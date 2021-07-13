@@ -1,6 +1,7 @@
 import numpy as np
 
 class NoDP:
+    name = "no_dp"
     def __init__(self):
         return
 
@@ -13,6 +14,7 @@ class NoDP:
         return -np.mean(np.log(pred_y) * test_y + np.log(1 - pred_y) * (1 - test_y))
 
 class BinaryThresholdDP:
+    name = "binary_thres"
     def __init__(self, base_threshold):
         self.base_threshold = base_threshold
 

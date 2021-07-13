@@ -65,7 +65,6 @@ class NelderMeadModeler:
         """
         @return perf_value
         """
-        print("TEST", test_y.shape)
         # Just for initialization
         def get_test_perf(params):
             lr = sklearn.base.clone(self.modeler)

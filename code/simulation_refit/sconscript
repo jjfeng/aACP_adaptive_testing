@@ -91,7 +91,7 @@ def create_dp(env, outdir, c):
         'python create_dp_mechanism.py',
         '--seed',
 	c['seed'],
-        '--threshold 0.6',
+        '--threshold 0.48' if c['dp_mech'] == 'binary_thres_dp' else '',
         '--dp-mech',
         c['dp_mech'],
 	'--out ${TARGETS[0]}'
@@ -108,15 +108,18 @@ def run_experiment(env, outdir, c):
         'python main.py',
         '--seed',
 	c['seed'],
-        '--maxfev 300',
+        '--maxfev 50',
 	'--data ${SOURCES[0]}',
 	'--model ${SOURCES[1]}',
 	'--dp-mech ${SOURCES[2]}',
-	'--log ${TARGETS[0]}'
+	'--log ${TARGETS[0]}',
+	'--plot ${TARGETS[1]}'
     ]
     return env.Command(
         [
-            join(outdir, 'log.txt')],
+            join(outdir, 'log.txt'),
+            join(outdir, 'plot_nll.png'),
+        ],
         [
             c["generate_data"][0],
             c["create_modeler"][0],

@@ -11,10 +11,8 @@ from typing import List, Dict
 
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import PolynomialFeatures
-from sklearn.linear_model import LinearRegression, LogisticRegression
-from sklearn.isotonic import IsotonicRegression
+import seaborn as sns
+from matplotlib import pyplot as plt
 from sklearn.metrics import roc_auc_score, plot_roc_curve, roc_curve
 
 from dataset import *
@@ -51,9 +49,17 @@ def parse_args():
         type=str,
         default="_output/model.pkl")
     parser.add_argument(
+        '--out-file',
+        type=str,
+        default="_output/res.pkl")
+    parser.add_argument(
         '--log-file',
         type=str,
         default="_output/log.txt")
+    parser.add_argument(
+        '--plot-file',
+        type=str,
+        default="_output/plot.png")
     args = parser.parse_args()
     return args
 
@@ -80,17 +86,39 @@ def main():
         modeler = pickle.load(f)
 
     # Run simulation
-    modeler.do_minimize(data.reuse_test_dat.x, data.reuse_test_dat.y, dp_mech, maxfev=args.maxfev)
+    reuse_nlls = []
+    test_nlls = []
+    for maxfev in range(args.maxfev):
+        modeler.do_minimize(data.reuse_test_dat.x, data.reuse_test_dat.y, dp_mech, maxfev=maxfev)
 
-    reuse_pred_y = modeler.predict_prob(data.reuse_test_dat.x)
-    reuse_auc = roc_auc_score(data.reuse_test_dat.y, reuse_pred_y)
-    reuse_nll = get_nll(data.reuse_test_dat.y, reuse_pred_y)
-    print(dp_mech.__class__, "reuse", "AUC", reuse_auc, "NLL", reuse_nll)
+        reuse_pred_y = modeler.predict_prob(data.reuse_test_dat.x)
+        reuse_auc = roc_auc_score(data.reuse_test_dat.y, reuse_pred_y)
+        reuse_nll = get_nll(data.reuse_test_dat.y, reuse_pred_y)
+        reuse_nlls.append(reuse_nll)
+        #print(dp_mech.name, "reuse", "AUC", reuse_auc, "NLL", reuse_nll)
 
-    test_pred_y = modeler.predict_prob(data.test_dat.x)
-    test_auc = roc_auc_score(data.test_dat.y, test_pred_y)
-    test_nll = get_nll(data.test_dat.y, test_pred_y)
-    print(dp_mech.__class__, "test", "AUC", test_auc, "NLL", test_nll)
+        test_pred_y = modeler.predict_prob(data.test_dat.x)
+        test_auc = roc_auc_score(data.test_dat.y, test_pred_y)
+        test_nll = get_nll(data.test_dat.y, test_pred_y)
+        test_nlls.append(test_nll)
+        #print(dp_mech.name, "test", "AUC", test_auc, "NLL", test_nll)
+
+    # Compile results
+    reuse_res_df = pd.DataFrame({"nll": reuse_nlls, "idx": np.arange(len(reuse_nlls))})
+    reuse_res_df["dataset"] = "reuse_test"
+    test_res_df = pd.DataFrame({"nll": test_nlls, "idx": np.arange(len(test_nlls))})
+    test_res_df["dataset"] = "test"
+    df = pd.concat([reuse_res_df, test_res_df])
+    df["dp"] = dp_mech.name
+
+    # Plot
+    print(df)
+    sns.lineplot(data=df, x="idx", y="nll", hue="dataset")
+    plt.title("DP mech: %s" % dp_mech.name)
+    plt.savefig(args.plot_file)
+
+    with open(args.out_file, "wb") as f:
+        pickle.dump(df, f)
 
 
 if __name__ == "__main__":
