@@ -113,8 +113,10 @@ def main():
 
     # Plot
     print(df)
+    sns.set_context("paper", font_scale=2)
     sns.lineplot(data=df, x="idx", y="nll", hue="dataset")
     plt.title("DP mech: %s" % dp_mech.name)
+    plt.tight_layout()
     plt.savefig(args.plot_file)
 
     with open(args.out_file, "wb") as f:
