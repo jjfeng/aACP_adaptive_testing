@@ -85,12 +85,12 @@ def main():
     reuse_pred_y = modeler.predict_prob(data.reuse_test_dat.x)
     reuse_auc = roc_auc_score(data.reuse_test_dat.y, reuse_pred_y)
     reuse_nll = get_nll(data.reuse_test_dat.y, reuse_pred_y)
-    print("reuse", "AUC", reuse_auc, "NLL", reuse_nll)
+    print(dp_mech.__class__, "reuse", "AUC", reuse_auc, "NLL", reuse_nll)
 
     test_pred_y = modeler.predict_prob(data.test_dat.x)
     test_auc = roc_auc_score(data.test_dat.y, test_pred_y)
     test_nll = get_nll(data.test_dat.y, test_pred_y)
-    print("test", "AUC", test_auc, "NLL", test_nll)
+    print(dp_mech.__class__, "test", "AUC", test_auc, "NLL", test_nll)
 
 
 if __name__ == "__main__":

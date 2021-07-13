@@ -65,6 +65,7 @@ class NelderMeadModeler:
         """
         @return perf_value
         """
+        print("TEST", test_y.shape)
         # Just for initialization
         def get_test_perf(params):
             lr = sklearn.base.clone(self.modeler)
@@ -73,7 +74,6 @@ class NelderMeadModeler:
             lr = self.set_model(lr, params)
             pred_y = lr.predict_proba(test_x)[:,1].reshape((-1,1))
             mtp_answer = mtp_engine.get_test_eval(test_y, pred_y)
-            print("mtp answer", mtp_answer)
             return mtp_answer
 
         init_coef = np.concatenate([self.modeler.intercept_, self.modeler.coef_.flatten()])

@@ -25,7 +25,12 @@ def parse_args():
         '--dp-mech',
         type=str,
         default="no_dp",
-        choices=["no_dp"])
+        choices=["no_dp", "binary_thres_dp"])
+    parser.add_argument(
+        '--threshold',
+        type=float,
+        default=0.69,
+        help='seed')
     parser.add_argument(
         '--out-file',
         type=str,
@@ -47,6 +52,8 @@ def main():
     # Create DP mech
     if args.dp_mech == "no_dp":
         dp_mech = NoDP()
+    elif args.dp_mech == "binary_thres_dp":
+        dp_mech = BinaryThresholdDP(args.threshold)
 
     with open(args.out_file, "wb") as f:
         pickle.dump(dp_mech, f)
