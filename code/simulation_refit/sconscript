@@ -1,0 +1,124 @@
+import os
+
+from os.path import join
+from nestly.scons import SConsWrap
+from nestly import Nest
+from SCons.Script import Environment, Command, AddOption
+
+Import('env')
+localenv = env.Clone()
+
+# Set up state
+nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
+
+RUN_STATUS = localenv['clusters']
+NUM_SEEDS = localenv['num_seeds']
+
+nest.add(
+    'num_p',
+    [10],
+    label_func=lambda c: "num_p_%d" % c)
+
+nest.add(
+    'init_beta',
+    [0.35],
+    label_func=lambda c: "beta_%.2f" % c)
+
+nest.add_aggregate("summary_res_combo_refit", list)
+nest.add_aggregate("summary_res_combo_boxed", list)
+nest.add_aggregate("summary_res_refit", list)
+nest.add_aggregate("summary_res_boxed", list)
+nest.add(
+    'seed',
+    range(NUM_SEEDS),
+    label_func=lambda c: "seed_%d" % c)
+
+@nest.add_target_with_env(localenv)
+def generate_data(env, outdir, c):
+    cmd = [
+        'python generate_data_single_pop.py',
+        '--meta-seed 3',
+        '--sparse',
+        c['num_p'],
+        '--p',
+        c['num_p'],
+        '--test-n 4000',
+        '--init-train-n 100',
+        '--init-reuse-test-n 30',
+	'--out ${TARGETS[0]}',
+	'--log-file ${TARGETS[1]}',
+    ]
+    return env.Command(
+        [
+            join(outdir, 'data.pkl'),
+            join(outdir, 'log.txt')],
+        [],
+        ' '.join(map(str, cmd)))
+
+nest.add(
+    'model_sim',
+    [
+        "neldermead",
+    ])
+
+@nest.add_target_with_env(localenv)
+def create_modeler(env, outdir, c):
+    cmd = [
+        'python create_modeler.py',
+        '--seed',
+	c['seed'],
+        '--simulation',
+        c['model_sim'],
+	'--data ${SOURCES[0]}',
+	'--out ${TARGETS[0]}'
+    ]
+    return env.Command(
+        [
+            join(outdir, 'model.pkl')],
+        c["generate_data"],
+        ' '.join(map(str, cmd)))
+
+nest.add(
+    'dp_mech',
+    [
+        "no_dp",
+    ])
+
+@nest.add_target_with_env(localenv)
+def create_dp(env, outdir, c):
+    cmd = [
+        'python create_dp_mechanism.py',
+        '--seed',
+	c['seed'],
+        '--dp-mech',
+        c['dp_mech'],
+	'--out ${TARGETS[0]}'
+    ]
+    return env.Command(
+        [
+            join(outdir, 'dp_mech.pkl')],
+        [],
+        ' '.join(map(str, cmd)))
+
+@nest.add_target_with_env(localenv)
+def run_experiment(env, outdir, c):
+    cmd = [
+        'python main.py',
+        '--seed',
+	c['seed'],
+        '--maxfev 10',
+	'--data ${SOURCES[0]}',
+	'--model ${SOURCES[1]}',
+	'--dp-mech ${SOURCES[2]}',
+	'--log ${TARGETS[0]}'
+    ]
+    return env.Command(
+        [
+            join(outdir, 'log.txt')],
+        [
+            c["generate_data"][0],
+            c["create_modeler"][0],
+            c["create_dp"][0],
+        ],
+        ' '.join(map(str, cmd)))
+

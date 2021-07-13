@@ -1,0 +1,32 @@
+#!/usr/bin/env scons
+#
+# To run things, do "scons  --clusters=prod  -j 123 --seeds=1" or
+# for local "scons  --clusters=local  -j 123 --seeds=1"
+#
+
+import os
+
+from os.path import join
+from nestly.scons import SConsWrap
+from nestly import Nest
+import SCons.Script as sc
+
+# Command line options
+
+sc.AddOption('--clusters', type='string', help="Clusters", default='local')
+# For paper, just ran seeds=20
+sc.AddOption('--seeds', type='int', help="SEEDS", default=1)
+sc.AddOption('--output', type='string', help="output folder", default='_output')
+
+env = sc.Environment(
+        ENV=os.environ,
+        clusters=sc.GetOption('clusters'),
+        num_seeds=sc.GetOption('seeds'),
+        output=sc.GetOption('output'))
+
+sc.Export('env')
+
+env.SConsignFile()
+
+flag = 'simulation_refit'
+sc.SConscript(flag + '/sconscript', exports=['flag'])
