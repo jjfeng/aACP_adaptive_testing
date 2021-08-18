@@ -89,7 +89,8 @@ def main():
     reuse_nlls = []
     test_nlls = []
     for maxfev in range(args.maxfev):
-        modeler.do_minimize(data.reuse_test_dat.x, data.reuse_test_dat.y, dp_mech, dat_stream=data.train_dat_stream, maxfev=maxfev)
+        dp_results = modeler.do_minimize(data.reuse_test_dat.x, data.reuse_test_dat.y, dp_mech, dat_stream=data.train_dat_stream, maxfev=maxfev)
+        print(dp_results)
 
         reuse_pred_y = modeler.predict_prob(data.reuse_test_dat.x)
         reuse_auc = roc_auc_score(data.reuse_test_dat.y, reuse_pred_y)

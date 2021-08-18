@@ -92,7 +92,7 @@ def create_dp(env, outdir, c):
         'python create_dp_mechanism.py',
         '--seed',
 	c['seed'],
-        '--threshold 0.48' if c['dp_mech'] == 'binary_thres_dp' else '',
+        '--threshold 0.53' if c['dp_mech'] == 'binary_thres_dp' else '',
         '--dp-mech',
         c['dp_mech'],
 	'--out ${TARGETS[0]}'

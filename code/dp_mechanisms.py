@@ -20,10 +20,10 @@ class BinaryThresholdDP:
 
     def get_test_eval(self, test_y, pred_y):
         """
-        @return test perf without any DP, return NLL
+        @return test perf where 1 means approve and 0 means not approved
         """
         test_y = test_y.flatten()
         pred_y = pred_y.flatten()
         test_nll = -np.mean(np.log(pred_y) * test_y + np.log(1 - pred_y) * (1 - test_y))
-        return int(test_nll > self.base_threshold)
+        return int(test_nll < self.base_threshold)
 
