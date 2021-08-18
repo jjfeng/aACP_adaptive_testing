@@ -43,8 +43,10 @@ def generate_data(env, outdir, c):
         '--p',
         c['num_p'],
         '--test-n 4000',
-        '--init-train-n 1000',
-        '--init-reuse-test-n 50',
+        '--init-train-n 2000',
+        '--train-batch-n 100',
+        '--train-iters 10',
+        '--init-reuse-test-n 1000',
 	'--out ${TARGETS[0]}',
 	'--log-file ${TARGETS[1]}',
     ]
@@ -82,8 +84,9 @@ def create_modeler(env, outdir, c):
 nest.add(
     'dp_mech',
     [
-        "no_dp",
-        "binary_thres_dp",
+        #"no_dp",
+        #"binary_thres_dp",
+        "bonferroni",
     ])
 
 @nest.add_target_with_env(localenv)
@@ -92,7 +95,8 @@ def create_dp(env, outdir, c):
         'python create_dp_mechanism.py',
         '--seed',
 	c['seed'],
-        '--threshold 0.53' if c['dp_mech'] == 'binary_thres_dp' else '',
+        '--threshold 0.53',
+        '--alpha 0.05',
         '--dp-mech',
         c['dp_mech'],
 	'--out ${TARGETS[0]}'

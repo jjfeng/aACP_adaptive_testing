@@ -88,7 +88,8 @@ def main():
     # Run simulation
     reuse_nlls = []
     test_nlls = []
-    for maxfev in range(args.maxfev):
+    for maxfev in range(1, args.maxfev + 1):
+        dp_mech.set_num_queries(maxfev)
         dp_results = modeler.do_minimize(data.reuse_test_dat.x, data.reuse_test_dat.y, dp_mech, dat_stream=data.train_dat_stream, maxfev=maxfev)
         print(dp_results)
 
