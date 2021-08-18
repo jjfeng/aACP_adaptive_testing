@@ -25,12 +25,17 @@ def parse_args():
         '--dp-mech',
         type=str,
         default="no_dp",
-        choices=["no_dp", "binary_thres_dp", "bonferroni"])
+        choices=["no_dp", "binary_thres_dp", "bonferroni", "graphical_bonf"])
     parser.add_argument(
         '--threshold',
         type=float,
         default=0.5,
         help='threshold for testing modifications')
+    parser.add_argument(
+        '--success-weight',
+        type=float,
+        default=0.8,
+        help='recycling factor')
     parser.add_argument(
         '--alpha',
         type=float,
@@ -61,6 +66,8 @@ def main():
         dp_mech = BinaryThresholdDP(args.threshold)
     elif args.dp_mech == "bonferroni":
         dp_mech = BonferroniThresholdDP(args.threshold, args.alpha)
+    elif args.dp_mech == "graphical_bonf":
+        dp_mech = GraphicalBonfDP(args.threshold, args.alpha, success_weight=args.success_weight)
 
     with open(args.out_file, "wb") as f:
         pickle.dump(dp_mech, f)

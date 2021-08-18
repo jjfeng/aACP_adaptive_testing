@@ -46,7 +46,8 @@ def generate_data(env, outdir, c):
         '--init-train-n 2000',
         '--train-batch-n 100',
         '--train-iters 10',
-        '--init-reuse-test-n 1000',
+        '--init-reuse-test-n 950',
+        '--test-n 2000',
 	'--out ${TARGETS[0]}',
 	'--log-file ${TARGETS[1]}',
     ]
@@ -87,6 +88,7 @@ nest.add(
         #"no_dp",
         #"binary_thres_dp",
         "bonferroni",
+        "graphical_bonf",
     ])
 
 @nest.add_target_with_env(localenv)
@@ -96,7 +98,8 @@ def create_dp(env, outdir, c):
         '--seed',
 	c['seed'],
         '--threshold 0.53',
-        '--alpha 0.05',
+        '--success-weight 0.9' if c['dp_mech'] == "graphical_bonf" else '',
+        '--alpha 0.05' if "bonf" in c['dp_mech'] else '',
         '--dp-mech',
         c['dp_mech'],
 	'--out ${TARGETS[0]}'
