@@ -8,6 +8,19 @@ from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 
 from dataset import Dataset
 
+class TestHistory:
+    def __init__(self, init_model):
+        self.approval_times = [0]
+        self.approved_mdls = [init_model]
+        self.curr_time = 1
+
+    def update(self, test_res, curr_mdl):
+        if test_res == 1:
+            self.approval_times.append(self.curr_time)
+            self.approved_mdls.append(curr_mdl)
+
+        self.curr_time += 1
+
 class LockedModeler:
     def __init__(self, dat: Dataset, n_estimators: int=200, max_depth: int = 3):
         self.dat = dat
@@ -65,10 +78,13 @@ class NelderMeadModeler:
             mtp_answer = mtp_engine.get_test_eval(test_y, pred_y)
             return mtp_answer
 
+        test_hist = TestHistory()
         init_coef = np.concatenate([self.modeler.intercept_, self.modeler.coef_.flatten()])
+        # TODO: add callback to append to history
         res = scipy.optimize.minimize(get_test_perf, x0=init_coef, method="Nelder-Mead", options={"maxfev": maxfev})
         self.modeler = self.set_model(self.modeler, res.x)
-        return res.fun
+
+        return test_hist
 
 class OnlineLearnerModeler(NelderMeadModeler):
     """
@@ -81,12 +97,19 @@ class OnlineLearnerModeler(NelderMeadModeler):
         @return perf_value
         """
         merged_dat = self.dat
-        mtp_answers = []
+        test_hist = TestHistory(self.modeler)
         for i, batch_dat in enumerate(dat_stream[:maxfev]):
             merged_dat = Dataset.merge([merged_dat, batch_dat])
-            self.modeler.fit(merged_dat.x, merged_dat.y.flatten())
+            lr = sklearn.base.clone(self.modeler)
+            lr.fit(merged_dat.x, merged_dat.y.flatten())
 
-            pred_y = self.modeler.predict_proba(test_x)[:,1].reshape((-1,1))
-            mtp_answers.append(mtp_engine.get_test_eval(test_y, pred_y))
+            pred_y = lr.predict_proba(test_x)[:,1].reshape((-1,1))
+            test_res = mtp_engine.get_test_eval(test_y, pred_y)
+            if test_res == 1:
+                # replace current modeler only if successful
+                self.modeler = lr
+            test_hist.update(
+                    test_res=test_res,
+                    curr_mdl=self.modeler)
 
-        return mtp_answers
+        return test_hist

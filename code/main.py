@@ -87,28 +87,32 @@ def main():
 
     # Run simulation
     reuse_nlls = []
+    reuse_aucs = []
     test_nlls = []
+    test_aucs = []
     for maxfev in range(1, args.maxfev + 1):
         dp_mech.set_num_queries(maxfev)
-        dp_results = modeler.do_minimize(data.reuse_test_dat.x, data.reuse_test_dat.y, dp_mech, dat_stream=data.train_dat_stream, maxfev=maxfev)
-        print(dp_results)
+        full_hist = modeler.do_minimize(data.reuse_test_dat.x, data.reuse_test_dat.y, dp_mech, dat_stream=data.train_dat_stream, maxfev=maxfev)
+        print("APPROVAL", full_hist.approval_times)
 
         reuse_pred_y = modeler.predict_prob(data.reuse_test_dat.x)
         reuse_auc = roc_auc_score(data.reuse_test_dat.y, reuse_pred_y)
         reuse_nll = get_nll(data.reuse_test_dat.y, reuse_pred_y)
         reuse_nlls.append(reuse_nll)
+        reuse_aucs.append(reuse_auc)
         #print(dp_mech.name, "reuse", "AUC", reuse_auc, "NLL", reuse_nll)
 
         test_pred_y = modeler.predict_prob(data.test_dat.x)
         test_auc = roc_auc_score(data.test_dat.y, test_pred_y)
         test_nll = get_nll(data.test_dat.y, test_pred_y)
         test_nlls.append(test_nll)
+        test_aucs.append(test_auc)
         #print(dp_mech.name, "test", "AUC", test_auc, "NLL", test_nll)
 
     # Compile results
-    reuse_res_df = pd.DataFrame({"nll": reuse_nlls, "idx": np.arange(len(reuse_nlls))})
+    reuse_res_df = pd.DataFrame({"nll": reuse_nlls,  "auc": reuse_aucs,"idx": np.arange(len(reuse_nlls))})
     reuse_res_df["dataset"] = "reuse_test"
-    test_res_df = pd.DataFrame({"nll": test_nlls, "idx": np.arange(len(test_nlls))})
+    test_res_df = pd.DataFrame({"nll": test_nlls, "auc": test_aucs, "idx": np.arange(len(test_nlls))})
     test_res_df["dataset"] = "test"
     df = pd.concat([reuse_res_df, test_res_df])
     df["dp"] = dp_mech.name

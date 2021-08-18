@@ -15,6 +15,11 @@ from dataset import *
 def parse_args():
     parser = argparse.ArgumentParser(description='run simulation')
     parser.add_argument(
+        '--train-seed',
+        type=int,
+        default=1235,
+        help='seed')
+    parser.add_argument(
         '--meta-seed',
         type=int,
         default=0,
@@ -69,10 +74,10 @@ def main():
     np.random.seed(args.meta_seed)
 
     # Prep data
-    init_beta = np.random.normal(size=(args.p,1)) * 0.05
+    init_beta = np.random.normal(size=(args.p,1)) * 0.0
     init_beta[:args.sparse_p] += -args.init_sparse_beta
     data_generator = DataGenerator(init_beta, mean_x=0)
-    full_dat, beta_time_varying = data_generator.generate_data(args.init_train_n, args.train_batch_n, args.train_iters, args.init_reuse_test_n, args.test_n)
+    full_dat, beta_time_varying = data_generator.generate_data(args.init_train_n, args.train_batch_n, args.train_iters, args.init_reuse_test_n, args.test_n, seed=args.train_seed)
 
     with open(args.out_file, "wb") as f:
         pickle.dump({
