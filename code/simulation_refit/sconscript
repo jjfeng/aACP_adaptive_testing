@@ -58,7 +58,8 @@ def generate_data(env, outdir, c):
 nest.add(
     'model_sim',
     [
-        "neldermead",
+        #"neldermead",
+        "online_fixed",
     ])
 
 @nest.add_target_with_env(localenv)
@@ -108,7 +109,7 @@ def run_experiment(env, outdir, c):
         'python main.py',
         '--seed',
 	c['seed'],
-        '--maxfev 50',
+        '--maxfev 10',
 	'--data ${SOURCES[0]}',
 	'--model ${SOURCES[1]}',
 	'--dp-mech ${SOURCES[2]}',

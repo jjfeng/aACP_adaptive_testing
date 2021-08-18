@@ -10,8 +10,9 @@ def make_safe_prob(p, eps=1e-10):
     return np.maximum(eps, np.minimum(1-eps, p))
 
 class FullDataset:
-    def __init__(self, init_train_dat, reuse_test_dat, test_dat, timestamps=None):
+    def __init__(self, init_train_dat, train_dat_stream, reuse_test_dat, test_dat, timestamps=None):
         self.init_train_dat = init_train_dat
+        self.train_dat_stream = train_dat_stream
         self.reuse_test_dat = reuse_test_dat
         self.timestamps = timestamps
         self.test_dat = test_dat
@@ -82,12 +83,13 @@ class DataGenerator:
         self.p = init_beta.size
         self.mean_x = mean_x
 
-    def generate_data(self, init_train_n, init_reuse_test_n, test_n: int):
+    def generate_data(self, init_train_n, train_stream_n, train_iters, init_reuse_test_n, test_n: int):
         init_train_dat = self.make_data(init_train_n, self.init_beta)
+        train_dats = [self.make_data(train_stream_n, self.init_beta) for i in range(train_iters)]
         reuse_test_dat = self.make_data(init_reuse_test_n, self.init_beta)
         test_dat = self.make_data(test_n, self.init_beta)
 
-        full_dat = FullDataset(init_train_dat, reuse_test_dat, test_dat)
+        full_dat = FullDataset(init_train_dat, train_dats, reuse_test_dat, test_dat)
 
         return full_dat, [self.init_beta]
 

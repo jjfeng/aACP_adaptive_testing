@@ -31,18 +31,6 @@ class LockedModeler:
         # Do nothing
         return False
 
-    @property
-    def num_models(self):
-        return len(self.locked_idxs + self.evolve_idxs)
-
-    @property
-    def locked_idxs(self):
-        return [0]
-
-    @property
-    def evolve_idxs(self):
-        return []
-
 class NelderMeadModeler:
     """
     Logistic reg only right now
@@ -61,8 +49,10 @@ class NelderMeadModeler:
     def predict_prob(self, x):
         return self.modeler.predict_proba(x)[:,1].reshape((-1,1))
 
-    def do_minimize(self, test_x, test_y, mtp_engine, maxfev=10):
+    def do_minimize(self, test_x, test_y, mtp_engine, dat_stream=None, maxfev=10):
         """
+        @param dat_stream: ignores this
+
         @return perf_value
         """
         # Just for initialization
@@ -80,6 +70,23 @@ class NelderMeadModeler:
         self.modeler = self.set_model(self.modeler, res.x)
         return res.fun
 
-    @property
-    def num_models(self):
-        return len(self.locked_idxs + self.evolve_idxs)
+class OnlineLearnerModeler(NelderMeadModeler):
+    """
+    Just do online learning on a separate dataset
+    only does logistic reg
+    """
+    def do_minimize(self, test_x, test_y, mtp_engine, dat_stream, maxfev=10):
+        """
+        @param dat_stream: a list of datasets for further training the model
+        @return perf_value
+        """
+        merged_dat = self.dat
+        mtp_answers = []
+        for i, batch_dat in enumerate(dat_stream[:maxfev]):
+            merged_dat = Dataset.merge([merged_dat, batch_dat])
+            self.modeler.fit(merged_dat.x, merged_dat.y.flatten())
+
+            pred_y = self.modeler.predict_proba(test_x)[:,1].reshape((-1,1))
+            mtp_answers.append(mtp_engine.get_test_eval(test_y, pred_y))
+
+        return mtp_answers

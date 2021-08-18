@@ -40,6 +40,14 @@ def parse_args():
         type=int,
         default=1000)
     parser.add_argument(
+        '--train-batch-n',
+        type=int,
+        default=100)
+    parser.add_argument(
+        '--train-iters',
+        type=int,
+        default=10)
+    parser.add_argument(
         '--test-n',
         type=int,
         default=2000)
@@ -64,7 +72,7 @@ def main():
     init_beta = np.random.normal(size=(args.p,1)) * 0.05
     init_beta[:args.sparse_p] += -args.init_sparse_beta
     data_generator = DataGenerator(init_beta, mean_x=0)
-    full_dat, beta_time_varying = data_generator.generate_data(args.init_train_n, args.init_reuse_test_n, args.test_n)
+    full_dat, beta_time_varying = data_generator.generate_data(args.init_train_n, args.train_batch_n, args.train_iters, args.init_reuse_test_n, args.test_n)
 
     with open(args.out_file, "wb") as f:
         pickle.dump({

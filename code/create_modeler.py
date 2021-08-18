@@ -24,7 +24,7 @@ def parse_args():
         '--simulation',
         type=str,
         default="fixed",
-        choices=["fixed", "neldermead"])
+        choices=["fixed", "neldermead", "online_fixed"])
     parser.add_argument(
         '--n-estimators',
         type=int,
@@ -68,6 +68,9 @@ def main():
     # Create model
     if args.simulation == "neldermead":
         clf = NelderMeadModeler(data.init_train_dat)
+    elif args.simulation == "online_fixed":
+        clf = OnlineLearnerModeler(data.init_train_dat)
+
 
     with open(args.out_file, "wb") as f:
         pickle.dump(clf, f)
