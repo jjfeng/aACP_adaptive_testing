@@ -13,7 +13,7 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 RUN_STATUS = localenv['clusters']
 NUM_SEEDS = localenv['num_seeds']
-REUSE_ITERS = 12
+REUSE_ITERS = 20
 
 nest.add(
     'num_p',
@@ -32,7 +32,7 @@ nest.add_aggregate("summary_res_boxed", list)
 nest.add(
     'reuse_test_n',
     #[1000,1500,2000,3000,4000],
-    [800],
+    [1200],
     label_func=lambda c: "test_%d" % c)
 
 nest.add(
@@ -51,7 +51,7 @@ def generate_data(env, outdir, c):
         c['num_p'],
         '--init-train-n 300',
         '--train-batch-n 200',
-        '--train-incr 1.2',
+        '--train-incr 1.4',
         '--train-iters',
         REUSE_ITERS,
         '--init-reuse-test-n',
@@ -109,8 +109,8 @@ def create_dp(env, outdir, c):
         'python create_dp_mechanism.py',
         '--seed',
 	c['seed'],
-        '--threshold 0.42',
-        '--success-weight 0.6' if "graphical" in c['dp_mech'] else '',
+        '--threshold 0.39',
+        '--success-weight 0.8' if "graphical" in c['dp_mech'] else '',
         '--alpha 0.1',
         '--dp-mech',
         c['dp_mech'],
