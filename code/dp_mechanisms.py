@@ -108,7 +108,7 @@ class GraphicalBonfDP(BinaryThresholdDP):
         test_nlls = -(np.log(pred_y) * test_y + np.log(1 - pred_y) * (1 - test_y))
         t_stat_se = np.sqrt(np.var(test_nlls)/test_nlls.size)
 
-        alpha_level = self.test_tree.alpha
+        alpha_level = self.test_tree.alpha * self.test_tree.success_edge
         upper_ci = np.mean(test_nlls) + t_stat_se * norm.ppf(1 - alpha_level)
         #print("upper ci", np.mean(test_nlls), upper_ci)
         test_result = int(upper_ci < self.base_threshold)
@@ -176,7 +176,7 @@ class GraphicalFFSDP(GraphicalBonfDP):
         t_stat_se = np.sqrt(np.var(test_nlls)/test_nlls.size)
 
         # compute critical levels
-        alpha_level = self.test_tree.alpha
+        alpha_level = self.test_tree.alpha * self.test_tree.success_edge
         # Need to traverse subfam parent nodes to decide local level
         prior_test_nlls = self._get_prior_losses(self.test_tree.subfam_root, self.test_tree)
         prior_thres = self._get_prior_thres(self.test_tree.subfam_root, self.test_tree)
