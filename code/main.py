@@ -90,10 +90,16 @@ def main():
     reuse_aucs = []
     test_nlls = []
     test_aucs = []
-    for maxfev in range(1, args.maxfev + 1):
-        dp_mech.set_num_queries(maxfev)
-        full_hist = modeler.do_minimize(data.reuse_test_dat.x, data.reuse_test_dat.y, dp_mech, dat_stream=data.train_dat_stream, maxfev=maxfev)
-        print("APPROVAL", full_hist.approval_times)
+    #dp_mech.set_num_queries(args.maxfev)
+    #full_hist = modeler.do_minimize(data.reuse_test_dat.x, data.reuse_test_dat.y, dp_mech, dat_stream=data.train_dat_stream, maxfev=args.maxfev)
+    #print("PPAROVAL", full_hist.approval_times)
+    #1/0
+    for maxfev in range(args.maxfev + 1):
+        print("===========RUN PROCEDURE FOR NUM STPES", maxfev)
+        if maxfev > 0:
+            dp_mech.set_num_queries(maxfev)
+            full_hist = modeler.do_minimize(data.reuse_test_dat.x, data.reuse_test_dat.y, dp_mech, dat_stream=data.train_dat_stream, maxfev=maxfev)
+            print("APPROVAL", full_hist.approval_times)
 
         reuse_pred_y = modeler.predict_prob(data.reuse_test_dat.x)
         reuse_auc = roc_auc_score(data.reuse_test_dat.y, reuse_pred_y)

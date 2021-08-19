@@ -83,13 +83,13 @@ class DataGenerator:
         self.p = init_beta.size
         self.mean_x = mean_x
 
-    def generate_data(self, init_train_n, train_stream_n, train_iters, init_reuse_test_n, test_n: int, seed: int=0):
+    def generate_data(self, init_train_n, train_stream_n, train_iters, init_reuse_test_n, test_n: int, seed: int=0, train_batch_incr_factor: int = 1):
         test_dat = self.make_data(test_n, self.init_beta)
         reuse_test_dat = self.make_data(init_reuse_test_n, self.init_beta)
 
         np.random.seed(seed)
         init_train_dat = self.make_data(init_train_n, self.init_beta)
-        train_dats = [self.make_data(train_stream_n, self.init_beta) for i in range(train_iters)]
+        train_dats = [self.make_data(int(train_stream_n * np.power(train_batch_incr_factor, i)), self.init_beta) for i in range(train_iters)]
 
         full_dat = FullDataset(init_train_dat, train_dats, reuse_test_dat, test_dat)
 
