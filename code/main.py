@@ -90,10 +90,6 @@ def main():
     reuse_aucs = []
     test_nlls = []
     test_aucs = []
-    #dp_mech.set_num_queries(args.maxfev)
-    #full_hist = modeler.do_minimize(data.reuse_test_dat.x, data.reuse_test_dat.y, dp_mech, dat_stream=data.train_dat_stream, maxfev=args.maxfev)
-    #print("PPAROVAL", full_hist.approval_times)
-    #1/0
     for maxfev in range(args.maxfev + 1):
         print("===========RUN PROCEDURE FOR NUM STPES", maxfev)
         if maxfev > 0:

@@ -94,7 +94,7 @@ def create_modeler(env, outdir, c):
 
 nest.add(
     'thres',
-    [0.38,0.39,0.4,0.41,0.42],
+    [0.40],
     label_func=lambda c: "thres_%.2f" % c)
 
 nest.add(
@@ -102,9 +102,10 @@ nest.add(
     [
         #"no_dp",
         #"binary_thres_dp",
-        "bonferroni",
-        "graphical_bonf",
-        "graphical_ffs",
+        #"bonferroni",
+        #"graphical_bonf",
+        #"graphical_ffs",
+        "graphical_similarity",
     ])
 
 @nest.add_target_with_env(localenv)

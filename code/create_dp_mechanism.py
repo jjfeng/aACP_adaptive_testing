@@ -25,7 +25,7 @@ def parse_args():
         '--dp-mech',
         type=str,
         default="no_dp",
-        choices=["no_dp", "binary_thres_dp", "bonferroni", "graphical_bonf", "graphical_ffs"])
+        choices=["no_dp", "binary_thres_dp", "bonferroni", "graphical_bonf", "graphical_ffs", "graphical_similarity"])
     parser.add_argument(
         '--threshold',
         type=float,
@@ -70,6 +70,8 @@ def main():
         dp_mech = GraphicalBonfDP(args.threshold, args.alpha, success_weight=args.success_weight)
     elif args.dp_mech == "graphical_ffs":
         dp_mech = GraphicalFFSDP(args.threshold, args.alpha, success_weight=args.success_weight)
+    elif args.dp_mech == "graphical_similarity":
+        dp_mech = GraphicalSimilarityDP(args.threshold, args.alpha, success_weight=args.success_weight)
 
     with open(args.out_file, "wb") as f:
         pickle.dump(dp_mech, f)
