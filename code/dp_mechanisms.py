@@ -52,6 +52,17 @@ class BonferroniThresholdDP(BinaryThresholdDP):
         return int(upper_ci < self.base_threshold)
 
 
+class BonferroniNonAdaptDP(BonferroniThresholdDP):
+    """
+    Assumes person is not adaptive at all
+    """
+    name = "bonferroni_nonadapt"
+    def set_num_queries(self, num_adapt_queries):
+        self.num_adapt_queries = num_adapt_queries
+        self.correction_factor = num_adapt_queries
+        print(num_adapt_queries, self.correction_factor)
+
+
 class Node:
     def __init__(self, alpha, success_edge, history, subfam_root=None, parent=None):
         """
@@ -249,6 +260,7 @@ class GraphicalSimilarityDP(GraphicalBonfDP):
 
         # assuming exactly the same when in the same level
         # rejecting an earlier level rejects all in the same level
+        print("ALPHA spent", tot_alpha_spent, node.alpha)
         Q_factor = tot_alpha_spent + node.alpha
         assert Q_factor <= 1
         return Q_factor

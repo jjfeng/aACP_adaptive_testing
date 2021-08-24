@@ -24,8 +24,8 @@ def parse_args():
     parser.add_argument(
         '--dp-mech',
         type=str,
-        default="no_dp",
-        choices=["no_dp", "binary_thres_dp", "bonferroni", "graphical_bonf", "graphical_ffs", "graphical_similarity"])
+        default="no_dp")
+        #choices=["no_dp", "binary_thres_dp", "bonferroni", "graphical_bonf", "graphical_ffs", "graphical_similarity"])
     parser.add_argument(
         '--threshold',
         type=float,
@@ -66,6 +66,8 @@ def main():
         dp_mech = BinaryThresholdDP(args.threshold)
     elif args.dp_mech == "bonferroni":
         dp_mech = BonferroniThresholdDP(args.threshold, args.alpha)
+    elif args.dp_mech == "bonferroni_nonadapt":
+        dp_mech = BonferroniNonAdaptDP(args.threshold, args.alpha)
     elif args.dp_mech == "graphical_bonf":
         dp_mech = GraphicalBonfDP(args.threshold, args.alpha, success_weight=args.success_weight)
     elif args.dp_mech == "graphical_ffs":

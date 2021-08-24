@@ -49,9 +49,7 @@ class NelderMeadModeler:
     Logistic reg only right now
     """
     def __init__(self, dat):
-        self.modeler = LogisticRegression(penalty="none", solver="lbfgs")
         self.dat = dat
-        self.modeler.fit(self.dat.x, self.dat.y.flatten())
 
     def set_model(self, mdl, params):
         mdl.classes_ = np.array([0,1])
@@ -68,6 +66,8 @@ class NelderMeadModeler:
 
         @return perf_value
         """
+        self.modeler.fit(self.dat.x, self.dat.y.flatten())
+
         # Just for initialization
         def get_test_perf(params):
             lr = sklearn.base.clone(self.modeler)
@@ -96,6 +96,8 @@ class OnlineLearnerModeler(NelderMeadModeler):
         @param dat_stream: a list of datasets for further training the model
         @return perf_value
         """
+        self.modeler.fit(self.dat.x, self.dat.y.flatten())
+
         merged_dat = self.dat
         test_hist = TestHistory(self.modeler)
         for i, batch_dat in enumerate(dat_stream[:maxfev]):

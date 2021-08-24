@@ -102,9 +102,10 @@ nest.add(
     [
         #"no_dp",
         #"binary_thres_dp",
-        #"bonferroni",
-        #"graphical_bonf",
-        #"graphical_ffs",
+        "bonferroni",
+        "bonferroni_nonadapt",
+        "graphical_bonf",
+        "graphical_ffs",
         "graphical_similarity",
     ])
 
