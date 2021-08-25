@@ -7,7 +7,7 @@ class NoDP:
     def __init__(self):
         return
 
-    def get_test_eval(self, test_y, pred_y):
+    def get_test_eval(self, test_y, pred_y, predef_pred_y=None):
         """
         @return test perf without any DP, return NLL
         """
@@ -20,7 +20,7 @@ class BinaryThresholdDP:
     def __init__(self, base_threshold):
         self.base_threshold = base_threshold
 
-    def get_test_eval(self, test_y, pred_y):
+    def get_test_eval(self, test_y, pred_y, predef_pred_y=None):
         """
         @return test perf where 1 means approve and 0 means not approved
         """
@@ -45,7 +45,7 @@ class BonferroniThresholdDP(BinaryThresholdDP):
         self.correction_factor = np.power(2, num_adapt_queries)
         print(num_adapt_queries, self.correction_factor)
 
-    def get_test_eval(self, test_y, pred_y):
+    def get_test_eval(self, test_y, pred_y, predef_pred_y=None):
         """
         @return test perf where 1 means approve and 0 means not approved
         """
@@ -116,7 +116,7 @@ class GraphicalBonfDP(BinaryThresholdDP):
         self.num_queries = 0
         self.test_hist = []
 
-    def get_test_eval(self, test_y, pred_y):
+    def get_test_eval(self, test_y, pred_y, predef_pred_y=None):
         """
         @return test perf where 1 means approve and 0 means not approved
         """
@@ -151,14 +151,17 @@ class GraphicalParallelDP(GraphicalBonfDP):
     AND assumes correlation structure among models in a level
     """
     name = "graphical_parallel"
-    def __init__(self, base_threshold, alpha, success_weight, parallel_success_weight: float = 0.1, parallel_ratio: float = 0.9, min_loss_to_diff_std: float = 5.0):
+    def __init__(self, base_threshold, alpha, success_weight, parallel_success_weight: float = 0.1, parallel_ratio: float = 0.9, loss_to_diff_std_ratio: float = 200.0):
+        """
+        @param loss_to_diff_std_ratio: the minimum ratio between the stdev of the loss of the predef model and the loss of the modifications in that level (maybe in the future, consider an avg?)
+        """
         self.base_threshold = base_threshold
         self.alpha = alpha
         self.success_weight = success_weight
         self.parallel_success_weight = parallel_success_weight
         self.parallel_ratio = parallel_ratio
-        assert min_loss_to_diff_std >= 1
-        self.min_loss_to_diff_std = min_loss_to_diff_std
+        assert loss_to_diff_std_ratio >= 1
+        self.loss_to_diff_std_ratio = loss_to_diff_std_ratio
 
     def _create_tree(self, node, tree_depth, node_dict):
         if tree_depth == 0:
@@ -193,6 +196,7 @@ class GraphicalParallelDP(GraphicalBonfDP):
         # reset num queries
         self.num_queries = 0
         self.test_hist = []
+        self.parallel_test_hist = []
 
     def _get_test_eval(self, test_y, pred_y, predef_pred_y, t_stat_thres):
         """
@@ -213,9 +217,9 @@ class GraphicalParallelDP(GraphicalBonfDP):
         return test_result
 
     def _get_fwer(self, gamma, alloc_w, weights):
-        tot_alpha = 1 - norm.cdf(gamma * alloc_w)
+        tot_alpha = norm.cdf(gamma * alloc_w)
         for w in weights:
-            tot_alpha += 1 - norm.cdf(gamma * (w - alloc_w) * self.min_loss_to_diff_std)
+            tot_alpha += norm.cdf(gamma * (w - alloc_w) * self.loss_to_diff_std_ratio)
         return tot_alpha
 
     def get_corrected_fwer_thresholds(self, weights, desired_fwer):
@@ -223,30 +227,29 @@ class GraphicalParallelDP(GraphicalBonfDP):
         def fwer_dist(x):
             fwer = self._get_fwer(x[0], x[1], pos_weights)
             return np.power(fwer - desired_fwer, 2)
-        x0 = np.array([1, np.min(pos_weights)/2])
-        fwer_res = scipy.optimize.minimize(fwer_dist, x0, bounds=[(0,10000), (0,np.min(pos_weights))])
+        x0 = np.array([-1, np.min(pos_weights)/2])
+        fwer_res = scipy.optimize.minimize(fwer_dist, x0, bounds=[(-10000,0), (0,np.min(pos_weights))])
         optim_gamma = fwer_res.x[0]
         optim_alloc_w = fwer_res.x[1]
-        return -optim_gamma * weights
+        return optim_gamma * weights
 
     def get_test_eval(self, test_y, pred_y, predef_pred_y):
-        predef_res = self._get_test_eval(test_y, predef_pred_y, predef_pred_y, norm.ppf(self.parallel_tree.alpha))
-        if predef_res == 1:
+        parallel_test_result = self._get_test_eval(test_y, predef_pred_y, predef_pred_y, norm.ppf(self.parallel_tree.alpha))
+        if parallel_test_result == 1:
             print("PROPAGATE!!!!")
             # propagate to children (both parallel node and test tree)
             # TODO: check propagation to test tree
-            print(self.test_tree.alpha, "my old alpha")
             for child_node, weight in self.parallel_tree.weights.items():
                 child_node.earn(self.parallel_tree.alpha * weight)
-            print(self.test_tree.alpha, "my new alpha")
 
         # get the corrected levels for testing the current node, accounting for modification similarity
         curr_level_alphas = np.array([node.alpha for node in self.node_dict[len(self.test_tree.history)]])
-        # TODO: fix the weights here
-        alpha_weights = curr_level_alphas/np.sum(curr_level_alphas)
-        test_stat_weights = np.array([1/(w + 1e-5) for w in alpha_weights])
+        desired_fwer = np.sum(curr_level_alphas)
+        alpha_weights = (curr_level_alphas + np.power(10.,-self.num_adapt_queries))/(np.sum(curr_level_alphas) + np.power(10.,-self.num_adapt_queries) * curr_level_alphas.size)
+        test_stat_weights = np.maximum(-1e5, np.array([norm.ppf(w * desired_fwer) for w in alpha_weights]))
+
         weights = test_stat_weights/np.sum(test_stat_weights)
-        corrected_thresholds = self.get_corrected_fwer_thresholds(weights = weights, desired_fwer=np.sum(curr_level_alphas))
+        corrected_thresholds = self.get_corrected_fwer_thresholds(weights = weights, desired_fwer=desired_fwer)
         # find the threshold that matches the current test node
         argmatch = np.where(curr_level_alphas == self.test_tree.alpha)[0][0]
         test_thres = corrected_thresholds[argmatch]
@@ -255,6 +258,7 @@ class GraphicalParallelDP(GraphicalBonfDP):
         # update tree
         self.num_queries += 1
         self.test_hist.append(test_result)
+        self.parallel_test_hist.append(parallel_test_result)
         if test_result == 1:
             # remove node and propagate weights
             self.test_tree.success.earn(self.test_tree.alpha * self.test_tree.success_edge)
@@ -266,6 +270,7 @@ class GraphicalParallelDP(GraphicalBonfDP):
         # Increment parallel tree
         self.parallel_tree = self.parallel_tree.par_child
 
+        print("PARALLL", self.parallel_test_hist)
         return test_result
 
 class GraphicalFFSDP(GraphicalBonfDP):
@@ -310,7 +315,7 @@ class GraphicalFFSDP(GraphicalBonfDP):
             return res_ffs.x
 
 
-    def get_test_eval(self, test_y, pred_y):
+    def get_test_eval(self, test_y, pred_y, predef_pred_y=None):
         test_y = test_y.flatten()
         pred_y = pred_y.flatten()
         test_nlls = -(np.log(pred_y) * test_y + np.log(1 - pred_y) * (1 - test_y))
@@ -395,7 +400,7 @@ class GraphicalSimilarityDP(GraphicalBonfDP):
         assert Q_factor <= 1
         return Q_factor
 
-    def get_test_eval(self, test_y, pred_y):
+    def get_test_eval(self, test_y, pred_y, predef_pred_y=None):
         """
         @return test perf where 1 means approve and 0 means not approved
         """

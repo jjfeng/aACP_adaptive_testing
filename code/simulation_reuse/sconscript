@@ -13,7 +13,7 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 RUN_STATUS = localenv['clusters']
 NUM_SEEDS = localenv['num_seeds']
-REUSE_ITERS = 15
+REUSE_ITERS = 10
 
 nest.add(
     'num_p',
@@ -95,7 +95,7 @@ def create_modeler(env, outdir, c):
 
 nest.add(
     'thres',
-    [0.4],
+    [0.41],
     label_func=lambda c: "thres_%.2f" % c)
 
 nest.add(
@@ -103,9 +103,9 @@ nest.add(
     [
         #"no_dp",
         #"binary_thres_dp",
-        #"bonferroni",
-        #"bonferroni_nonadapt",
-        #"graphical_bonf",
+        "bonferroni",
+        "bonferroni_nonadapt",
+        "graphical_bonf",
         "graphical_parallel",
         #"graphical_ffs",
         #"graphical_similarity",

@@ -133,7 +133,6 @@ class OnlineLearnerFixedModeler(OnlineLearnerModeler):
         merged_dat = self.dat
         test_hist = TestHistory(self.modeler)
         for i, batch_dat in enumerate(dat_stream[:maxfev]):
-            print("====STEP", i)
             merged_dat = Dataset.merge([merged_dat, batch_dat])
             lr = sklearn.base.clone(self.modeler)
             lr.fit(merged_dat.x, merged_dat.y.flatten())
@@ -146,5 +145,4 @@ class OnlineLearnerFixedModeler(OnlineLearnerModeler):
             test_hist.update(
                     test_res=test_res,
                     curr_mdl=self.modeler)
-
         return test_hist
