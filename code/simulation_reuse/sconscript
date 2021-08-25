@@ -72,6 +72,7 @@ nest.add(
     'model_sim',
     [
         #"neldermead",
+        #"online",
         "online_fixed",
     ])
 
@@ -102,11 +103,12 @@ nest.add(
     [
         #"no_dp",
         #"binary_thres_dp",
-        "bonferroni",
-        "bonferroni_nonadapt",
-        "graphical_bonf",
-        "graphical_ffs",
-        "graphical_similarity",
+        #"bonferroni",
+        #"bonferroni_nonadapt",
+        #"graphical_bonf",
+        "graphical_parallel",
+        #"graphical_ffs",
+        #"graphical_similarity",
     ])
 
 @nest.add_target_with_env(localenv)

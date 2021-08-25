@@ -49,7 +49,9 @@ class NelderMeadModeler:
     Logistic reg only right now
     """
     def __init__(self, dat):
+        self.modeler = LogisticRegression(penalty="none", solver="lbfgs")
         self.dat = dat
+        self.modeler.fit(self.dat.x, self.dat.y.flatten())
 
     def set_model(self, mdl, params):
         mdl.classes_ = np.array([0,1])
@@ -60,7 +62,7 @@ class NelderMeadModeler:
     def predict_prob(self, x):
         return self.modeler.predict_proba(x)[:,1].reshape((-1,1))
 
-    def do_minimize(self, test_x, test_y, mtp_engine, dat_stream=None, maxfev=10):
+    def do_minimize(self, test_x, test_y, dp_engine, dat_stream=None, maxfev=10):
         """
         @param dat_stream: ignores this
 
@@ -75,7 +77,7 @@ class NelderMeadModeler:
             #print(lr.coef_.shape, lr.intercept_, test_x.shape)
             lr = self.set_model(lr, params)
             pred_y = lr.predict_proba(test_x)[:,1].reshape((-1,1))
-            mtp_answer = mtp_engine.get_test_eval(test_y, pred_y)
+            mtp_answer = dp_engine.get_test_eval(test_y, pred_y)
             return mtp_answer
 
         test_hist = TestHistory()
@@ -91,7 +93,7 @@ class OnlineLearnerModeler(NelderMeadModeler):
     Just do online learning on a separate dataset
     only does logistic reg
     """
-    def do_minimize(self, test_x, test_y, mtp_engine, dat_stream, maxfev=10):
+    def do_minimize(self, test_x, test_y, dp_engine, dat_stream, maxfev=10):
         """
         @param dat_stream: a list of datasets for further training the model
         @return perf_value
@@ -106,7 +108,38 @@ class OnlineLearnerModeler(NelderMeadModeler):
             lr.fit(merged_dat.x, merged_dat.y.flatten())
 
             pred_y = lr.predict_proba(test_x)[:,1].reshape((-1,1))
-            test_res = mtp_engine.get_test_eval(test_y, pred_y)
+            test_res = dp_engine.get_test_eval(test_y, pred_y)
+            if test_res == 1:
+                # replace current modeler only if successful
+                self.modeler = lr
+            test_hist.update(
+                    test_res=test_res,
+                    curr_mdl=self.modeler)
+
+        return test_hist
+
+class OnlineLearnerFixedModeler(OnlineLearnerModeler):
+    """
+    Just do online learning on a separate dataset
+    only does logistic reg
+    """
+    def do_minimize(self, test_x, test_y, dp_engine, dat_stream, maxfev=10):
+        """
+        @param dat_stream: a list of datasets for further training the model
+        @return perf_value
+        """
+        self.modeler.fit(self.dat.x, self.dat.y.flatten())
+
+        merged_dat = self.dat
+        test_hist = TestHistory(self.modeler)
+        for i, batch_dat in enumerate(dat_stream[:maxfev]):
+            print("====STEP", i)
+            merged_dat = Dataset.merge([merged_dat, batch_dat])
+            lr = sklearn.base.clone(self.modeler)
+            lr.fit(merged_dat.x, merged_dat.y.flatten())
+
+            pred_y = lr.predict_proba(test_x)[:,1].reshape((-1,1))
+            test_res = dp_engine.get_test_eval(test_y, pred_y, predef_pred_y=pred_y)
             if test_res == 1:
                 # replace current modeler only if successful
                 self.modeler = lr

@@ -70,6 +70,8 @@ def main():
         dp_mech = BonferroniNonAdaptDP(args.threshold, args.alpha)
     elif args.dp_mech == "graphical_bonf":
         dp_mech = GraphicalBonfDP(args.threshold, args.alpha, success_weight=args.success_weight)
+    elif args.dp_mech == "graphical_parallel":
+        dp_mech = GraphicalParallelDP(args.threshold, args.alpha, success_weight=args.success_weight)
     elif args.dp_mech == "graphical_ffs":
         dp_mech = GraphicalFFSDP(args.threshold, args.alpha, success_weight=args.success_weight)
     elif args.dp_mech == "graphical_similarity":

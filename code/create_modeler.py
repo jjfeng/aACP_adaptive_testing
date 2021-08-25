@@ -24,7 +24,7 @@ def parse_args():
         '--simulation',
         type=str,
         default="fixed",
-        choices=["fixed", "neldermead", "online_fixed"])
+        choices=["fixed", "neldermead", "online_fixed", "online"])
     parser.add_argument(
         '--n-estimators',
         type=int,
@@ -68,8 +68,10 @@ def main():
     # Create model
     if args.simulation == "neldermead":
         clf = NelderMeadModeler(data.init_train_dat)
-    elif args.simulation == "online_fixed":
+    elif args.simulation == "online":
         clf = OnlineLearnerModeler(data.init_train_dat)
+    elif args.simulation == "online_fixed":
+        clf = OnlineLearnerFixedModeler(data.init_train_dat)
 
 
     with open(args.out_file, "wb") as f:
