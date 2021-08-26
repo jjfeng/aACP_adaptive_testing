@@ -152,7 +152,10 @@ class GraphicalParallelDP(GraphicalBonfDP):
     Model developer PRESPECIFies a parallel online procedure
     AND assumes correlation structure among models in a level
     """
-    name = "graphical_parallel"
+    @property
+    def name(self):
+        return "graphical_parallel_%d" % self.loss_to_diff_std_ratio
+
     def __init__(self, base_threshold, alpha, success_weight, parallel_success_weight: float = 0.1, parallel_ratio: float = 0.6, loss_to_diff_std_ratio: float = 100.0):
         """
         @param loss_to_diff_std_ratio: the minimum ratio between the stdev of the loss of the predef model and the loss of the modifications in that level (maybe in the future, consider an avg?)
@@ -222,33 +225,59 @@ class GraphicalParallelDP(GraphicalBonfDP):
 
     def _get_fwer(self, gamma, alloc_w, weights, debug=False):
         tot_alpha = norm.cdf(gamma * alloc_w)
-        extra_alpha = 0
-        for w in weights:
-            extra_alpha += norm.cdf(gamma * (w - alloc_w) * self.loss_to_diff_std_ratio)
+        extra_alpha = np.sum(norm.cdf(gamma * (weights - alloc_w) * self.loss_to_diff_std_ratio))
         if debug:
             print("ALPHA SPLIT", tot_alpha, extra_alpha)
         return tot_alpha + extra_alpha
 
     def get_corrected_fwer_thresholds(self, weights, desired_fwer):
-        max_weight = np.max(weights)
         def _to_gamma_scale(x_candidate):
-            return -np.exp(x_candidate)/max_weight
+            return -np.exp(x_candidate)#/np.mean(weights)
 
+        def my_fwer_calc(x):
+            gamma = _to_gamma_scale(x[0])
+            fwer = self._get_fwer(gamma, x[1], weights)
+            return fwer
         def fwer_dist(x):
-            fwer = self._get_fwer(_to_gamma_scale(x[0]), x[1], weights)
-            return np.power(fwer - desired_fwer, 2)
-        print("WEIGHTS", weights)
-        x0 = np.array([0, np.min(weights) * 0.9])
-        fwer_res = scipy.optimize.minimize(fwer_dist, x0, bounds=[(-5,5), (0,np.min(weights))], method='L-BFGS-B',  options={'disp': None, 'maxcor': 10, 'ftol': 1e-10, 'gtol': 1e-20, 'eps': 1e-12})
-        print(fwer_res)
-        print(desired_fwer)
-        assert fwer_res.fun < 1e-3
-        if fwer_res.fun > 1e-3:
-            logging.info("ERROR in optimization %s", fwer_res)
-        optim_gamma = _to_gamma_scale(fwer_res.x[0])
-        print("WEIGHTS fwer", desired_fwer, weights, optim_gamma, optim_gamma * weights)
-        actual_fwer = self._get_fwer(optim_gamma, fwer_res.x[1], weights, debug=True)
-        print("actula fwer", actual_fwer)
+            gamma = _to_gamma_scale(x[0])
+            fwer = self._get_fwer(gamma, x[1], weights)
+            return np.power(fwer - desired_fwer, 2) + 0.001 * np.abs(gamma) * np.min(weights)
+        #x0 = np.array([-4, np.min(weights) * 0.95])
+        #fwer_res = scipy.optimize.minimize(fwer_dist, x0, bounds=[(-5,2), (0,np.min(weights))], method='L-BFGS-B',  options={'disp': None, 'maxcor': 10, 'ftol': 1e-10, 'gtol': 1e-20, 'eps': 1e-12})
+        #print(fwer_res)
+
+        #optim_gamma = _to_gamma_scale(fwer_res.x[0])
+        #actual_fwer = self._get_fwer(optim_gamma, fwer_res.x[1], weights, debug=True)
+        #print(fwer_res)
+        #print("selected gamma", optim_gamma, optim_gamma * weights, optim_gamma * fwer_res.x[1])
+        #print("actula fwer", actual_fwer, desired_fwer)
+        #assert fwer_res.fun < 1e-4
+        #if fwer_res.fun > 1e-3:
+        #    logging.info("ERROR in optimization %s", fwer_res)
+
+        # Find the gamma value that solves the desired FWER problem
+        x = np.linspace(0, 7, 200)
+        y = np.linspace(0, np.min(weights), 30)
+        m_tuples = np.array(np.meshgrid(x, y)).T.reshape((-1,2))
+        fwer_res = np.apply_along_axis(my_fwer_calc, 1, m_tuples)
+        good_choices = np.where(fwer_res <= 1e-10 + desired_fwer)[0]
+        if good_choices.size == 0:
+            logging.info("trouble finding the one")
+            min_idx = np.argmin(fwer_res)
+            good_settings = m_tuples[min_idx:min_idx + 1]
+        else:
+            #assert good_choices.size > 0
+            good_settings = m_tuples[good_choices]
+        good_settings[:,0] = _to_gamma_scale(good_settings[:,0])
+        #print("GOOD", good_settings)
+        smallest_gamma_idx = np.argmax(good_settings[:,0])
+        my_fwer_res = good_settings[smallest_gamma_idx]
+        print("min weights", np.min(weights))
+        print("MY FAVE GAMMA", my_fwer_res)
+        actual_fwer = self._get_fwer(my_fwer_res[0], my_fwer_res[1], weights, debug=True)
+        optim_gamma = my_fwer_res[0]
+        print("my fwer", actual_fwer, desired_fwer)
+        print("GAMMA final", optim_gamma, optim_gamma * np.min(weights), optim_gamma * my_fwer_res[1])
         return optim_gamma * weights
 
     def get_test_eval(self, test_y, pred_y, predef_pred_y):
@@ -262,7 +291,6 @@ class GraphicalParallelDP(GraphicalBonfDP):
 
         # get the corrected levels for testing the current node, accounting for modification similarity
         curr_level_alphas = np.array([node.alpha for node in self.node_dict[len(self.test_tree.history)]])
-        print("curr", curr_level_alphas)
         desired_fwer = np.sum(curr_level_alphas)
         alpha_weights = (curr_level_alphas + np.power(10.,-self.num_adapt_queries))/(np.sum(curr_level_alphas) + np.power(10.,-self.num_adapt_queries) * curr_level_alphas.size)
         test_stat_weights = np.maximum(-1e5, np.array([norm.ppf(w * desired_fwer) for w in alpha_weights]))
