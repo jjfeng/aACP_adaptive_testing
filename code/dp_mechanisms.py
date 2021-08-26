@@ -1,3 +1,5 @@
+import logging
+
 import numpy as np
 from scipy.stats import norm, multivariate_normal
 import scipy.optimize
@@ -151,7 +153,7 @@ class GraphicalParallelDP(GraphicalBonfDP):
     AND assumes correlation structure among models in a level
     """
     name = "graphical_parallel"
-    def __init__(self, base_threshold, alpha, success_weight, parallel_success_weight: float = 0.1, parallel_ratio: float = 0.9, loss_to_diff_std_ratio: float = 200.0):
+    def __init__(self, base_threshold, alpha, success_weight, parallel_success_weight: float = 0.1, parallel_ratio: float = 1.0, loss_to_diff_std_ratio: float = 20000.0):
         """
         @param loss_to_diff_std_ratio: the minimum ratio between the stdev of the loss of the predef model and the loss of the modifications in that level (maybe in the future, consider an avg?)
         """
@@ -212,25 +214,40 @@ class GraphicalParallelDP(GraphicalBonfDP):
         std_err = np.sqrt(np.var(predef_pred_test_nlls)/test_nlls.size)
 
         test_stat = (np.mean(test_nlls) - self.base_threshold)/std_err
+        print("95 upper ci", np.mean(test_nlls) + 1.96 * std_err)
+        print("TEST EvAL", test_stat, t_stat_thres, std_err, np.mean(test_nlls), self.base_threshold)
         test_result = int(test_stat < t_stat_thres)
-        print("THRESHODSL", test_stat, t_stat_thres)
         return test_result
 
-    def _get_fwer(self, gamma, alloc_w, weights):
+    def _get_fwer(self, gamma, alloc_w, weights, debug=False):
         tot_alpha = norm.cdf(gamma * alloc_w)
+        extra_alpha = 0
         for w in weights:
-            tot_alpha += norm.cdf(gamma * (w - alloc_w) * self.loss_to_diff_std_ratio)
-        return tot_alpha
+            extra_alpha += norm.cdf(gamma * (w - alloc_w) * self.loss_to_diff_std_ratio)
+        if debug:
+            print("ALPHA SPLIT", tot_alpha, extra_alpha)
+        return tot_alpha + extra_alpha
 
     def get_corrected_fwer_thresholds(self, weights, desired_fwer):
-        pos_weights = np.array([w for w in weights if w > 0])
+        max_weight = np.max(weights)
+        def _to_gamma_scale(x_candidate):
+            return -np.exp(x_candidate)/max_weight
+
         def fwer_dist(x):
-            fwer = self._get_fwer(x[0], x[1], pos_weights)
+            fwer = self._get_fwer(_to_gamma_scale(x[0]), x[1], weights)
             return np.power(fwer - desired_fwer, 2)
-        x0 = np.array([-1, np.min(pos_weights)/2])
-        fwer_res = scipy.optimize.minimize(fwer_dist, x0, bounds=[(-10000,0), (0,np.min(pos_weights))])
-        optim_gamma = fwer_res.x[0]
-        optim_alloc_w = fwer_res.x[1]
+        print("WEIGHTS", weights)
+        x0 = np.array([0, np.min(weights) * 0.9])
+        fwer_res = scipy.optimize.minimize(fwer_dist, x0, bounds=[(-5,5), (0,np.min(weights))], method='L-BFGS-B',  options={'disp': None, 'maxcor': 10, 'ftol': 1e-10, 'gtol': 1e-20, 'eps': 1e-12})
+        print(fwer_res)
+        print(desired_fwer)
+        assert fwer_res.fun < 1e-3
+        if fwer_res.fun > 1e-3:
+            logging.info("ERROR in optimization %s", fwer_res)
+        optim_gamma = _to_gamma_scale(fwer_res.x[0])
+        print("WEIGHTS fwer", desired_fwer, weights, optim_gamma, optim_gamma * weights)
+        actual_fwer = self._get_fwer(optim_gamma, fwer_res.x[1], weights, debug=True)
+        print("actula fwer", actual_fwer)
         return optim_gamma * weights
 
     def get_test_eval(self, test_y, pred_y, predef_pred_y):
@@ -244,6 +261,7 @@ class GraphicalParallelDP(GraphicalBonfDP):
 
         # get the corrected levels for testing the current node, accounting for modification similarity
         curr_level_alphas = np.array([node.alpha for node in self.node_dict[len(self.test_tree.history)]])
+        print("curr", curr_level_alphas)
         desired_fwer = np.sum(curr_level_alphas)
         alpha_weights = (curr_level_alphas + np.power(10.,-self.num_adapt_queries))/(np.sum(curr_level_alphas) + np.power(10.,-self.num_adapt_queries) * curr_level_alphas.size)
         test_stat_weights = np.maximum(-1e5, np.array([norm.ppf(w * desired_fwer) for w in alpha_weights]))

@@ -95,7 +95,7 @@ def create_modeler(env, outdir, c):
 
 nest.add(
     'thres',
-    [0.41],
+    [0.40],
     label_func=lambda c: "thres_%.2f" % c)
 
 nest.add(
@@ -103,9 +103,9 @@ nest.add(
     [
         #"no_dp",
         #"binary_thres_dp",
-        "bonferroni",
+        #"bonferroni",
         "bonferroni_nonadapt",
-        "graphical_bonf",
+        #"graphical_bonf",
         "graphical_parallel",
         #"graphical_ffs",
         #"graphical_similarity",
