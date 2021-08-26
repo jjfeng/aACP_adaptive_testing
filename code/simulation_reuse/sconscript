@@ -119,6 +119,8 @@ def create_dp(env, outdir, c):
 	c['seed'],
         '--threshold',
         c['thres'],
+        '--parallel-ratio 0.9' if "graphical_parallel" == c['dp_mech'] else '',
+        '--loss-to-diff-ratio 100' if "graphical_parallel" == c['dp_mech'] else '',
         '--success-weight 0.8' if "graphical" in c['dp_mech'] else '',
         '--alpha 0.1',
         '--dp-mech',

@@ -32,6 +32,15 @@ def parse_args():
         default=0.5,
         help='threshold for testing modifications')
     parser.add_argument(
+        '--parallel-ratio',
+        type=float,
+        default=1.0,
+        help='parallel factor')
+    parser.add_argument(
+        '--loss-to-diff-ratio',
+        type=float,
+        help='ratio in modeling assumptions')
+    parser.add_argument(
         '--success-weight',
         type=float,
         default=0.8,
@@ -71,7 +80,7 @@ def main():
     elif args.dp_mech == "graphical_bonf":
         dp_mech = GraphicalBonfDP(args.threshold, args.alpha, success_weight=args.success_weight)
     elif args.dp_mech == "graphical_parallel":
-        dp_mech = GraphicalParallelDP(args.threshold, args.alpha, success_weight=args.success_weight)
+        dp_mech = GraphicalParallelDP(args.threshold, args.alpha, success_weight=args.success_weight, parallel_ratio=args.parallel_ratio, loss_to_diff_std_ratio=args.loss_to_diff_ratio)
     elif args.dp_mech == "graphical_ffs":
         dp_mech = GraphicalFFSDP(args.threshold, args.alpha, success_weight=args.success_weight)
     elif args.dp_mech == "graphical_similarity":

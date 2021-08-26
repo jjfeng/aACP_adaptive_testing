@@ -153,9 +153,10 @@ class GraphicalParallelDP(GraphicalBonfDP):
     AND assumes correlation structure among models in a level
     """
     name = "graphical_parallel"
-    def __init__(self, base_threshold, alpha, success_weight, parallel_success_weight: float = 0.1, parallel_ratio: float = 1.0, loss_to_diff_std_ratio: float = 20000.0):
+    def __init__(self, base_threshold, alpha, success_weight, parallel_success_weight: float = 0.1, parallel_ratio: float = 0.6, loss_to_diff_std_ratio: float = 100.0):
         """
         @param loss_to_diff_std_ratio: the minimum ratio between the stdev of the loss of the predef model and the loss of the modifications in that level (maybe in the future, consider an avg?)
+                                    bigger the ratio the more similar the adaptive strategy is to the prespecified strategy
         """
         self.base_threshold = base_threshold
         self.alpha = alpha
