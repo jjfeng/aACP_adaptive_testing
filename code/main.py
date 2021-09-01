@@ -128,6 +128,7 @@ def main():
     plt.title("DP mech: %s" % dp_mech.name)
     plt.tight_layout()
     plt.savefig(args.plot_file)
+    print("Fig", args.plot_file)
 
     with open(args.out_file, "wb") as f:
         pickle.dump(df, f)

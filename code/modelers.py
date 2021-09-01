@@ -183,7 +183,8 @@ class BinaryAdversaryModeler(LockedModeler):
             lr = self.set_model(lr, params)
             pred_y = lr.predict_proba(test_x)[:,1].reshape((-1,1))
             prev_pred_y = self.modeler.predict_proba(test_x)[:,1].reshape((-1,1))
-            mtp_answer = dp_engine.get_test_compare(test_y, pred_y, prev_pred_y)
+            #mtp_answer = dp_engine.get_test_compare(test_y, pred_y, prev_pred_y)
+            mtp_answer = dp_engine.get_test_eval(test_y, pred_y, prev_pred_y)
             return mtp_answer
 
         # Now search in each direction and do a greedy search
@@ -240,7 +241,7 @@ class AdversarialModeler(LockedModeler):
             self.modeler = self.binary_modeler.modeler
         return test_hist
 
-class OnlineLearnerModeler(NelderMeadModeler):
+class OnlineLearnerModeler(LockedModeler):
     """
     Just do online learning on a separate dataset
     only does logistic reg

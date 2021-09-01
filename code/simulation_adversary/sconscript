@@ -13,7 +13,7 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 RUN_STATUS = localenv['clusters']
 NUM_SEEDS = localenv['num_seeds']
-REUSE_ITERS = 30
+REUSE_ITERS = 10
 SPARSE_P = 1
 
 #nest.add_aggregate("summary_res_combo_refit", list)
@@ -86,11 +86,11 @@ nest.add(
     'dp_mech',
     [
         #"no_dp",
-        "binary_thres_dp",
+        #"binary_thres_dp",
         #"bonferroni",
         #"bonferroni_nonadapt",
         #"graphical_bonf",
-        #"graphical_parallel",
+        "graphical_parallel",
         #"graphical_ffs",
     ])
 

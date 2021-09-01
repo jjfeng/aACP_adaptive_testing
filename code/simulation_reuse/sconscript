@@ -105,9 +105,9 @@ nest.add(
         #"binary_thres_dp",
         "bonferroni",
         "bonferroni_nonadapt",
-        "graphical_bonf",
+        #"graphical_bonf",
         "graphical_parallel",
-        "graphical_ffs",
+        #"graphical_ffs",
         #"graphical_similarity",
     ])
 
@@ -127,7 +127,7 @@ def create_dp(env, outdir, c):
         '--parallel-ratio 1.0' if "graphical_parallel" == c['dp_mech'] else '',
         #'--parallel-ratio %f' % c['parallel_ratio'] if "graphical_parallel" == c['dp_mech'] else '',
         #'--loss-to-diff-ratio %d' % c['loss_to_diff_ratio'] if "graphical_parallel" == c['dp_mech'] else '',
-        '--loss-to-diff-ratio 100' if "graphical_parallel" == c['dp_mech'] else '',
+        '--loss-to-diff-ratio 100000' if "graphical_parallel" == c['dp_mech'] else '',
         '--success-weight 0.9' if "graphical" in c['dp_mech'] else '',
         '--alpha 0.1',
         '--dp-mech',
