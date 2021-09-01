@@ -65,7 +65,7 @@ def parse_args():
 
 def get_nll(test_y, pred_y):
     test_y = test_y.flatten()
-    pred_y = pred_y.flatten()
+    pred_y = np.maximum(np.minimum(1 - 1e-10, pred_y.flatten()), 1e-10)
     return -np.mean(test_y * np.log(pred_y) + (1 - test_y) * np.log(1 - pred_y))
 
 def main():

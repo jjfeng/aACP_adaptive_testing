@@ -80,6 +80,78 @@ class NelderMeadModeler(LockedModeler):
 
         return test_hist
 
+class CtsAdversaryModeler(LockedModeler):
+    def __init__(self, dat: Dataset, min_var_idx: int = 1, update_incr: float = 0.04):
+        """
+        @param min_var_idx: nelder mead only tunes coefficients with idx at least min_var_idx
+        """
+        self.modeler = LogisticRegression(penalty="none", solver="lbfgs")
+        self.dat = dat
+        self.modeler.fit(self.dat.x, self.dat.y.flatten())
+        self.update_incr = update_incr
+        self.min_var_idx = min_var_idx
+
+    def do_minimize(self, test_x, test_y, dp_engine, dat_stream=None, maxfev=10):
+        """
+        @param dat_stream: ignores this
+        """
+        # Train a good initial model
+        self.modeler.fit(self.dat.x, self.dat.y.flatten())
+        self.modeler.intercept_[:] = 0
+        self.modeler.coef_[0,:self.min_var_idx] = 5
+        self.modeler.coef_[0,self.min_var_idx:] = 0
+
+        def get_test_perf(params):
+            lr = sklearn.base.clone(self.modeler)
+            lr = self.set_model(lr, params)
+            pred_y = lr.predict_proba(test_x)[:,1].reshape((-1,1))
+            mtp_answer = dp_engine.get_test_eval(test_y, pred_y)
+            return mtp_answer
+
+        # Now search in each direction and do a greedy search
+        test_hist = TestHistory(self.modeler)
+        curr_coef = np.concatenate([self.modeler.intercept_, self.modeler.coef_.flatten()])
+        curr_perf = get_test_perf(curr_coef)
+        while test_hist.curr_time < maxfev:
+            # Test each variable (that's known to be irrelevant)
+            for var_idx in range(self.min_var_idx, test_x.shape[1]):
+                # Test each direction for the variable
+                is_success = False
+                for update_dir in [-1,1]:
+                    if test_hist.curr_time >= maxfev:
+                        break
+                    curr_coef = np.concatenate([self.modeler.intercept_, self.modeler.coef_.flatten()])
+                    curr_coef[var_idx] += update_dir * self.update_incr
+                    test_res = get_test_perf(curr_coef)
+                    test_hist.update(
+                            test_res=test_res,
+                            curr_mdl=self.modeler)
+                    #print(test_res, curr_perf, var_idx, update_dir)
+                    if test_res < curr_perf:
+                        is_success = True
+                        self.set_model(self.modeler, curr_coef)
+                        curr_perf = test_res
+                        break
+
+                # If we found a good direction, keep walking in that direction
+                while is_success:
+                    if test_hist.curr_time >= maxfev:
+                        break
+                    curr_coef = np.concatenate([self.modeler.intercept_, self.modeler.coef_.flatten()])
+                    curr_coef[var_idx] += update_dir * self.update_incr
+                    test_res = get_test_perf(curr_coef)
+                    test_hist.update(
+                            test_res=test_res,
+                            curr_mdl=self.modeler)
+                    if test_res < curr_perf:
+                        self.set_model(self.modeler, curr_coef)
+                        curr_perf = test_res
+                        is_success = True
+                    else:
+                        is_success = False
+
+        return test_hist
+
 class BinaryAdversaryModeler(LockedModeler):
     def __init__(self, dat: Dataset, min_var_idx: int = 1, update_incr: float = 0.04):
         """
@@ -97,7 +169,8 @@ class BinaryAdversaryModeler(LockedModeler):
         """
         # Train a good initial model
         self.modeler.fit(self.dat.x, self.dat.y.flatten())
-        self.modeler.coef_[self.min_var_idx:] = 0
+        self.modeler.coef_[0,:self.min_var_idx] = 5
+        self.modeler.coef_[0,self.min_var_idx:] = 0
 
         def get_test_perf(params):
             lr = sklearn.base.clone(self.modeler)
@@ -142,9 +215,9 @@ class BinaryAdversaryModeler(LockedModeler):
 
 class AdversarialModeler(LockedModeler):
     def __init__(self, dat, min_var_idx: int = 1):
-        self.nm_modeler = NelderMeadModeler(dat, min_var_idx)
+        self.cts_modeler = CtsAdversaryModeler(dat, min_var_idx)
         self.binary_modeler = BinaryAdversaryModeler(dat, min_var_idx)
-        self.modeler = self.nm_modeler.modeler
+        self.modeler = self.cts_modeler.modeler
 
     def do_minimize(self, test_x, test_y, dp_engine, dat_stream=None, maxfev=10):
         """
@@ -153,8 +226,8 @@ class AdversarialModeler(LockedModeler):
         @return perf_value
         """
         if dp_engine.name == "no_dp":
-            test_hist = self.nm_modeler.do_minimize(test_x, test_y, dp_engine, dat_stream, maxfev)
-            self.modeler = self.nm_modeler.modeler
+            test_hist = self.cts_modeler.do_minimize(test_x, test_y, dp_engine, dat_stream, maxfev)
+            self.modeler = self.cts_modeler.modeler
         else:
             test_hist = self.binary_modeler.do_minimize(test_x, test_y, dp_engine, dat_stream, maxfev)
             self.modeler = self.binary_modeler.modeler

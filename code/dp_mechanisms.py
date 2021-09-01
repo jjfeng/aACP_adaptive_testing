@@ -17,7 +17,7 @@ class NoDP:
         @return test perf without any DP, return NLL
         """
         test_y = test_y.flatten()
-        pred_y = pred_y.flatten()
+        pred_y = np.maximum(np.minimum(1 - 1e-10, pred_y.flatten()), 1e-10)
         return -np.mean(np.log(pred_y) * test_y + np.log(1 - pred_y) * (1 - test_y))
 
 class BinaryThresholdDP(NoDP):
@@ -31,7 +31,7 @@ class BinaryThresholdDP(NoDP):
         @return test perf where 1 means approve and 0 means not approved
         """
         test_y = test_y.flatten()
-        pred_y = pred_y.flatten()
+        pred_y = np.maximum(np.minimum(1 - 1e-10, pred_y.flatten()), 1e-10)
         test_nlls = -(np.log(pred_y) * test_y + np.log(1 - pred_y) * (1 - test_y))
         t_stat_se = np.sqrt(np.var(test_nlls)/test_nlls.size)
         upper_ci = np.mean(test_nlls) + t_stat_se * norm.ppf(1 - self.alpha)
