@@ -49,13 +49,14 @@ class NelderMeadModeler(LockedModeler):
         self.dat = dat
         self.modeler.fit(self.dat.x, self.dat.y.flatten())
         self.min_var_idx = min_var_idx
+        self.modeler.coef_[0,self.min_var_idx:] = 0
 
     def do_minimize(self, test_x, test_y, dp_engine, dat_stream=None, maxfev=10):
         """
         @param dat_stream: ignores this
         """
         self.modeler.fit(self.dat.x, self.dat.y.flatten())
-        self.modeler.coef_[self.min_var_idx:] = 0
+        self.modeler.coef_[0,self.min_var_idx:] = 0
 
         # Just for initialization
         def get_test_perf(params):
@@ -72,7 +73,8 @@ class NelderMeadModeler(LockedModeler):
         test_hist = TestHistory(self.modeler)
         init_coef = np.concatenate([self.modeler.coef_.flatten()[self.min_var_idx:]])
         # TODO: add callback to append to history
-        res = scipy.optimize.minimize(get_test_perf, x0=init_coef, method="Nelder-Mead", options={"maxfev": maxfev})
+        res = scipy.optimize.minimize(get_test_perf, x0=init_coef, method="Nelder-Mead", options={"maxfev": maxfev, "adaptive": True})
+        print(res.x)
         self.modeler = self.set_model(self.modeler, np.concatenate([
                 self.modeler.intercept_,
                 self.modeler.coef_.flatten()[:self.min_var_idx],
@@ -87,9 +89,11 @@ class CtsAdversaryModeler(LockedModeler):
         """
         self.modeler = LogisticRegression(penalty="none", solver="lbfgs")
         self.dat = dat
-        self.modeler.fit(self.dat.x, self.dat.y.flatten())
         self.update_incr = update_incr
         self.min_var_idx = min_var_idx
+        self.modeler.fit(self.dat.x, self.dat.y.flatten())
+        self.modeler.coef_[0,:self.min_var_idx] = 5
+        self.modeler.coef_[0,self.min_var_idx:] = 0
 
     def do_minimize(self, test_x, test_y, dp_engine, dat_stream=None, maxfev=10):
         """
@@ -159,9 +163,11 @@ class BinaryAdversaryModeler(LockedModeler):
         """
         self.modeler = LogisticRegression(penalty="none", solver="lbfgs")
         self.dat = dat
-        self.modeler.fit(self.dat.x, self.dat.y.flatten())
         self.update_incr = update_incr
         self.min_var_idx = min_var_idx
+        self.modeler.fit(self.dat.x, self.dat.y.flatten())
+        self.modeler.coef_[0,:self.min_var_idx] = 5
+        self.modeler.coef_[0,self.min_var_idx:] = 0
 
     def do_minimize(self, test_x, test_y, dp_engine, dat_stream=None, maxfev=10):
         """
@@ -176,7 +182,8 @@ class BinaryAdversaryModeler(LockedModeler):
             lr = sklearn.base.clone(self.modeler)
             lr = self.set_model(lr, params)
             pred_y = lr.predict_proba(test_x)[:,1].reshape((-1,1))
-            mtp_answer = dp_engine.get_test_eval(test_y, pred_y)
+            prev_pred_y = self.modeler.predict_proba(test_x)[:,1].reshape((-1,1))
+            mtp_answer = dp_engine.get_test_compare(test_y, pred_y, prev_pred_y)
             return mtp_answer
 
         # Now search in each direction and do a greedy search
@@ -210,7 +217,7 @@ class BinaryAdversaryModeler(LockedModeler):
                             curr_mdl=self.modeler)
                     if test_res == 1:
                         self.set_model(self.modeler, curr_coef)
-
+        print("coefs", self.modeler.coef_)
         return test_hist
 
 class AdversarialModeler(LockedModeler):

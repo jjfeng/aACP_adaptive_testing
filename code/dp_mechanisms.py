@@ -20,6 +20,13 @@ class NoDP:
         pred_y = np.maximum(np.minimum(1 - 1e-10, pred_y.flatten()), 1e-10)
         return -np.mean(np.log(pred_y) * test_y + np.log(1 - pred_y) * (1 - test_y))
 
+def get_losses(test_y, pred_y):
+    test_y = test_y.flatten()
+    pred_y = np.maximum(np.minimum(1 - 1e-10, pred_y.flatten()), 1e-10)
+    test_nlls = -(np.log(pred_y) * test_y + np.log(1 - pred_y) * (1 - test_y))
+    return test_nlls
+
+
 class BinaryThresholdDP(NoDP):
     name = "binary_thres"
     def __init__(self, base_threshold, alpha):
@@ -30,12 +37,23 @@ class BinaryThresholdDP(NoDP):
         """
         @return test perf where 1 means approve and 0 means not approved
         """
-        test_y = test_y.flatten()
-        pred_y = np.maximum(np.minimum(1 - 1e-10, pred_y.flatten()), 1e-10)
-        test_nlls = -(np.log(pred_y) * test_y + np.log(1 - pred_y) * (1 - test_y))
+        test_nlls = get_losses(test_y, pred_y)
         t_stat_se = np.sqrt(np.var(test_nlls)/test_nlls.size)
         upper_ci = np.mean(test_nlls) + t_stat_se * norm.ppf(1 - self.alpha)
+        print("upper ci", upper_ci)
         return int(upper_ci < self.base_threshold)
+
+    def get_test_compare(self, test_y, pred_y, prev_pred_y):
+        """
+        @return test perf where 1 means approve and 0 means not approved
+        """
+        test_nlls_new = get_losses(test_y, pred_y)
+        test_nlls_prev = get_losses(test_y, prev_pred_y)
+        loss_diffs = test_nlls_new - test_nlls_prev
+        t_stat_se = np.sqrt(np.var(loss_diffs)/loss_diffs.size)
+        upper_ci = np.mean(loss_diffs) + t_stat_se * norm.ppf(1 - self.alpha)
+        print("upper ci", upper_ci)
+        return int(upper_ci < 0)
 
 class BonferroniThresholdDP(BinaryThresholdDP):
     name = "bonferroni_thres"

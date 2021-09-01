@@ -81,7 +81,6 @@ def main():
     # Prep data
     init_beta = np.random.normal(size=(args.p,1)) * 0.0
     init_beta[:args.sparse_p] = args.init_sparse_beta
-    print(init_beta)
     data_generator = DataGenerator(init_beta, mean_x=0)
     full_dat, beta_time_varying = data_generator.generate_data(args.init_train_n, args.train_batch_n, args.train_iters, args.init_reuse_test_n, args.test_n, seed=args.train_seed, train_batch_incr_factor=args.train_incr_factor)
 

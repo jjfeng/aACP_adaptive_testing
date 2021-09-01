@@ -91,6 +91,7 @@ def main():
     test_nlls = []
     test_aucs = []
     for maxfev in range(args.maxfev + 1):
+    #for maxfev in [args.maxfev]:
         print("===========RUN PROCEDURE FOR NUM STPES", maxfev)
         if maxfev > 0:
             dp_mech.set_num_queries(maxfev)
