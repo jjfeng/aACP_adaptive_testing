@@ -23,16 +23,11 @@ def parse_args():
     parser.add_argument(
         '--simulation',
         type=str,
-        default="fixed",
-        choices=["fixed", "neldermead", "online_fixed", "online"])
+        default="fixed")
     parser.add_argument(
-        '--n-estimators',
+        '--min-var-idx',
         type=int,
-        default=200)
-    parser.add_argument(
-        '--max-depth',
-        type=int,
-        default=2)
+        default=0)
     parser.add_argument(
         '--refit-freq',
         type=int,
@@ -67,7 +62,9 @@ def main():
 
     # Create model
     if args.simulation == "neldermead":
-        clf = NelderMeadModeler(data.init_train_dat)
+        clf = NelderMeadModeler(data.init_train_dat, min_var_idx=args.min_var_idx)
+    elif args.simulation == "adversary":
+        clf = AdversarialModeler(data.init_train_dat, min_var_idx=args.min_var_idx)
     elif args.simulation == "online":
         clf = OnlineLearnerModeler(data.init_train_dat)
     elif args.simulation == "online_fixed":

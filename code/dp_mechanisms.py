@@ -20,10 +20,11 @@ class NoDP:
         pred_y = pred_y.flatten()
         return -np.mean(np.log(pred_y) * test_y + np.log(1 - pred_y) * (1 - test_y))
 
-class BinaryThresholdDP:
+class BinaryThresholdDP(NoDP):
     name = "binary_thres"
-    def __init__(self, base_threshold):
+    def __init__(self, base_threshold, alpha):
         self.base_threshold = base_threshold
+        self.alpha = alpha
 
     def get_test_eval(self, test_y, pred_y, predef_pred_y=None):
         """
@@ -31,13 +32,10 @@ class BinaryThresholdDP:
         """
         test_y = test_y.flatten()
         pred_y = pred_y.flatten()
-        test_nll = -np.mean(np.log(pred_y) * test_y + np.log(1 - pred_y) * (1 - test_y))
-        return int(test_nll < self.base_threshold)
-
-    def merge_failure_with_success_node(self):
-        # noop
-        return
-
+        test_nlls = -(np.log(pred_y) * test_y + np.log(1 - pred_y) * (1 - test_y))
+        t_stat_se = np.sqrt(np.var(test_nlls)/test_nlls.size)
+        upper_ci = np.mean(test_nlls) + t_stat_se * norm.ppf(1 - self.alpha)
+        return int(upper_ci < self.base_threshold)
 
 class BonferroniThresholdDP(BinaryThresholdDP):
     name = "bonferroni_thres"

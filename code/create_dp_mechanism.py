@@ -72,7 +72,7 @@ def main():
     if args.dp_mech == "no_dp":
         dp_mech = NoDP()
     elif args.dp_mech == "binary_thres_dp":
-        dp_mech = BinaryThresholdDP(args.threshold)
+        dp_mech = BinaryThresholdDP(args.threshold, args.alpha)
     elif args.dp_mech == "bonferroni":
         dp_mech = BonferroniThresholdDP(args.threshold, args.alpha)
     elif args.dp_mech == "bonferroni_nonadapt":

@@ -13,7 +13,8 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 RUN_STATUS = localenv['clusters']
 NUM_SEEDS = localenv['num_seeds']
-REUSE_ITERS = 100
+REUSE_ITERS = 40
+SPARSE_P = 1
 
 #nest.add_aggregate("summary_res_combo_refit", list)
 #nest.add_aggregate("summary_res_combo_boxed", list)
@@ -21,7 +22,7 @@ REUSE_ITERS = 100
 #nest.add_aggregate("summary_res_boxed", list)
 nest.add(
     'reuse_test_n',
-    [50],
+    [100],
     label_func=lambda c: "test_%d" % c)
 
 nest.add(
@@ -34,8 +35,9 @@ def generate_data(env, outdir, c):
     cmd = [
         'python generate_data_single_pop.py',
         '--meta-seed 1',
-        '--sparse 1',
-        '--p 10',
+        '--sparse',
+        SPARSE_P,
+        '--p 20',
         '--init-train-n 300',
         '--train-batch-n 0',
         '--train-incr 1',
@@ -43,7 +45,7 @@ def generate_data(env, outdir, c):
         REUSE_ITERS,
         '--init-reuse-test-n',
         c['reuse_test_n'],
-        '--init-sparse-beta 2',
+        '--init-sparse-beta 5',
         '--test-n 4000',
 	'--out ${TARGETS[0]}',
 	'--log-file ${TARGETS[1]}',
@@ -58,7 +60,7 @@ def generate_data(env, outdir, c):
 nest.add(
     'model_sim',
     [
-        "neldermead",
+        "adversary",
     ])
 
 @nest.add_target_with_env(localenv)
@@ -69,6 +71,8 @@ def create_modeler(env, outdir, c):
 	c['seed'],
         '--simulation',
         c['model_sim'],
+        '--min-var-idx',
+        SPARSE_P,
 	'--data ${SOURCES[0]}',
 	'--out ${TARGETS[0]}'
     ]
@@ -79,15 +83,10 @@ def create_modeler(env, outdir, c):
         ' '.join(map(str, cmd)))
 
 nest.add(
-    'thres',
-    [0.48],
-    label_func=lambda c: "thres_%.2f" % c)
-
-nest.add(
     'dp_mech',
     [
         "no_dp",
-        #"binary_thres_dp",
+        "binary_thres_dp",
         #"bonferroni",
         #"bonferroni_nonadapt",
         #"graphical_bonf",
@@ -95,22 +94,14 @@ nest.add(
         #"graphical_ffs",
     ])
 
-#nest.add(
-#    'loss_to_diff_ratio',
-#    [25,100,500],
-#    label_func=lambda c: "ratio_%d" % c)
-
 @nest.add_target_with_env(localenv)
 def create_dp(env, outdir, c):
     cmd = [
         'python create_dp_mechanism.py',
         '--seed',
 	c['seed'],
-        '--threshold',
-        c['thres'],
-        '--parallel-ratio 1.0' if "graphical_parallel" == c['dp_mech'] else '',
-        #'--parallel-ratio %f' % c['parallel_ratio'] if "graphical_parallel" == c['dp_mech'] else '',
-        #'--loss-to-diff-ratio %d' % c['loss_to_diff_ratio'] if "graphical_parallel" == c['dp_mech'] else '',
+        '--threshold 0.39',
+        '--parallel-ratio 0.5' if "graphical_parallel" == c['dp_mech'] else '',
         '--loss-to-diff-ratio 100' if "graphical_parallel" == c['dp_mech'] else '',
         '--success-weight 0.9' if "graphical" in c['dp_mech'] else '',
         '--alpha 0.1',

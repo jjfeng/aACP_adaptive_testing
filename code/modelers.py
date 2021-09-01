@@ -22,33 +22,10 @@ class TestHistory:
         self.curr_time += 1
 
 class LockedModeler:
-    def __init__(self, dat: Dataset, n_estimators: int=200, max_depth: int = 3):
-        self.dat = dat
-        self.curr_model = GradientBoostingClassifier(n_estimators=n_estimators, learning_rate=.04, max_depth=max_depth, random_state=0)
-        self._fit_model()
-        self.refit_freq = None
-
-    def _fit_model(self):
-        self.curr_model.fit(self.dat.x, self.dat.y.flatten())
-
-    def predict_prob_single(self, x):
-        return self.curr_model.predict_proba(x)[:,1].reshape((-1,1))
-
-    def predict_prob(self, x):
-        return self.curr_model.predict_proba(x)[:,1].reshape((-1,1))
-
-    def update(self, x, y, is_init=False):
-        """
-        @return whether or not the underlying model changed
-        """
-        # Do nothing
-        return False
-
-class NelderMeadModeler:
     """
     Logistic reg only right now
     """
-    def __init__(self, dat):
+    def __init__(self, dat: Dataset):
         self.modeler = LogisticRegression(penalty="none", solver="lbfgs")
         self.dat = dat
         self.modeler.fit(self.dat.x, self.dat.y.flatten())
@@ -62,30 +39,125 @@ class NelderMeadModeler:
     def predict_prob(self, x):
         return self.modeler.predict_proba(x)[:,1].reshape((-1,1))
 
+
+class NelderMeadModeler(LockedModeler):
+    def __init__(self, dat: Dataset, min_var_idx: int = 1):
+        """
+        @param min_var_idx: nelder mead only tunes coefficients with idx at least min_var_idx
+        """
+        self.modeler = LogisticRegression(penalty="none", solver="lbfgs")
+        self.dat = dat
+        self.modeler.fit(self.dat.x, self.dat.y.flatten())
+        self.min_var_idx = min_var_idx
+
+    def do_minimize(self, test_x, test_y, dp_engine, dat_stream=None, maxfev=10):
+        """
+        @param dat_stream: ignores this
+        """
+        self.modeler.fit(self.dat.x, self.dat.y.flatten())
+        self.modeler.coef_[self.min_var_idx:] = 0
+
+        # Just for initialization
+        def get_test_perf(params):
+            lr = sklearn.base.clone(self.modeler)
+            #print(params)
+            lr = self.set_model(lr, np.concatenate([
+                self.modeler.intercept_,
+                self.modeler.coef_.flatten()[:self.min_var_idx],
+                params]))
+            pred_y = lr.predict_proba(test_x)[:,1].reshape((-1,1))
+            mtp_answer = dp_engine.get_test_eval(test_y, pred_y)
+            return mtp_answer
+
+        test_hist = TestHistory(self.modeler)
+        init_coef = np.concatenate([self.modeler.coef_.flatten()[self.min_var_idx:]])
+        # TODO: add callback to append to history
+        res = scipy.optimize.minimize(get_test_perf, x0=init_coef, method="Nelder-Mead", options={"maxfev": maxfev})
+        self.modeler = self.set_model(self.modeler, np.concatenate([
+                self.modeler.intercept_,
+                self.modeler.coef_.flatten()[:self.min_var_idx],
+                res.x]))
+
+        return test_hist
+
+class BinaryAdversaryModeler(LockedModeler):
+    def __init__(self, dat: Dataset, min_var_idx: int = 1, update_incr: float = 0.04):
+        """
+        @param min_var_idx: nelder mead only tunes coefficients with idx at least min_var_idx
+        """
+        self.modeler = LogisticRegression(penalty="none", solver="lbfgs")
+        self.dat = dat
+        self.modeler.fit(self.dat.x, self.dat.y.flatten())
+        self.update_incr = update_incr
+        self.min_var_idx = min_var_idx
+
+    def do_minimize(self, test_x, test_y, dp_engine, dat_stream=None, maxfev=10):
+        """
+        @param dat_stream: ignores this
+        """
+        # Train a good initial model
+        self.modeler.fit(self.dat.x, self.dat.y.flatten())
+        self.modeler.coef_[self.min_var_idx:] = 0
+
+        def get_test_perf(params):
+            lr = sklearn.base.clone(self.modeler)
+            lr = self.set_model(lr, params)
+            pred_y = lr.predict_proba(test_x)[:,1].reshape((-1,1))
+            mtp_answer = dp_engine.get_test_eval(test_y, pred_y)
+            return mtp_answer
+
+        # Now search in each direction and do a greedy search
+        test_hist = TestHistory(self.modeler)
+        while test_hist.curr_time < maxfev:
+            # Test each variable (that's known to be irrelevant)
+            for var_idx in range(self.min_var_idx, test_x.shape[1]):
+                # Test each direction for the variable
+                for update_dir in [-1,1]:
+                    if test_hist.curr_time >= maxfev:
+                        break
+                    curr_coef = np.concatenate([self.modeler.intercept_, self.modeler.coef_.flatten()])
+                    curr_coef[var_idx] += update_dir * self.update_incr
+                    test_res = get_test_perf(curr_coef)
+                    test_hist.update(
+                            test_res=test_res,
+                            curr_mdl=self.modeler)
+                    if test_res == 1:
+                        self.set_model(self.modeler, curr_coef)
+                        break
+
+                # If we found a good direction, keep walking in that direction
+                while test_res == 1:
+                    if test_hist.curr_time >= maxfev:
+                        break
+                    curr_coef = np.concatenate([self.modeler.intercept_, self.modeler.coef_.flatten()])
+                    curr_coef[var_idx] += update_dir * self.update_incr
+                    test_res = get_test_perf(curr_coef)
+                    test_hist.update(
+                            test_res=test_res,
+                            curr_mdl=self.modeler)
+                    if test_res == 1:
+                        self.set_model(self.modeler, curr_coef)
+
+        return test_hist
+
+class AdversarialModeler(LockedModeler):
+    def __init__(self, dat, min_var_idx: int = 1):
+        self.nm_modeler = NelderMeadModeler(dat, min_var_idx)
+        self.binary_modeler = BinaryAdversaryModeler(dat, min_var_idx)
+        self.modeler = self.nm_modeler.modeler
+
     def do_minimize(self, test_x, test_y, dp_engine, dat_stream=None, maxfev=10):
         """
         @param dat_stream: ignores this
 
         @return perf_value
         """
-        self.modeler.fit(self.dat.x, self.dat.y.flatten())
-
-        # Just for initialization
-        def get_test_perf(params):
-            lr = sklearn.base.clone(self.modeler)
-            #lr.fit(test_x[:5], test_y[:5])
-            #print(lr.coef_.shape, lr.intercept_, test_x.shape)
-            lr = self.set_model(lr, params)
-            pred_y = lr.predict_proba(test_x)[:,1].reshape((-1,1))
-            mtp_answer = dp_engine.get_test_eval(test_y, pred_y)
-            return mtp_answer
-
-        test_hist = TestHistory(self.modeler)
-        init_coef = np.concatenate([self.modeler.intercept_, self.modeler.coef_.flatten()])
-        # TODO: add callback to append to history
-        res = scipy.optimize.minimize(get_test_perf, x0=init_coef, method="Nelder-Mead", options={"maxfev": maxfev})
-        self.modeler = self.set_model(self.modeler, res.x)
-
+        if dp_engine.name == "no_dp":
+            test_hist = self.nm_modeler.do_minimize(test_x, test_y, dp_engine, dat_stream, maxfev)
+            self.modeler = self.nm_modeler.modeler
+        else:
+            test_hist = self.binary_modeler.do_minimize(test_x, test_y, dp_engine, dat_stream, maxfev)
+            self.modeler = self.binary_modeler.modeler
         return test_hist
 
 class OnlineLearnerModeler(NelderMeadModeler):
