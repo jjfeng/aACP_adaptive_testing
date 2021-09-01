@@ -30,3 +30,6 @@ env.SConsignFile()
 
 flag = 'simulation_reuse'
 sc.SConscript(flag + '/sconscript', exports=['flag'])
+
+flag = 'simulation_adversary'
+sc.SConscript(flag + '/sconscript', exports=['flag'])

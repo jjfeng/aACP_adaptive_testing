@@ -9,6 +9,9 @@ class NoDP:
     def __init__(self):
         return
 
+    def set_num_queries(self, num_adapt_queries):
+        self.num_adapt_queries = num_adapt_queries
+
     def get_test_eval(self, test_y, pred_y, predef_pred_y=None):
         """
         @return test perf without any DP, return NLL

@@ -80,7 +80,7 @@ class NelderMeadModeler:
             mtp_answer = dp_engine.get_test_eval(test_y, pred_y)
             return mtp_answer
 
-        test_hist = TestHistory()
+        test_hist = TestHistory(self.modeler)
         init_coef = np.concatenate([self.modeler.intercept_, self.modeler.coef_.flatten()])
         # TODO: add callback to append to history
         res = scipy.optimize.minimize(get_test_perf, x0=init_coef, method="Nelder-Mead", options={"maxfev": maxfev})
