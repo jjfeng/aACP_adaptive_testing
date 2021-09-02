@@ -360,7 +360,6 @@ class GraphicalParallelDP(GraphicalBonfDP):
 
     def get_test_eval(self, test_y, pred_y, predef_pred_y):
         parallel_test_result = self._get_test_eval(test_y, predef_pred_y, predef_pred_y, self.parallel_tree.alpha * self.alpha)
-        print("aladksflasdf", self.parallel_tree.alpha * self.alpha)
         self._do_par_tree_update(parallel_test_result)
 
         # get the corrected levels for testing the current node, accounting for modification similarity
@@ -369,13 +368,9 @@ class GraphicalParallelDP(GraphicalBonfDP):
         if desired_fwer == 0:
             test_result = 0
         else:
-            print("orig alph", curr_level_alphas, desired_fwer)
             alpha_weights = (curr_level_alphas + np.power(10.,-self.num_adapt_queries))/(np.sum(curr_level_alphas) + np.power(10.,-self.num_adapt_queries) * curr_level_alphas.size)
-            print("alpha weights", alpha_weights)
             corrected_alphas = self.get_corrected_fwer_thresholds(alpha_weights = alpha_weights, desired_fwer=desired_fwer)
-            print("CORRE ALPHA", corrected_alphas)
             test_result = self._get_test_eval(test_y, pred_y, predef_pred_y, corrected_alphas[0])
-            print("elsa NON ADAPTe?", desired_fwer, self._get_test_eval(test_y, pred_y, predef_pred_y, desired_fwer))
 
         # update tree
         self._do_adapt_tree_update(test_result)
