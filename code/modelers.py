@@ -177,14 +177,15 @@ class BinaryAdversaryModeler(LockedModeler):
         self.modeler.fit(self.dat.x, self.dat.y.flatten())
         self.modeler.coef_[0,:self.min_var_idx] = 5
         self.modeler.coef_[0,self.min_var_idx:] = 0
+        orig_pred_y = self.modeler.predict_proba(test_x)[:,1].reshape((-1,1))
+
 
         def get_test_perf(params):
             lr = sklearn.base.clone(self.modeler)
             lr = self.set_model(lr, params)
             pred_y = lr.predict_proba(test_x)[:,1].reshape((-1,1))
             prev_pred_y = self.modeler.predict_proba(test_x)[:,1].reshape((-1,1))
-            #mtp_answer = dp_engine.get_test_compare(test_y, pred_y, prev_pred_y)
-            mtp_answer = dp_engine.get_test_eval(test_y, pred_y, prev_pred_y)
+            mtp_answer = dp_engine.get_test_compare(test_y, pred_y, prev_pred_y, predef_pred_y=orig_pred_y)
             return mtp_answer
 
         # Now search in each direction and do a greedy search
