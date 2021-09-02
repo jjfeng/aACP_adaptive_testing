@@ -118,7 +118,7 @@ class CtsAdversaryModeler(LockedModeler):
         curr_perf = get_test_perf(curr_coef)
         while test_hist.curr_time < maxfev:
             # Test each variable (that's known to be irrelevant)
-            for var_idx in range(self.min_var_idx, test_x.shape[1]):
+            for var_idx in range(1+self.min_var_idx, 1+test_x.shape[1]):
                 # Test each direction for the variable
                 is_success = False
                 for update_dir in [-1,1]:
@@ -127,8 +127,9 @@ class CtsAdversaryModeler(LockedModeler):
                     curr_coef = np.concatenate([self.modeler.intercept_, self.modeler.coef_.flatten()])
                     curr_coef[var_idx] += update_dir * self.update_incr
                     test_res = get_test_perf(curr_coef)
+                    print("preturb?", var_idx, curr_perf, test_res)
                     test_hist.update(
-                            test_res=test_res,
+                            test_res=test_res < curr_perf,
                             curr_mdl=self.modeler)
                     #print(test_res, curr_perf, var_idx, update_dir)
                     if test_res < curr_perf:
@@ -138,19 +139,24 @@ class CtsAdversaryModeler(LockedModeler):
                         break
 
                 # If we found a good direction, keep walking in that direction
+                ctr = 1
                 while is_success:
+                    print("success!!!")
                     if test_hist.curr_time >= maxfev:
                         break
                     curr_coef = np.concatenate([self.modeler.intercept_, self.modeler.coef_.flatten()])
-                    curr_coef[var_idx] += update_dir * self.update_incr
+                    curr_coef[var_idx] += update_dir * self.update_incr * ctr
                     test_res = get_test_perf(curr_coef)
+                    print("preturb cont?", var_idx, curr_perf, test_res)
                     test_hist.update(
-                            test_res=test_res,
+                            test_res=test_res < curr_perf,
                             curr_mdl=self.modeler)
                     if test_res < curr_perf:
                         self.set_model(self.modeler, curr_coef)
                         curr_perf = test_res
                         is_success = True
+                        print("CTR", ctr)
+                        ctr += 1
                     else:
                         is_success = False
 
@@ -192,7 +198,7 @@ class BinaryAdversaryModeler(LockedModeler):
         test_hist = TestHistory(self.modeler)
         while test_hist.curr_time < maxfev:
             # Test each variable (that's known to be irrelevant)
-            for var_idx in range(self.min_var_idx, test_x.shape[1]):
+            for var_idx in range(1 + self.min_var_idx, 1 + test_x.shape[1]):
                 # Test each direction for the variable
                 for update_dir in [-1,1]:
                     if test_hist.curr_time >= maxfev:
@@ -200,6 +206,7 @@ class BinaryAdversaryModeler(LockedModeler):
                     curr_coef = np.concatenate([self.modeler.intercept_, self.modeler.coef_.flatten()])
                     curr_coef[var_idx] += update_dir * self.update_incr
                     test_res = get_test_perf(curr_coef)
+                    print("perturb?", var_idx, update_dir, test_res)
                     test_hist.update(
                             test_res=test_res,
                             curr_mdl=self.modeler)
@@ -214,6 +221,7 @@ class BinaryAdversaryModeler(LockedModeler):
                     curr_coef = np.concatenate([self.modeler.intercept_, self.modeler.coef_.flatten()])
                     curr_coef[var_idx] += update_dir * self.update_incr
                     test_res = get_test_perf(curr_coef)
+                    print("perturb cont", var_idx, test_res)
                     test_hist.update(
                             test_res=test_res,
                             curr_mdl=self.modeler)
@@ -225,6 +233,7 @@ class BinaryAdversaryModeler(LockedModeler):
 class AdversarialModeler(LockedModeler):
     def __init__(self, dat, min_var_idx: int = 1):
         self.cts_modeler = CtsAdversaryModeler(dat, min_var_idx)
+        #self.cts_modeler = NelderMeadModeler(dat, min_var_idx)
         self.binary_modeler = BinaryAdversaryModeler(dat, min_var_idx)
         self.modeler = self.cts_modeler.modeler
 

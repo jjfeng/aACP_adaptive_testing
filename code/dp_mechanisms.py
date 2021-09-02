@@ -4,6 +4,13 @@ import numpy as np
 from scipy.stats import norm, multivariate_normal
 import scipy.optimize
 
+def get_losses(test_y, pred_y):
+    test_y = test_y.flatten()
+    pred_y = np.maximum(np.minimum(1 - 1e-10, pred_y.flatten()), 1e-10)
+    test_nlls = -(np.log(pred_y) * test_y + np.log(1 - pred_y) * (1 - test_y))
+    return test_nlls
+
+
 class NoDP:
     name = "no_dp"
     def __init__(self):
@@ -16,16 +23,7 @@ class NoDP:
         """
         @return test perf without any DP, return NLL
         """
-        test_y = test_y.flatten()
-        pred_y = np.maximum(np.minimum(1 - 1e-10, pred_y.flatten()), 1e-10)
-        return -np.mean(np.log(pred_y) * test_y + np.log(1 - pred_y) * (1 - test_y))
-
-def get_losses(test_y, pred_y):
-    test_y = test_y.flatten()
-    pred_y = np.maximum(np.minimum(1 - 1e-10, pred_y.flatten()), 1e-10)
-    test_nlls = -(np.log(pred_y) * test_y + np.log(1 - pred_y) * (1 - test_y))
-    return test_nlls
-
+        return get_losses(test_y, pred_y).mean()
 
 class BinaryThresholdDP(NoDP):
     name = "binary_thres"
@@ -43,7 +41,7 @@ class BinaryThresholdDP(NoDP):
         print("upper ci", upper_ci)
         return int(upper_ci < self.base_threshold)
 
-    def get_test_compare(self, test_y, pred_y, prev_pred_y):
+    def get_test_compare(self, test_y, pred_y, prev_pred_y, predef_pred_y=None):
         """
         @return test perf where 1 means approve and 0 means not approved
         """

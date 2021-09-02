@@ -13,7 +13,7 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 RUN_STATUS = localenv['clusters']
 NUM_SEEDS = localenv['num_seeds']
-REUSE_ITERS = 10
+REUSE_ITERS = 20
 SPARSE_P = 1
 
 #nest.add_aggregate("summary_res_combo_refit", list)
@@ -85,12 +85,12 @@ def create_modeler(env, outdir, c):
 nest.add(
     'dp_mech',
     [
-        #"no_dp",
-        #"binary_thres_dp",
+        "no_dp",
+        "binary_thres_dp",
         #"bonferroni",
         #"bonferroni_nonadapt",
         #"graphical_bonf",
-        "graphical_parallel",
+        #"graphical_parallel",
         #"graphical_ffs",
     ])
 
