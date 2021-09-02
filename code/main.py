@@ -90,13 +90,17 @@ def main():
     reuse_aucs = []
     test_nlls = []
     test_aucs = []
+    prev_approval_time = 0
+    last_approval_times = []
     for maxfev in range(args.maxfev + 1):
     #for maxfev in [args.maxfev]:
         print("===========RUN PROCEDURE FOR NUM STPES", maxfev)
+        curr_approval_time = 0
         if maxfev > 0:
             dp_mech.set_num_queries(maxfev)
             full_hist = modeler.do_minimize(data.reuse_test_dat.x, data.reuse_test_dat.y, dp_mech, dat_stream=data.train_dat_stream, maxfev=maxfev)
             print("APPROVAL", full_hist.approval_times)
+            curr_approval_time = full_hist.approval_times[-1]
             logging.info("APPROVAL %s", full_hist.approval_times)
 
         reuse_pred_y = modeler.predict_prob(data.reuse_test_dat.x)
@@ -112,21 +116,34 @@ def main():
         test_nlls.append(test_nll)
         test_aucs.append(test_auc)
         #print(dp_mech.name, "test", "AUC", test_auc, "NLL", test_nll)
+        if curr_approval_time == 0:
+            last_approval_times.append(0)
+        else:
+            last_approval_times.append(len(full_hist.approval_times) - 1)
 
     # Compile results
-    reuse_res_df = pd.DataFrame({"nll": reuse_nlls,  "auc": reuse_aucs,"idx": np.arange(len(reuse_nlls))})
-    reuse_res_df["dataset"] = "reuse_test"
-    test_res_df = pd.DataFrame({"nll": test_nlls, "auc": test_aucs, "idx": np.arange(len(test_nlls))})
-    test_res_df["dataset"] = "test"
-    df = pd.concat([reuse_res_df, test_res_df])
+    reuse_nll_df = pd.DataFrame({"value": reuse_nlls,  "idx": np.arange(len(reuse_nlls))})
+    reuse_nll_df["dataset"] = "reuse_test"
+    reuse_nll_df["name"] = "nll, %s" % dp_mech.name
+    reuse_auc_df = pd.DataFrame({"value": reuse_aucs,  "idx": np.arange(len(reuse_aucs))})
+    reuse_auc_df["dataset"] = "reuse_test"
+    reuse_auc_df["name"] = "auc, %s" % dp_mech.name
+    count_df = pd.DataFrame({"value": last_approval_times,  "idx": np.arange(len(reuse_aucs))})
+    count_df["dataset"] = "reuse_test"
+    count_df["name"] = "num_approvals"
+    test_nll_df = pd.DataFrame({"value": test_nlls,  "idx": np.arange(len(test_nlls))})
+    test_nll_df["dataset"] = "test"
+    test_nll_df["name"] = "nll, %s" % dp_mech.name
+    test_auc_df = pd.DataFrame({"value": test_aucs,  "idx": np.arange(len(test_aucs))})
+    test_auc_df["dataset"] = "test"
+    test_auc_df["name"] = "auc, %s" % dp_mech.name
+    df = pd.concat([reuse_nll_df, reuse_auc_df, count_df, test_auc_df, test_nll_df])
     df["dp"] = dp_mech.name
 
     # Plot
     print(df)
     sns.set_context("paper", font_scale=2)
-    sns.lineplot(data=df, x="idx", y="nll", hue="dataset")
-    plt.title("DP mech: %s" % dp_mech.name)
-    plt.tight_layout()
+    sns.relplot(data=df, x="idx", y="value", hue="dataset", col="name", kind="line", facet_kws={'sharey': False, 'sharex': True})
     plt.savefig(args.plot_file)
     print("Fig", args.plot_file)
 

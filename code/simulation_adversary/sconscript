@@ -13,8 +13,9 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 RUN_STATUS = localenv['clusters']
 NUM_SEEDS = localenv['num_seeds']
-REUSE_ITERS = 20
+REUSE_ITERS = 100
 SPARSE_P = 1
+SPARSE_COEF_VAL = 1.5
 
 #nest.add_aggregate("summary_res_combo_refit", list)
 #nest.add_aggregate("summary_res_combo_boxed", list)
@@ -34,18 +35,19 @@ nest.add(
 def generate_data(env, outdir, c):
     cmd = [
         'python generate_data_single_pop.py',
-        '--meta-seed 1',
+        '--meta-seed 2',
         '--sparse',
         SPARSE_P,
         '--p 30',
-        '--init-train-n 10000',
+        '--init-train-n 100',
         '--train-batch-n 0',
         '--train-incr 1',
         '--train-iters',
         REUSE_ITERS,
         '--init-reuse-test-n',
         c['reuse_test_n'],
-        '--init-sparse-beta 5',
+        '--init-sparse-beta',
+        SPARSE_COEF_VAL,
         '--test-n 4000',
 	'--out ${TARGETS[0]}',
 	'--log-file ${TARGETS[1]}',
@@ -73,6 +75,8 @@ def create_modeler(env, outdir, c):
         c['model_sim'],
         '--min-var-idx',
         SPARSE_P,
+        '--preset-coef',
+        SPARSE_COEF_VAL,
 	'--data ${SOURCES[0]}',
 	'--out ${TARGETS[0]}'
     ]
@@ -85,12 +89,12 @@ def create_modeler(env, outdir, c):
 nest.add(
     'dp_mech',
     [
-        "no_dp",
+        #"no_dp",
         "binary_thres_dp",
         #"bonferroni",
         #"bonferroni_nonadapt",
-        #"graphical_bonf",
-        #"graphical_parallel",
+        "graphical_bonf",
+        "graphical_parallel",
         #"graphical_ffs",
     ])
 
@@ -100,9 +104,9 @@ def create_dp(env, outdir, c):
         'python create_dp_mechanism.py',
         '--seed',
 	c['seed'],
-        '--threshold 0.39',
-        '--parallel-ratio 0.5' if "graphical_parallel" == c['dp_mech'] else '',
-        '--loss-to-diff-ratio 100' if "graphical_parallel" == c['dp_mech'] else '',
+        '--threshold 0.3',
+        '--parallel-ratio 0.9' if "graphical_parallel" == c['dp_mech'] else '',
+        '--loss-to-diff-ratio 400' if "graphical_parallel" == c['dp_mech'] else '',
         '--success-weight 0.9' if "graphical" in c['dp_mech'] else '',
         '--alpha 0.1',
         '--dp-mech',

@@ -83,7 +83,7 @@ class NelderMeadModeler(LockedModeler):
         return test_hist
 
 class CtsAdversaryModeler(LockedModeler):
-    def __init__(self, dat: Dataset, min_var_idx: int = 1, update_incr: float = 0.04):
+    def __init__(self, dat: Dataset, preset_coef:float = 0, min_var_idx: int = 1, update_incr: float = 0.02):
         """
         @param min_var_idx: nelder mead only tunes coefficients with idx at least min_var_idx
         """
@@ -91,8 +91,10 @@ class CtsAdversaryModeler(LockedModeler):
         self.dat = dat
         self.update_incr = update_incr
         self.min_var_idx = min_var_idx
+        self.preset_coef = preset_coef
         self.modeler.fit(self.dat.x, self.dat.y.flatten())
-        self.modeler.coef_[0,:self.min_var_idx] = 5
+        self.modeler.intercept_[:] = 0
+        self.modeler.coef_[0,:self.min_var_idx] = preset_coef
         self.modeler.coef_[0,self.min_var_idx:] = 0
 
     def do_minimize(self, test_x, test_y, dp_engine, dat_stream=None, maxfev=10):
@@ -102,7 +104,7 @@ class CtsAdversaryModeler(LockedModeler):
         # Train a good initial model
         self.modeler.fit(self.dat.x, self.dat.y.flatten())
         self.modeler.intercept_[:] = 0
-        self.modeler.coef_[0,:self.min_var_idx] = 5
+        self.modeler.coef_[0,:self.min_var_idx] = self.preset_coef
         self.modeler.coef_[0,self.min_var_idx:] = 0
 
         def get_test_perf(params):
@@ -156,14 +158,14 @@ class CtsAdversaryModeler(LockedModeler):
                         curr_perf = test_res
                         is_success = True
                         print("CTR", ctr)
-                        ctr += 1
+                        ctr *= 2
                     else:
                         is_success = False
 
         return test_hist
 
 class BinaryAdversaryModeler(LockedModeler):
-    def __init__(self, dat: Dataset, min_var_idx: int = 1, update_incr: float = 0.04):
+    def __init__(self, dat: Dataset, preset_coef:float = 0, min_var_idx: int = 1, update_incr: float = 0.02):
         """
         @param min_var_idx: nelder mead only tunes coefficients with idx at least min_var_idx
         """
@@ -171,8 +173,10 @@ class BinaryAdversaryModeler(LockedModeler):
         self.dat = dat
         self.update_incr = update_incr
         self.min_var_idx = min_var_idx
+        self.preset_coef = preset_coef
         self.modeler.fit(self.dat.x, self.dat.y.flatten())
-        self.modeler.coef_[0,:self.min_var_idx] = 5
+        self.modeler.intercept_[:] = 0
+        self.modeler.coef_[0,:self.min_var_idx] = preset_coef
         self.modeler.coef_[0,self.min_var_idx:] = 0
 
     def do_minimize(self, test_x, test_y, dp_engine, dat_stream=None, maxfev=10):
@@ -181,7 +185,8 @@ class BinaryAdversaryModeler(LockedModeler):
         """
         # Train a good initial model
         self.modeler.fit(self.dat.x, self.dat.y.flatten())
-        self.modeler.coef_[0,:self.min_var_idx] = 5
+        self.modeler.intercept_[:] = 0
+        self.modeler.coef_[0,:self.min_var_idx] = self.preset_coef
         self.modeler.coef_[0,self.min_var_idx:] = 0
         orig_pred_y = self.modeler.predict_proba(test_x)[:,1].reshape((-1,1))
 
@@ -215,11 +220,12 @@ class BinaryAdversaryModeler(LockedModeler):
                         break
 
                 # If we found a good direction, keep walking in that direction
+                ctr = 1
                 while test_res == 1:
                     if test_hist.curr_time >= maxfev:
                         break
                     curr_coef = np.concatenate([self.modeler.intercept_, self.modeler.coef_.flatten()])
-                    curr_coef[var_idx] += update_dir * self.update_incr
+                    curr_coef[var_idx] += update_dir * self.update_incr * ctr
                     test_res = get_test_perf(curr_coef)
                     print("perturb cont", var_idx, test_res)
                     test_hist.update(
@@ -227,14 +233,15 @@ class BinaryAdversaryModeler(LockedModeler):
                             curr_mdl=self.modeler)
                     if test_res == 1:
                         self.set_model(self.modeler, curr_coef)
+                        ctr *= 2
         print("coefs", self.modeler.coef_)
         return test_hist
 
 class AdversarialModeler(LockedModeler):
-    def __init__(self, dat, min_var_idx: int = 1):
-        self.cts_modeler = CtsAdversaryModeler(dat, min_var_idx)
+    def __init__(self, dat, preset_coef: float=0, min_var_idx: int = 1):
+        self.cts_modeler = CtsAdversaryModeler(dat, preset_coef, min_var_idx)
         #self.cts_modeler = NelderMeadModeler(dat, min_var_idx)
-        self.binary_modeler = BinaryAdversaryModeler(dat, min_var_idx)
+        self.binary_modeler = BinaryAdversaryModeler(dat, preset_coef, min_var_idx)
         self.modeler = self.cts_modeler.modeler
 
     def do_minimize(self, test_x, test_y, dp_engine, dat_stream=None, maxfev=10):

@@ -181,7 +181,7 @@ class GraphicalBonfDP(BinaryThresholdDP):
         self._do_tree_update(test_result)
         return test_result
 
-    def get_test_compare(self, test_y, pred_y, prev_pred_y):
+    def get_test_compare(self, test_y, pred_y, prev_pred_y, predef_pred_y=None):
         """
         @return test perf where 1 means approve and 0 means not approved
         """
@@ -190,10 +190,9 @@ class GraphicalBonfDP(BinaryThresholdDP):
         loss_diffs = test_nlls_new - test_nlls_prev
         t_stat_se = np.sqrt(np.var(loss_diffs)/loss_diffs.size)
         alpha_level = self.test_tree.alpha * self.test_tree.success_edge
-        print("alpha", alpha_level)
+        #print("alpha", alpha_level)
         upper_ci = np.mean(loss_diffs) + t_stat_se * norm.ppf(1 - alpha_level)
         test_result = int(upper_ci < 0)
-        print("SDJFKLJSDFLJKSDF")
 
         self._do_tree_update(test_result)
         return test_result
@@ -290,16 +289,17 @@ class GraphicalParallelDP(GraphicalBonfDP):
         test_result = int(norm.cdf(test_stat) < alpha)
         return test_result
 
-    def _get_fwer(self, q, alpha_weights, desired_fwer, debug=False):
+    def _get_fwer(self, q, uniq_alpha_weights, weight_cts, desired_fwer, debug=False):
         def fwer_calc(c_thres):
             tot_alpha = 1 - norm.cdf(c_thres)
-            offsets = norm.ppf(1 - alpha_weights * desired_fwer * q)
+            offsets = norm.ppf(1 - uniq_alpha_weights * desired_fwer * q)
             assert np.all(offsets >= c_thres)
-            extra_alpha = np.sum(1 - norm.cdf((offsets - c_thres) * self.loss_to_diff_std_ratio))
+            extra_alphas = 1 - norm.cdf((offsets - c_thres) * self.loss_to_diff_std_ratio)
+            tot_extra_alpha = np.sum(extra_alphas * weight_cts)
             #print("ALPHA SPLIT", tot_alpha, extra_alpha)
-            return tot_alpha + extra_alpha
+            return tot_alpha + tot_extra_alpha
 
-        max_c_thres = norm.ppf(1 - alpha_weights.max() * q * desired_fwer)
+        max_c_thres = norm.ppf(1 - uniq_alpha_weights.max() * q * desired_fwer)
         res = scipy.optimize.minimize_scalar(fwer_calc, bounds=[0, max_c_thres], method="bounded")
         #print("local alpha", res.fun, "desired fwer", desired_fwer)
         print("FWER...", res.fun, desired_fwer, (res.fun - desired_fwer)/desired_fwer, np.abs(res.fun - desired_fwer)/desired_fwer)
@@ -307,21 +307,21 @@ class GraphicalParallelDP(GraphicalBonfDP):
         #print("INNER OPTIM", res.fun, res.x)
         return res.fun
 
-    def get_corrected_fwer_thresholds(self, alpha_weights, desired_fwer):
+    def get_corrected_fwer_thresholds(self, uniq_alpha_weights, weight_cts, desired_fwer):
+        mask = uniq_alpha_weights > 0
         def fwer_dist(x):
-            fwer = self._get_fwer(x, alpha_weights[alpha_weights > 0], desired_fwer)
+            fwer = self._get_fwer(x, uniq_alpha_weights[mask], weight_cts[mask], desired_fwer)
             return np.power(np.abs(fwer - desired_fwer)/desired_fwer, 2)
 
         # Now fine tune it using an optimization algo. maybe it'll tell us something new
-        if np.sum(alpha_weights > 0) == 1:
-            return alpha_weights * desired_fwer
+        if np.sum(uniq_alpha_weights > 0) == 1 or np.isclose(1, 1/uniq_alpha_weights.max()):
+            return uniq_alpha_weights * desired_fwer
         else:
-            min_alpha_weight = alpha_weights[alpha_weights > 0].max()
-            new_fwer_res = scipy.optimize.minimize_scalar(fwer_dist, bounds=[1, 1/min_alpha_weight], method="bounded")
+            print("UNIQ WEIG", uniq_alpha_weights)
+            new_fwer_res = scipy.optimize.minimize_scalar(fwer_dist, bounds=[1, 1/uniq_alpha_weights.max()], method="bounded")
             fwer_inflat = new_fwer_res.x
-            print("alpha", alpha_weights)
-            print("SEPNT", self._get_fwer(fwer_inflat, alpha_weights, desired_fwer), desired_fwer)
-            return alpha_weights * fwer_inflat * desired_fwer
+            print("SEPNT", self._get_fwer(fwer_inflat, uniq_alpha_weights, weight_cts, desired_fwer), desired_fwer)
+            return uniq_alpha_weights * fwer_inflat * desired_fwer
 
     def _do_adapt_tree_update(self, test_result):
         # update adaptive tree
@@ -366,8 +366,18 @@ class GraphicalParallelDP(GraphicalBonfDP):
         if desired_fwer == 0:
             test_result = 0
         else:
-            alpha_weights = (curr_level_alphas + np.power(10.,-self.num_adapt_queries))/(np.sum(curr_level_alphas) + np.power(10.,-self.num_adapt_queries) * curr_level_alphas.size)
-            corrected_alphas = self.get_corrected_fwer_thresholds(alpha_weights = alpha_weights, desired_fwer=desired_fwer)
+            eps = np.power(10.,-self.num_adapt_queries)
+            tot_weight = self.test_tree.alpha + (self.num_same_level_nodes - 1) * self.same_level_node.alpha
+            desired_fwer = self.alpha * tot_weight
+            #print("orig alph", curr_level_alphas)
+            uniq_alpha_weights = np.array([self.test_tree.alpha, self.same_level_node.alpha])
+            uniq_alpha_weights = (uniq_alpha_weights + eps)/(tot_weight + eps * self.num_same_level_nodes)
+            assert uniq_alpha_weights.max() <= 1
+            weight_cts = np.array([1, self.num_same_level_nodes - 1])
+            corrected_alphas = self.get_corrected_fwer_thresholds(
+                    uniq_alpha_weights = uniq_alpha_weights,
+                    weight_cts=weight_cts,
+                    desired_fwer=desired_fwer)
             test_result = self._get_test_eval(test_y, pred_y, predef_pred_y, corrected_alphas[0])
 
         # update tree
@@ -382,16 +392,19 @@ class GraphicalParallelDP(GraphicalBonfDP):
         self._do_par_tree_update(parallel_test_result)
 
         # get the corrected levels for testing the current node, accounting for modification similarity
-        curr_level_alphas = np.array([self.test_tree.alpha] + [self.same_level_node.alpha] * (self.num_same_level_nodes - 1))
-        desired_fwer = np.sum(curr_level_alphas) * self.alpha
-        if desired_fwer == 0:
+        if np.isclose(self.test_tree.alpha, 0):
             test_result = 0
         else:
-            print("orig alph", curr_level_alphas)
-            alpha_weights = (curr_level_alphas + np.power(10.,-self.num_adapt_queries))/(np.sum(curr_level_alphas) + np.power(10.,-self.num_adapt_queries) * curr_level_alphas.size)
-            print("alpha weights", alpha_weights)
-            corrected_alphas = self.get_corrected_fwer_thresholds(alpha_weights = alpha_weights, desired_fwer=desired_fwer)
-            print("CORRE ALPHA", corrected_alphas)
+            eps = np.power(10.,-self.num_adapt_queries)
+            tot_weight = self.test_tree.alpha + (self.num_same_level_nodes - 1) * self.same_level_node.alpha
+            desired_fwer = self.alpha * tot_weight
+            #print("orig alph", curr_level_alphas)
+            uniq_alpha_weights = np.array([self.test_tree.alpha, self.same_level_node.alpha])
+            uniq_alpha_weights = (uniq_alpha_weights + eps)/(tot_weight + eps * self.num_same_level_nodes)
+            assert uniq_alpha_weights.max() <= 1
+            weight_cts = np.array([1, self.num_same_level_nodes - 1])
+            corrected_alphas = self.get_corrected_fwer_thresholds(uniq_alpha_weights = uniq_alpha_weights, weight_cts = weight_cts, desired_fwer=desired_fwer)
+            #print("CORRE ALPHA", corrected_alphas)
             test_result = self._get_test_compare(test_y, pred_y, prev_pred_y, predef_pred_y, alpha=corrected_alphas[0])
 
         # update tree
@@ -407,7 +420,7 @@ class GraphicalFFSDP(GraphicalBonfDP):
     def set_num_queries(self, num_adapt_queries):
         self.num_adapt_queries = num_adapt_queries
         self.test_tree = Node(self.alpha, success_edge=self.success_weight, history=[])
-        self._create_tree(self.test_tree, num_adapt_queries)
+        self._create_children(self.test_tree)
 
         # reset num queries
         self.num_queries = 0
@@ -465,15 +478,7 @@ class GraphicalFFSDP(GraphicalBonfDP):
         #print("test statistic", test_result, t_statistic, t_thres, self.base_threshold)
 
         # update tree
-        self.num_queries += 1
-        self.test_hist.append(test_result)
-        if test_result == 1:
-            # remove node and propagate weights
-            self.test_tree.success.earn(self.test_tree.alpha * self.test_tree.success_edge)
-            self.test_tree = self.test_tree.success
-        else:
-            self.test_tree.failure.earn(self.test_tree.alpha * self.test_tree.failure_edge)
-            self.test_tree = self.test_tree.failure
+        self._do_tree_update(test_result)
 
         return test_result
 

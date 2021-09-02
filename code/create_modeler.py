@@ -29,6 +29,10 @@ def parse_args():
         type=int,
         default=0)
     parser.add_argument(
+        '--preset-coef',
+        type=float,
+        default=0)
+    parser.add_argument(
         '--refit-freq',
         type=int,
         default=1)
@@ -64,7 +68,7 @@ def main():
     if args.simulation == "neldermead":
         clf = NelderMeadModeler(data.init_train_dat, min_var_idx=args.min_var_idx)
     elif args.simulation == "adversary":
-        clf = AdversarialModeler(data.init_train_dat, min_var_idx=args.min_var_idx)
+        clf = AdversarialModeler(data.init_train_dat, min_var_idx=args.min_var_idx, preset_coef=args.preset_coef)
     elif args.simulation == "online":
         clf = OnlineLearnerModeler(data.init_train_dat)
     elif args.simulation == "online_fixed":
