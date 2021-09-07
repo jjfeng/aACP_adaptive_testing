@@ -83,8 +83,8 @@ def main():
         dp_mech = GraphicalParallelDP(args.threshold, args.alpha, success_weight=args.success_weight, parallel_ratio=args.parallel_ratio, loss_to_diff_std_ratio=args.loss_to_diff_ratio)
     elif args.dp_mech == "graphical_ffs":
         dp_mech = GraphicalFFSDP(args.threshold, args.alpha, success_weight=args.success_weight)
-    elif args.dp_mech == "graphical_similarity":
-        dp_mech = GraphicalSimilarityDP(args.threshold, args.alpha, success_weight=args.success_weight)
+    elif args.dp_mech == "graphical_ffs_parallel":
+        dp_mech = GraphicalParallelDP(args.threshold, args.alpha, success_weight=args.success_weight, parallel_ratio=args.parallel_ratio, loss_to_diff_std_ratio=args.loss_to_diff_ratio, do_ffs=True)
 
     with open(args.out_file, "wb") as f:
         pickle.dump(dp_mech, f)
