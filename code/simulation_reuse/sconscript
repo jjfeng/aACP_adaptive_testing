@@ -95,8 +95,8 @@ def create_modeler(env, outdir, c):
 
 nest.add(
     'thres',
-    [0.40, 0.41],
-    label_func=lambda c: "thres_%.2f" % c)
+    [0.4,0.406],
+    label_func=lambda c: "thres_%.3f" % c)
 
 nest.add(
     'dp_mech',
@@ -104,17 +104,11 @@ nest.add(
         #"no_dp",
         #"binary_thres_dp",
         "bonferroni",
-        "bonferroni_nonadapt",
+        #"bonferroni_nonadapt",
         "graphical_bonf",
         "graphical_parallel",
         "graphical_ffs",
-        #"graphical_similarity",
     ])
-
-#nest.add(
-#    'loss_to_diff_ratio',
-#    [25,100,500],
-#    label_func=lambda c: "ratio_%d" % c)
 
 @nest.add_target_with_env(localenv)
 def create_dp(env, outdir, c):
@@ -124,10 +118,8 @@ def create_dp(env, outdir, c):
 	c['seed'],
         '--threshold',
         c['thres'],
-        '--parallel-ratio 0.9' if "graphical_parallel" == c['dp_mech'] else '',
-        #'--parallel-ratio %f' % c['parallel_ratio'] if "graphical_parallel" == c['dp_mech'] else '',
-        #'--loss-to-diff-ratio %d' % c['loss_to_diff_ratio'] if "graphical_parallel" == c['dp_mech'] else '',
-        '--loss-to-diff-ratio 400' if "graphical_parallel" == c['dp_mech'] else '',
+        '--parallel-ratio 0.95' if "graphical_parallel" == c['dp_mech'] else '',
+        '--loss-to-diff-ratio 1000' if "graphical_parallel" == c['dp_mech'] else '',
         '--success-weight 0.9' if "graphical" in c['dp_mech'] else '',
         '--alpha 0.1',
         '--dp-mech',

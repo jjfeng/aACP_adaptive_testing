@@ -124,10 +124,11 @@ class Node:
 
 class GraphicalBonfDP(BinaryThresholdDP):
     name = "graphical_bonf_thres"
-    def __init__(self, base_threshold, alpha, success_weight):
+    def __init__(self, base_threshold, alpha, success_weight, alpha_alloc_max_depth: int = 3):
         self.base_threshold = base_threshold
         self.alpha = alpha
         self.success_weight = success_weight
+        self.alpha_alloc_max_depth = alpha_alloc_max_depth
 
     #def _create_tree(self, node, tree_depth):
     #    if tree_depth == 0:
@@ -139,23 +140,25 @@ class GraphicalBonfDP(BinaryThresholdDP):
     #    self._create_tree(node.failure, tree_depth - 1)
 
     def _create_children(self, node):
-        node.success = Node(0, success_edge=self.success_weight, history=node.history + [1], subfam_root=None, parent=node)
-        node.failure = Node(0, success_edge=self.success_weight, history=node.history + [0], subfam_root=node.subfam_root, parent=node)
+        child_alpha = self.alpha/np.power(2, self.alpha_alloc_max_depth) if self.num_queries < self.alpha_alloc_max_depth else 0
+        node.success = Node(child_alpha, success_edge=self.success_weight, history=node.history + [1], subfam_root=None, parent=node)
+        node.failure = Node(child_alpha, success_edge=self.success_weight, history=node.history + [0], subfam_root=node.subfam_root, parent=node)
 
     def set_num_queries(self, num_adapt_queries):
-        self.num_adapt_queries = num_adapt_queries
-        self.test_tree = Node(self.alpha, success_edge=self.success_weight, history=[], subfam_root=None)
-        self._create_children(self.test_tree)
-
         # reset num queries
         self.num_queries = 0
         self.test_hist = []
+
+        self.num_adapt_queries = num_adapt_queries
+        self.test_tree = Node(self.alpha/np.power(2, self.alpha_alloc_max_depth), success_edge=self.success_weight, history=[], subfam_root=None)
+        self._create_children(self.test_tree)
 
     def _do_tree_update(self, test_result):
         # update tree
         self.num_queries += 1
         self.test_hist.append(test_result)
         if test_result == 1:
+            print("DO EARN")
             # remove node and propagate weights
             self.test_tree.success.earn(self.test_tree.alpha * self.test_tree.success_edge)
             self.test_tree = self.test_tree.success
@@ -207,7 +210,7 @@ class GraphicalParallelDP(GraphicalBonfDP):
     def name(self):
         return "graphical_parallel_%d" % self.loss_to_diff_std_ratio
 
-    def __init__(self, base_threshold, alpha, success_weight, parallel_success_weight: float = 0.1, parallel_ratio: float = 0.6, loss_to_diff_std_ratio: float = 100.0):
+    def __init__(self, base_threshold, alpha, success_weight, parallel_success_weight: float = 0.1, parallel_ratio: float = 0.6, loss_to_diff_std_ratio: float = 100.0, alpha_alloc_max_depth: int = 3):
         """
         @param loss_to_diff_std_ratio: the minimum ratio between the stdev of the loss of the predef model and the loss of the modifications in that level (maybe in the future, consider an avg?)
                                     bigger the ratio the more similar the adaptive strategy is to the prespecified strategy
@@ -219,6 +222,7 @@ class GraphicalParallelDP(GraphicalBonfDP):
         self.parallel_ratio = parallel_ratio
         assert loss_to_diff_std_ratio >= 1
         self.loss_to_diff_std_ratio = loss_to_diff_std_ratio
+        self.alpha_alloc_max_depth = alpha_alloc_max_depth
 
     #def _create_tree(self, node, tree_depth, node_dict):
     #    if tree_depth == 0:
@@ -231,6 +235,11 @@ class GraphicalParallelDP(GraphicalBonfDP):
     #    self._create_tree(node.failure, tree_depth - 1, node_dict)
 
     def set_num_queries(self, num_adapt_queries):
+        # reset num queries
+        self.num_queries = 0
+        self.test_hist = []
+        self.parallel_test_hist = []
+
         self.num_adapt_queries = num_adapt_queries
         self.test_tree = Node(1 - self.parallel_ratio, success_edge=self.success_weight, history=[], subfam_root=None)
         self.num_same_level_nodes = 1
@@ -251,11 +260,6 @@ class GraphicalParallelDP(GraphicalBonfDP):
 
             curr_par_node = next_par_node
             curr_par_node.par_child = None
-
-        # reset num queries
-        self.num_queries = 0
-        self.test_hist = []
-        self.parallel_test_hist = []
 
     def _get_test_eval(self, test_y, pred_y, predef_pred_y, alpha):
         """
@@ -418,13 +422,13 @@ class GraphicalFFSDP(GraphicalBonfDP):
     name = "graphical_ffs"
 
     def set_num_queries(self, num_adapt_queries):
-        self.num_adapt_queries = num_adapt_queries
-        self.test_tree = Node(self.alpha, success_edge=self.success_weight, history=[])
-        self._create_children(self.test_tree)
-
         # reset num queries
         self.num_queries = 0
         self.test_hist = []
+
+        self.num_adapt_queries = num_adapt_queries
+        self.test_tree = Node(self.alpha/np.power(2, self.alpha_alloc_max_depth), success_edge=self.success_weight, history=[])
+        self._create_children(self.test_tree)
 
     def _get_prior_losses(self, node, last_node):
         if node == last_node:
@@ -437,6 +441,13 @@ class GraphicalFFSDP(GraphicalBonfDP):
         return [node.test_thres] + self._get_prior_thres(node.failure, last_node)
 
     def _solve_t_statistic_thres(self, est_cov, prior_thres, alpha_level):
+        """
+        @param est_cov: an estimated covariance matrix between the test statistics (not normalized, just differences of losses)
+        @param prior_thres: the thresholds for all but the last test statistic
+        @param alpha_level: the level of alpha we want to spend for the last test statistic
+
+        @return the threshold for the last test statistic to satisfy the spending schedule
+        """
         mvn = multivariate_normal(cov=est_cov)
         num_prior = len(prior_thres)
         def check_reject_prob_marg(thres):
