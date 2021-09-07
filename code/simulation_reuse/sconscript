@@ -107,7 +107,7 @@ nest.add(
         #"bonferroni_nonadapt",
         #"graphical_bonf",
         "graphical_parallel",
-        "graphical_ffs",
+        #"graphical_ffs",
         "graphical_ffs_parallel",
     ])
 
@@ -119,7 +119,7 @@ def create_dp(env, outdir, c):
 	c['seed'],
         '--threshold',
         c['thres'],
-        '--parallel-ratio 0.95' if "parallel" in c['dp_mech'] else '',
+        '--parallel-ratio 1' if "parallel" in c['dp_mech'] else '',
         '--loss-to-diff-ratio 1000' if "parallel" in c['dp_mech'] else '',
         '--success-weight 0.9' if "graphical" in c['dp_mech'] else '',
         '--alpha 0.1',

@@ -100,7 +100,7 @@ class BonferroniNonAdaptDP(BonferroniThresholdDP):
 
 
 class Node:
-    def __init__(self, alpha, success_edge, history, subfam_root=None, parent=None):
+    def __init__(self, weight, success_edge, history, subfam_root=None, parent=None):
         """
         @param subfam_root: which node is the subfamily's root node. if none, this is the root
         """
@@ -108,7 +108,7 @@ class Node:
         self.success_edge = success_edge
         self.failure_edge = 1 -  success_edge
         self.failure = None
-        self.alpha = alpha
+        self.weight = weight
         self.history = history
         self.subfam_root = subfam_root if subfam_root is not None else self
         self.parent = parent
@@ -119,8 +119,9 @@ class Node:
     def set_test_thres(self, thres):
         self.test_thres = thres
 
-    def earn(self, alpha_earn):
-        self.alpha += alpha_earn
+    def earn(self, weight_earn):
+        self.weight += weight_earn
+        self.local_alpha = None
 
 class GraphicalBonfDP(BinaryThresholdDP):
     name = "graphical_bonf_thres"
@@ -129,11 +130,12 @@ class GraphicalBonfDP(BinaryThresholdDP):
         self.alpha = alpha
         self.success_weight = success_weight
         self.alpha_alloc_max_depth = alpha_alloc_max_depth
+        self.parallel_ratio = 0
 
     def _create_children(self, node):
-        child_alpha = self.alpha/np.power(2, self.alpha_alloc_max_depth) if self.num_queries < self.alpha_alloc_max_depth else 0
-        node.success = Node(child_alpha, success_edge=self.success_weight, history=node.history + [1], subfam_root=None, parent=node)
-        node.failure = Node(child_alpha, success_edge=self.success_weight, history=node.history + [0], subfam_root=node.subfam_root, parent=node)
+        child_weight = (1 - self.parallel_ratio)/np.power(2, self.alpha_alloc_max_depth) if self.num_queries < self.alpha_alloc_max_depth else 0
+        node.success = Node(child_weight, success_edge=self.success_weight, history=node.history + [1], subfam_root=None, parent=node)
+        node.failure = Node(child_weight, success_edge=self.success_weight, history=node.history + [0], subfam_root=node.subfam_root, parent=node)
 
     def set_num_queries(self, num_adapt_queries):
         # reset num queries
@@ -141,7 +143,7 @@ class GraphicalBonfDP(BinaryThresholdDP):
         self.test_hist = []
 
         self.num_adapt_queries = num_adapt_queries
-        self.test_tree = Node(self.alpha/np.power(2, self.alpha_alloc_max_depth), success_edge=self.success_weight, history=[], subfam_root=None)
+        self.test_tree = Node(1/np.power(2, self.alpha_alloc_max_depth), success_edge=self.success_weight, history=[], subfam_root=None)
         self._create_children(self.test_tree)
 
     def _do_tree_update(self, test_result):
@@ -151,12 +153,12 @@ class GraphicalBonfDP(BinaryThresholdDP):
         if test_result == 1:
             print("DO EARN")
             # remove node and propagate weights
-            self.test_tree.success.earn(self.test_tree.alpha * self.test_tree.success_edge)
+            self.test_tree.success.earn(self.test_tree.weight * self.test_tree.success_edge)
             self.test_tree = self.test_tree.success
         else:
-            self.test_tree.failure.earn(self.test_tree.alpha * self.test_tree.failure_edge)
+            self.test_tree.failure.earn(self.test_tree.weight * self.test_tree.failure_edge)
             self.test_tree = self.test_tree.failure
-
+        self.test_tree.local_alpha = self.alpha * self.test_tree.weight
         self._create_children(self.test_tree)
 
     def get_test_eval(self, test_y, pred_y, predef_pred_y=None):
@@ -166,9 +168,8 @@ class GraphicalBonfDP(BinaryThresholdDP):
         test_nlls = get_losses(test_y, pred_y)
         t_stat_se = np.sqrt(np.var(test_nlls)/test_nlls.size)
 
-        alpha_level = self.test_tree.alpha * self.test_tree.success_edge
-        print("ALPHA?", self.test_tree.alpha)
-        upper_ci = np.mean(test_nlls) + t_stat_se * norm.ppf(1 - alpha_level)
+        self.test_tree.local_alpha = self.alpha * self.test_tree.weight * self.test_tree.success_edge
+        upper_ci = np.mean(test_nlls) + t_stat_se * norm.ppf(1 - self.test_tree.local_alpha)
         print("upper ci", np.mean(test_nlls), upper_ci)
         test_result = int(upper_ci < self.base_threshold)
 
@@ -183,9 +184,8 @@ class GraphicalBonfDP(BinaryThresholdDP):
         test_nlls_prev = get_losses(test_y, prev_pred_y)
         loss_diffs = test_nlls_new - test_nlls_prev
         t_stat_se = np.sqrt(np.var(loss_diffs)/loss_diffs.size)
-        alpha_level = self.test_tree.alpha * self.test_tree.success_edge
-        #print("alpha", alpha_level)
-        upper_ci = np.mean(loss_diffs) + t_stat_se * norm.ppf(1 - alpha_level)
+        self.test_tree.local_alpha = self.test_tree.weight * self.alpha * self.test_tree.success_edge
+        upper_ci = np.mean(loss_diffs) + t_stat_se * norm.ppf(1 - self.test_tree.local_alpha)
         test_result = int(upper_ci < 0)
 
         self._do_tree_update(test_result)
@@ -200,7 +200,7 @@ class GraphicalFFSDP(GraphicalBonfDP):
         self.test_hist = []
 
         self.num_adapt_queries = num_adapt_queries
-        self.test_tree = Node(self.alpha, success_edge=self.success_weight, history=[])
+        self.test_tree = Node(1, success_edge=self.success_weight, history=[])
         self._create_children(self.test_tree)
 
     def _get_prior_losses(self, node, last_node):
@@ -247,12 +247,12 @@ class GraphicalFFSDP(GraphicalBonfDP):
         self.test_tree.observe_losses(test_nlls)
 
         # compute critical levels
-        alpha_level = self.test_tree.alpha * self.test_tree.success_edge
+        self.test_tree.local_alpha = self.alpha * self.test_tree.weight * self.test_tree.success_edge
         # Need to traverse subfam parent nodes to decide local level
         prior_test_nlls = self._get_prior_losses(self.test_tree.subfam_root, self.test_tree)
         prior_thres = self._get_prior_thres(self.test_tree.subfam_root, self.test_tree)
         est_cov = np.cov(np.array(prior_test_nlls + [test_nlls]))
-        t_thres = self._solve_t_statistic_thres(est_cov, prior_thres, alpha_level)
+        t_thres = self._solve_t_statistic_thres(est_cov, prior_thres, self.test_tree.local_alpha)
         self.test_tree.set_test_thres(t_thres)
 
         #print("upper ci", np.mean(test_nlls), np.mean(test_nlls) + np.sqrt(np.var(test_nlls)/test_nlls.size) * norm.ppf(1 - alpha_level))
@@ -273,7 +273,10 @@ class GraphicalParallelDP(GraphicalFFSDP):
     """
     @property
     def name(self):
-        return "graphical_parallel_%d" % self.loss_to_diff_std_ratio
+        if self.do_ffs:
+            return "graphical_par_ffs_%.1f" % self.loss_to_diff_std_ratio
+        else:
+            return "graphical_par_%.1f" % self.loss_to_diff_std_ratio
 
     def __init__(self, base_threshold, alpha, success_weight, parallel_success_weight: float = 0.1, parallel_ratio: float = 0.6, loss_to_diff_std_ratio: float = 100.0, alpha_alloc_max_depth: int = 3, do_ffs: bool=False):
         """
@@ -306,7 +309,8 @@ class GraphicalParallelDP(GraphicalFFSDP):
         curr_par_node = self.parallel_tree
         for i in range(1, num_adapt_queries + 1):
             # TODO: this this history thing matter? It's just a placeholder
-            next_par_node = Node(1/num_adapt_queries * self.parallel_ratio, success_edge=self.parallel_success_weight, history=[None] * i, subfam_root=self.parallel_tree, parent=curr_par_node)
+            weight = 1/num_adapt_queries * self.parallel_ratio if i < num_adapt_queries else 0
+            next_par_node = Node(weight, success_edge=self.parallel_success_weight, history=[None] * i, subfam_root=self.parallel_tree, parent=curr_par_node)
             curr_par_node.par_child = next_par_node
             curr_par_node.par_weight  = self.parallel_success_weight
             curr_par_node.adapt_tree_node_weight  = (1 - self.parallel_success_weight)/np.power(2, i - 1)
@@ -410,13 +414,13 @@ class GraphicalParallelDP(GraphicalFFSDP):
         self.test_hist.append(test_result)
         if test_result == 1:
             # remove node and propagate weights
-            self.test_tree.success.earn(self.test_tree.alpha * self.test_tree.success_edge)
+            self.test_tree.success.earn(self.test_tree.weight * self.test_tree.success_edge)
             self.test_tree = self.test_tree.success
 
             # TODO: there are other same level nodes with other weights. need to be a bit more careful here
-            self.same_level_node = Node(self.test_tree.alpha * self.test_tree.failure_edge, success_edge = 0, history=[0] * len(self.test_tree.history))
+            self.same_level_node = Node(self.test_tree.weight * self.test_tree.failure_edge, success_edge = 0, history=[0] * len(self.test_tree.history))
         else:
-            self.test_tree.failure.earn(self.test_tree.alpha * self.test_tree.failure_edge)
+            self.test_tree.failure.earn(self.test_tree.weight * self.test_tree.failure_edge)
             self.test_tree = self.test_tree.failure
 
             self.same_level_node = Node(0, success_edge = 0, history=[0] * len(self.test_tree.history))
@@ -429,31 +433,35 @@ class GraphicalParallelDP(GraphicalFFSDP):
         self.parallel_test_hist.append(test_result)
 
         if test_result == 1:
-            self.parallel_tree.par_child.earn(self.parallel_tree.alpha * self.parallel_tree.par_weight)
-            self.test_tree.earn(self.parallel_tree.alpha * self.parallel_tree.adapt_tree_node_weight)
-            self.same_level_node = Node(self.parallel_tree.alpha * self.parallel_tree.adapt_tree_node_weight, success_edge = 0, history=[0] * len(self.test_tree.history))
+            self.parallel_tree.par_child.earn(self.parallel_tree.weight * self.parallel_tree.par_weight)
+            self.test_tree.earn(self.parallel_tree.weight * self.parallel_tree.adapt_tree_node_weight)
+            # TODO: this is a hack. fix this
+            self.same_level_node = Node(self.parallel_tree.weight * self.parallel_tree.adapt_tree_node_weight, success_edge = 0, history=[0] * len(self.test_tree.history))
             self.num_same_level_nodes = np.power(2, len(self.test_tree.history))
+            print("WEIHGS", self.same_level_node.weight, self.parallel_tree.adapt_tree_node_weight * self.num_same_level_nodes)
 
         # Increment the par tree node regardless of success
         self.parallel_tree = self.parallel_tree.par_child
+        self.parallel_tree.local_alpha = self.parallel_tree.weight * self.alpha
 
     def get_test_eval(self, test_y, pred_y, predef_pred_y):
         # Test the parallel tree stuff, do any weight propagation
-        self.parallel_tree.local_alpha = self.parallel_tree.alpha * self.alpha
+        self.parallel_tree.local_alpha = self.parallel_tree.weight * self.alpha
+        orig_alpha = self.parallel_tree.local_alpha
         parallel_test_result = self._get_test_eval(test_y, predef_pred_y, predef_pred_y, self.parallel_tree, do_ffs=self.do_ffs)
         self._do_par_tree_update(parallel_test_result)
 
         # get the corrected levels for testing the current node, accounting for modification similarity
-        curr_level_alphas = np.array([self.test_tree.alpha] + [self.same_level_node.alpha] * (self.num_same_level_nodes - 1))
-        desired_fwer = np.sum(curr_level_alphas) * self.alpha
+        curr_weights= np.array([self.test_tree.weight] + [self.same_level_node.weight] * (self.num_same_level_nodes - 1))
+        tot_weight = np.sum(curr_weights)
+        desired_fwer = tot_weight * self.alpha
+        # TODO: make sure this check passes
+        assert tot_weight <= 1
         if desired_fwer == 0:
             test_result = 0
         else:
             eps = np.power(10.,-self.num_adapt_queries)
-            tot_weight = self.test_tree.alpha + (self.num_same_level_nodes - 1) * self.same_level_node.alpha
-            desired_fwer = self.alpha * tot_weight
-            #print("orig alph", curr_level_alphas)
-            uniq_alpha_weights = np.array([self.test_tree.alpha, self.same_level_node.alpha])
+            uniq_alpha_weights = np.array([self.test_tree.weight, self.same_level_node.weight])
             uniq_alpha_weights = (uniq_alpha_weights + eps)/(tot_weight + eps * self.num_same_level_nodes)
             assert uniq_alpha_weights.max() <= 1
             weight_cts = np.array([1, self.num_same_level_nodes - 1])
@@ -472,18 +480,20 @@ class GraphicalParallelDP(GraphicalFFSDP):
         return test_result
 
     def get_test_compare(self, test_y, pred_y, prev_pred_y, predef_pred_y):
-        parallel_test_result = self._get_test_compare(test_y, predef_pred_y, prev_pred_y, predef_pred_y, alpha=self.parallel_tree.alpha * self.alpha, do_ffs=self.do_ffs)
+        parallel_test_result = self._get_test_compare(test_y, predef_pred_y, prev_pred_y, predef_pred_y, alpha=self.parallel_tree.weight * self.alpha, do_ffs=self.do_ffs)
         self._do_par_tree_update(parallel_test_result)
 
         # get the corrected levels for testing the current node, accounting for modification similarity
-        if np.isclose(self.test_tree.alpha, 0):
+        if np.isclose(self.test_tree.weight, 0):
             test_result = 0
         else:
             eps = np.power(10.,-self.num_adapt_queries)
-            tot_weight = self.test_tree.alpha + (self.num_same_level_nodes - 1) * self.same_level_node.alpha
+            tot_weight = self.test_tree.weight + (self.num_same_level_nodes - 1) * self.same_level_node.weight
             desired_fwer = self.alpha * tot_weight
+            print("TOT WEIGHT", tot_weight)
+            assert tot_weight <= 1
             #print("orig alph", curr_level_alphas)
-            uniq_alpha_weights = np.array([self.test_tree.alpha, self.same_level_node.alpha])
+            uniq_alpha_weights = np.array([self.test_tree.weight, self.same_level_node.weight])
             uniq_alpha_weights = (uniq_alpha_weights + eps)/(tot_weight + eps * self.num_same_level_nodes)
             assert uniq_alpha_weights.max() <= 1
             weight_cts = np.array([1, self.num_same_level_nodes - 1])
