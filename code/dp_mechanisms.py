@@ -427,7 +427,7 @@ class GraphicalFFSDP(GraphicalBonfDP):
         self.test_hist = []
 
         self.num_adapt_queries = num_adapt_queries
-        self.test_tree = Node(self.alpha/np.power(2, self.alpha_alloc_max_depth), success_edge=self.success_weight, history=[])
+        self.test_tree = Node(self.alpha, success_edge=self.success_weight, history=[])
         self._create_children(self.test_tree)
 
     def _get_prior_losses(self, node, last_node):
