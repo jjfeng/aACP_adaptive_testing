@@ -75,6 +75,8 @@ class BonferroniThresholdDP(BinaryThresholdDP):
         t_statistic = (np.mean(test_nlls) - self.base_threshold)/t_stat_se
         t_thres = norm.ppf(self.alpha/self.correction_factor)
         print("BONF t statistic", t_statistic, t_thres)
+        upper_ci = np.mean(test_nlls) + t_stat_se * norm.ppf(1 - self.alpha/self.correction_factor)
+        print("BONF upper ci", upper_ci)
         return int(t_statistic < t_thres)
 
     def get_test_compare(self, test_y, pred_y, prev_pred_y):
@@ -127,7 +129,7 @@ class Node:
 
 class GraphicalBonfDP(BinaryThresholdDP):
     name = "graphical_bonf_thres"
-    def __init__(self, base_threshold, alpha, success_weight, alpha_alloc_max_depth: int = 3):
+    def __init__(self, base_threshold, alpha, success_weight, alpha_alloc_max_depth: int = 1):
         self.base_threshold = base_threshold
         self.alpha = alpha
         self.success_weight = success_weight
@@ -171,6 +173,7 @@ class GraphicalBonfDP(BinaryThresholdDP):
         t_stat_se = np.sqrt(np.var(test_nlls)/test_nlls.size)
 
         self.test_tree.local_alpha = self.alpha * self.test_tree.weight * self.test_tree.success_edge
+        print("local alpha", self.test_tree.local_alpha)
         upper_ci = np.mean(test_nlls) + t_stat_se * norm.ppf(1 - self.test_tree.local_alpha)
         print("upper ci", np.mean(test_nlls), upper_ci)
         test_result = int(upper_ci < self.base_threshold)
@@ -253,14 +256,15 @@ class GraphicalFFSDP(GraphicalBonfDP):
         # Need to traverse subfam parent nodes to decide local level
         prior_test_nlls = self._get_prior_losses(self.test_tree.subfam_root, self.test_tree)
         prior_thres = self._get_prior_thres(self.test_tree.subfam_root, self.test_tree)
-        est_cov = np.cov(np.array(prior_test_nlls + [test_nlls]))
+        est_cov = np.corrcoef(np.array(prior_test_nlls + [test_nlls]))
         t_thres = self._solve_t_statistic_thres(est_cov, prior_thres, self.test_tree.local_alpha)
         self.test_tree.set_test_thres(t_thres)
 
         #print("upper ci", np.mean(test_nlls), np.mean(test_nlls) + np.sqrt(np.var(test_nlls)/test_nlls.size) * norm.ppf(1 - alpha_level))
-        t_statistic = (np.mean(test_nlls) - self.base_threshold) * np.sqrt(test_nlls.size)
+        std_err = np.sqrt(np.var(test_nlls)/test_nlls.size)
+        t_statistic = (np.mean(test_nlls) - self.base_threshold)/std_err
         test_result = int(t_statistic < t_thres)
-        #print("test statistic", test_result, t_statistic, t_thres, self.base_threshold)
+        print("test statistic", test_result, t_statistic, t_thres, self.base_threshold)
 
         # update tree
         self._do_tree_update(test_result)
@@ -277,7 +281,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
     def name(self):
         return "graphical_par_%.1f" % self.loss_to_diff_std_ratio
 
-    def __init__(self, base_threshold, alpha, success_weight, parallel_success_weight: float = 0.0, parallel_ratio: float = 0.6, loss_to_diff_std_ratio: float = 100.0, alpha_alloc_max_depth: int = 3):
+    def __init__(self, base_threshold, alpha, success_weight, parallel_success_weight: float = 0.5, parallel_ratio: float = 0.9, loss_to_diff_std_ratio: float = 100.0, alpha_alloc_max_depth: int = 0):
         """
         @param loss_to_diff_std_ratio: the minimum ratio between the stdev of the loss of the predef model and the loss of the modifications in that level (maybe in the future, consider an avg?)
                                     bigger the ratio the more similar the adaptive strategy is to the prespecified strategy
@@ -307,7 +311,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
         self.num_adapt_queries = num_adapt_queries
 
         # Create parallel sequence
-        self.parallel_tree = Node(1/num_adapt_queries * self.parallel_ratio, success_edge=self.parallel_success_weight, history=[], subfam_root=None)
+        self.parallel_tree = Node(1/np.power(2, self.alpha_alloc_max_depth) * self.parallel_ratio, success_edge=self.parallel_success_weight, history=[], subfam_root=None)
         self.last_ffs_root = self.parallel_tree
         curr_par_node = self.parallel_tree
         for i in range(1, num_adapt_queries + 1):

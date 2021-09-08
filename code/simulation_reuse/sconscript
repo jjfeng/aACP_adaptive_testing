@@ -48,9 +48,9 @@ def generate_data(env, outdir, c):
         c['num_p'],
         '--p',
         c['num_p'],
-        '--init-train-n 400',
+        '--init-train-n 100',
         '--train-batch-n 100',
-        '--train-incr 1.3',
+        '--train-incr 3',
         '--train-iters',
         REUSE_ITERS,
         '--init-reuse-test-n',
@@ -105,9 +105,9 @@ nest.add(
         #"binary_thres_dp",
         #"bonferroni",
         "bonferroni_nonadapt",
-        #"graphical_bonf",
+        "graphical_bonf",
         "graphical_parallel",
-        #"graphical_ffs",
+        "graphical_ffs",
     ])
 
 @nest.add_target_with_env(localenv)
