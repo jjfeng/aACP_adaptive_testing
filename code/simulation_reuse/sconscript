@@ -49,7 +49,7 @@ def generate_data(env, outdir, c):
         '--p',
         c['num_p'],
         '--init-train-n 300',
-        '--train-batch-n 210',
+        '--train-batch-n 200',
         '--train-incr 1',
         '--train-iters',
         REUSE_ITERS,
@@ -96,8 +96,9 @@ def create_modeler(env, outdir, c):
 nest.add(
     'thres',
     [
-        #0.396,
-        0.4
+        0.396,
+        0.4,
+        0.41
     ],
     label_func=lambda c: "thres_%.3f" % c)
 
@@ -106,11 +107,11 @@ nest.add(
     [
         #"no_dp",
         #"binary_thres_dp",
-        #"bonferroni",
+        "bonferroni",
         "bonferroni_nonadapt",
-        #"graphical_bonf",
+        "graphical_bonf",
         "graphical_parallel",
-        #"graphical_ffs",
+        "graphical_ffs",
     ])
 
 @nest.add_target_with_env(localenv)
