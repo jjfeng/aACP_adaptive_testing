@@ -314,7 +314,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
         self.num_adapt_queries = num_adapt_queries
 
         # Create parallel sequence
-        self.parallel_tree = Node(1/np.power(2, self.alpha_alloc_max_depth) * self.parallel_ratio, success_edge=self.parallel_success_weight, history=[], subfam_root=None)
+        self.parallel_tree = Node(1/num_adapt_queries * self.parallel_ratio, success_edge=self.parallel_success_weight, history=[], subfam_root=None)
         self.last_ffs_root = self.parallel_tree
         curr_par_node = self.parallel_tree
         for i in range(1, num_adapt_queries + 1):
@@ -488,6 +488,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
         self.parallel_test_hist.append(test_result)
 
         if test_result == 1:
+            print("DO EARN")
             self.parallel_tree.par_child.earn(self.parallel_tree.weight * self.parallel_tree.par_weight)
             self.test_tree.earn(self.parallel_tree.weight * self.parallel_tree.adapt_tree_node_weight)
             # TODO: check if this FFS root is correct
