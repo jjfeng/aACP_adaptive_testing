@@ -129,7 +129,7 @@ class Node:
 
 class GraphicalBonfDP(BinaryThresholdDP):
     name = "graphical_bonf_thres"
-    def __init__(self, base_threshold, alpha, success_weight, alpha_alloc_max_depth: int = 1):
+    def __init__(self, base_threshold, alpha, success_weight, alpha_alloc_max_depth: int = 0):
         self.base_threshold = base_threshold
         self.alpha = alpha
         self.success_weight = success_weight
@@ -160,7 +160,9 @@ class GraphicalBonfDP(BinaryThresholdDP):
             self.test_tree.success.earn(self.test_tree.weight * self.test_tree.success_edge)
             self.test_tree = self.test_tree.success
         else:
+            print("failre", self.test_tree.failure.weight)
             self.test_tree.failure.earn(self.test_tree.weight * self.test_tree.failure_edge)
+            print("failre new", self.test_tree.failure.weight)
             self.test_tree = self.test_tree.failure
         self.test_tree.local_alpha = self.alpha * self.test_tree.weight
         self._create_children(self.test_tree)
@@ -253,6 +255,7 @@ class GraphicalFFSDP(GraphicalBonfDP):
 
         # compute critical levels
         self.test_tree.local_alpha = self.alpha * self.test_tree.weight * self.test_tree.success_edge
+        print("LOCAL ALPHA", self.test_tree.local_alpha)
         # Need to traverse subfam parent nodes to decide local level
         prior_test_nlls = self._get_prior_losses(self.test_tree.subfam_root, self.test_tree)
         prior_thres = self._get_prior_thres(self.test_tree.subfam_root, self.test_tree)
@@ -359,12 +362,11 @@ class GraphicalParallelDP(GraphicalFFSDP):
         prior_test_nlls = self._get_prior_par_losses(self.last_ffs_root, self.parallel_tree)
         prior_thres = self._get_prior_par_thres(self.last_ffs_root, self.parallel_tree)
         est_corr = np.corrcoef(np.array(prior_test_nlls + [test_nlls]))
+        print("LOCAL FFS par ALPHA", self.parallel_tree.local_alpha)
         if self.parallel_tree.subfam_root == self.parallel_tree:
-            print("asdfjklasdjflasdf")
             t_thres = norm.ppf(self.parallel_tree.local_alpha)
         else:
             #print("EST COV", np.corrcoef(np.array(prior_test_nlls + [test_nlls])))
-            print("----------------", self.parallel_tree.local_alpha)
             t_thres = self._solve_t_statistic_thres(est_corr, prior_thres, self.parallel_tree.local_alpha)
         self.parallel_tree.set_test_thres(t_thres)
         t_statistic = (np.mean(test_nlls) - self.base_threshold)/std_err
@@ -397,7 +399,9 @@ class GraphicalParallelDP(GraphicalFFSDP):
         self.test_tree.observe_losses(test_nlls)
 
         test_stat = (np.mean(test_nlls) - self.base_threshold)/std_err
+        print("LOCAL ALPHA TREE", self.test_tree.local_alpha, norm.ppf(self.test_tree.local_alpha))
         t_thres = self._solve_t_statistic_thres_corr(self.test_tree.par_parent.test_thres, self.test_tree.local_alpha)
+        print("T THRES adjust", norm.cdf(t_thres), t_thres)
         self.test_tree.set_test_thres(t_thres)
         test_result = int(test_stat < t_thres)
         print("corr test resl", test_stat, t_thres)

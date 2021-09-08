@@ -48,9 +48,9 @@ def generate_data(env, outdir, c):
         c['num_p'],
         '--p',
         c['num_p'],
-        '--init-train-n 100',
-        '--train-batch-n 100',
-        '--train-incr 3',
+        '--init-train-n 300',
+        '--train-batch-n 210',
+        '--train-incr 1',
         '--train-iters',
         REUSE_ITERS,
         '--init-reuse-test-n',
@@ -95,7 +95,7 @@ def create_modeler(env, outdir, c):
 
 nest.add(
     'thres',
-    [0.4],
+    [0.396],
     label_func=lambda c: "thres_%.3f" % c)
 
 nest.add(
@@ -120,7 +120,7 @@ def create_dp(env, outdir, c):
         c['thres'],
         '--parallel-ratio 1' if "parallel" in c['dp_mech'] else '',
         '--loss-to-diff-ratio 1000' if "parallel" in c['dp_mech'] else '',
-        '--success-weight 1' if "graphical" in c['dp_mech'] else '',
+        '--success-weight 0.9' if "graphical" in c['dp_mech'] else '',
         '--alpha 0.1',
         '--dp-mech',
         c['dp_mech'],
