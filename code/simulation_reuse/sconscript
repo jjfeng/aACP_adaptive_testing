@@ -48,7 +48,7 @@ def generate_data(env, outdir, c):
         c['num_p'],
         '--p',
         c['num_p'],
-        '--init-train-n 300',
+        '--init-train-n 400',
         '--train-batch-n 100',
         '--train-incr 1.3',
         '--train-iters',
@@ -104,11 +104,10 @@ nest.add(
         #"no_dp",
         #"binary_thres_dp",
         #"bonferroni",
-        #"bonferroni_nonadapt",
+        "bonferroni_nonadapt",
         #"graphical_bonf",
         "graphical_parallel",
         #"graphical_ffs",
-        "graphical_ffs_parallel",
     ])
 
 @nest.add_target_with_env(localenv)
@@ -121,7 +120,7 @@ def create_dp(env, outdir, c):
         c['thres'],
         '--parallel-ratio 1' if "parallel" in c['dp_mech'] else '',
         '--loss-to-diff-ratio 1000' if "parallel" in c['dp_mech'] else '',
-        '--success-weight 0.9' if "graphical" in c['dp_mech'] else '',
+        '--success-weight 1' if "graphical" in c['dp_mech'] else '',
         '--alpha 0.1',
         '--dp-mech',
         c['dp_mech'],

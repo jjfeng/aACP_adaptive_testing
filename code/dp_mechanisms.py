@@ -72,8 +72,10 @@ class BonferroniThresholdDP(BinaryThresholdDP):
         pred_y = pred_y.flatten()
         test_nlls = -(np.log(pred_y) * test_y + np.log(1 - pred_y) * (1 - test_y))
         t_stat_se = np.sqrt(np.var(test_nlls)/test_nlls.size)
-        upper_ci = np.mean(test_nlls) + t_stat_se * norm.ppf(1 - self.alpha/self.correction_factor)
-        return int(upper_ci < self.base_threshold)
+        t_statistic = (np.mean(test_nlls) - self.base_threshold)/t_stat_se
+        t_thres = norm.ppf(self.alpha/self.correction_factor)
+        print("BONF t statistic", t_statistic, t_thres)
+        return int(t_statistic < t_thres)
 
     def get_test_compare(self, test_y, pred_y, prev_pred_y):
         """
@@ -235,7 +237,7 @@ class GraphicalFFSDP(GraphicalBonfDP):
             assert res_marg.success
             return res_marg.x
         else:
-            res_ffs = scipy.optimize.minimize_scalar(check_reject_prob_ffs)
+            res_ffs = scipy.optimize.minimize_scalar(check_reject_prob_ffs, method="bounded", bounds=[-4, 0])
             assert res_ffs.success
             return res_ffs.x
 
@@ -273,12 +275,9 @@ class GraphicalParallelDP(GraphicalFFSDP):
     """
     @property
     def name(self):
-        if self.do_ffs:
-            return "graphical_par_ffs_%.1f" % self.loss_to_diff_std_ratio
-        else:
-            return "graphical_par_%.1f" % self.loss_to_diff_std_ratio
+        return "graphical_par_%.1f" % self.loss_to_diff_std_ratio
 
-    def __init__(self, base_threshold, alpha, success_weight, parallel_success_weight: float = 0.1, parallel_ratio: float = 0.6, loss_to_diff_std_ratio: float = 100.0, alpha_alloc_max_depth: int = 3, do_ffs: bool=False):
+    def __init__(self, base_threshold, alpha, success_weight, parallel_success_weight: float = 0.0, parallel_ratio: float = 0.6, loss_to_diff_std_ratio: float = 100.0, alpha_alloc_max_depth: int = 3):
         """
         @param loss_to_diff_std_ratio: the minimum ratio between the stdev of the loss of the predef model and the loss of the modifications in that level (maybe in the future, consider an avg?)
                                     bigger the ratio the more similar the adaptive strategy is to the prespecified strategy
@@ -291,7 +290,13 @@ class GraphicalParallelDP(GraphicalFFSDP):
         assert loss_to_diff_std_ratio >= 1
         self.loss_to_diff_std_ratio = loss_to_diff_std_ratio
         self.alpha_alloc_max_depth = alpha_alloc_max_depth
-        self.do_ffs = do_ffs
+
+    def _create_children(self, node, next_par_node):
+        child_weight = (1 - self.parallel_ratio)/np.power(2, self.alpha_alloc_max_depth) if self.num_queries < self.alpha_alloc_max_depth else 0
+        node.success = Node(child_weight, success_edge=self.success_weight, history=node.history + [1], subfam_root=None, parent=node)
+        node.success.par_parent = next_par_node
+        node.failure = Node(child_weight, success_edge=self.success_weight, history=node.history + [0], subfam_root=node.subfam_root, parent=node)
+        node.failure.par_parent = next_par_node
 
     def set_num_queries(self, num_adapt_queries):
         # reset num queries
@@ -300,12 +305,10 @@ class GraphicalParallelDP(GraphicalFFSDP):
         self.parallel_test_hist = []
 
         self.num_adapt_queries = num_adapt_queries
-        self.test_tree = Node(1 - self.parallel_ratio, success_edge=self.success_weight, history=[], subfam_root=None)
-        self._create_children(self.test_tree)
-        self.num_same_level_nodes = 1
-        self.same_level_node = Node(0, success_edge=self.success_weight, history=[], subfam_root=None)
 
+        # Create parallel sequence
         self.parallel_tree = Node(1/num_adapt_queries * self.parallel_ratio, success_edge=self.parallel_success_weight, history=[], subfam_root=None)
+        self.last_ffs_root = self.parallel_tree
         curr_par_node = self.parallel_tree
         for i in range(1, num_adapt_queries + 1):
             # TODO: this this history thing matter? It's just a placeholder
@@ -318,6 +321,13 @@ class GraphicalParallelDP(GraphicalFFSDP):
             curr_par_node = next_par_node
             curr_par_node.par_child = None
 
+        # Create adapt tree
+        self.test_tree = Node(1 - self.parallel_ratio, success_edge=self.success_weight, history=[], subfam_root=None)
+        self.test_tree.par_parent = self.parallel_tree
+        self._create_children(self.test_tree, self.parallel_tree.par_child)
+        self.num_same_level_nodes = 1
+        self.same_level_node = Node(0, success_edge=self.success_weight, history=[], subfam_root=None)
+
     def _get_prior_par_losses(self, node, last_node):
         if node == last_node:
             return []
@@ -328,7 +338,48 @@ class GraphicalParallelDP(GraphicalFFSDP):
             return []
         return [node.test_thres] + self._get_prior_par_thres(node.par_child, last_node)
 
-    def _get_test_eval(self, test_y, pred_y, predef_pred_y, tree_node, do_ffs=False):
+    def _get_test_eval_ffs(self, test_y, pred_y, predef_pred_y):
+        """
+        NOTICE that the std err used here is not the usual one!!!
+
+        @return tuple(
+            test perf where 1 means approve and 0 means not approved,
+            test nlls)
+        """
+        test_nlls = get_losses(test_y, pred_y)
+        predef_pred_test_nlls = get_losses(test_y, predef_pred_y)
+        std_err = np.sqrt(np.var(predef_pred_test_nlls)/predef_pred_test_nlls.size)
+        self.parallel_tree.observe_losses(test_nlls)
+
+        # Need to traverse subfam parent nodes to decide local level
+        prior_test_nlls = self._get_prior_par_losses(self.last_ffs_root, self.parallel_tree)
+        prior_thres = self._get_prior_par_thres(self.last_ffs_root, self.parallel_tree)
+        est_corr = np.corrcoef(np.array(prior_test_nlls + [test_nlls]))
+        if self.parallel_tree.subfam_root == self.parallel_tree:
+            print("asdfjklasdjflasdf")
+            t_thres = norm.ppf(self.parallel_tree.local_alpha)
+        else:
+            #print("EST COV", np.corrcoef(np.array(prior_test_nlls + [test_nlls])))
+            print("----------------", self.parallel_tree.local_alpha)
+            t_thres = self._solve_t_statistic_thres(est_corr, prior_thres, self.parallel_tree.local_alpha)
+        self.parallel_tree.set_test_thres(t_thres)
+        t_statistic = (np.mean(test_nlls) - self.base_threshold)/std_err
+        #print("95 CI", np.mean(test_nlls) + std_err * 1.96)
+        test_result = int(t_statistic < t_thres)
+        print("t_statistics", t_statistic, t_thres)
+        return test_result
+
+    def _solve_t_statistic_thres_corr(self, prior_thres, alpha_level):
+        """
+        @param prior_thres: the thresholds for all but the last test statistic
+        @param alpha_level: the level of alpha we want to spend for the last test statistic
+
+        @return the threshold for the last test statistic to satisfy the spending schedule
+        """
+        new_thres = norm.ppf(alpha_level)/self.loss_to_diff_std_ratio + prior_thres
+        return new_thres
+
+    def _get_test_eval_corr(self, test_y, pred_y, predef_pred_y):
         """
         NOTICE that the std err used here is not the usual one!!!
 
@@ -339,39 +390,56 @@ class GraphicalParallelDP(GraphicalFFSDP):
         test_nlls = get_losses(test_y, pred_y)
         predef_pred_test_nlls = get_losses(test_y, predef_pred_y)
         std_err = np.sqrt(np.var(predef_pred_test_nlls)/test_nlls.size)
-        tree_node.observe_losses(test_nlls)
+        self.test_tree.observe_losses(test_nlls)
 
-        # TODO: check if this is the right alpha alloc, don't need success weight?
-        if do_ffs:
-            # Need to traverse subfam parent nodes to decide local level
-            prior_test_nlls = self._get_prior_par_losses(tree_node.subfam_root, tree_node)
-            prior_thres = self._get_prior_par_thres(tree_node.subfam_root, tree_node)
-            est_cov = np.cov(np.array(prior_test_nlls + [test_nlls]))
-            t_thres = self._solve_t_statistic_thres(est_cov, prior_thres, tree_node.local_alpha)
-            tree_node.set_test_thres(t_thres)
-            t_statistic = (np.mean(test_nlls) - self.base_threshold) * np.sqrt(test_nlls.size)
-            test_result = int(t_statistic < t_thres)
-        else:
-            test_stat = (np.mean(test_nlls) - self.base_threshold)/std_err
-            print("95 upper ci", np.mean(test_nlls) + 1.96 * std_err)
-            print("TEST EvAL", test_stat, std_err, np.mean(test_nlls), self.base_threshold)
-            test_result = int(norm.cdf(test_stat) < tree_node.local_alpha)
+        test_stat = (np.mean(test_nlls) - self.base_threshold)/std_err
+        t_thres = self._solve_t_statistic_thres_corr(self.test_tree.par_parent.test_thres, self.test_tree.local_alpha)
+        self.test_tree.set_test_thres(t_thres)
+        test_result = int(test_stat < t_thres)
+        print("corr test resl", test_stat, t_thres)
         return test_result
 
-    def _get_test_compare(self, test_y, pred_y, baseline_pred_y, predef_pred_y, alpha):
+    def _get_test_compare_ffs(self, test_y, pred_y, baseline_pred_y, predef_pred_y):
         """
         NOTICE that the std err used here is not the usual one!!!
 
-        @return test perf where 1 means approve and 0 means not approved
+        @return test perf where 1 means approve and 0 means not approved,
         """
         test_nlls_new = get_losses(test_y, pred_y)
         test_nlls_old = get_losses(test_y, baseline_pred_y)
         predef_pred_test_nlls = get_losses(test_y, predef_pred_y)
         std_err = np.sqrt(np.var(predef_pred_test_nlls - test_nlls_old)/test_nlls_old.size)
+        test_nll_diffs = test_nlls_new - test_nlls_old
+        self.parallel_tree.observe_losses(test_nll_diffs)
 
-        test_stat = np.mean(test_nlls_new - test_nlls_old)/std_err
-        print("TEST EvAL", test_stat, std_err, np.mean(test_nlls_new - test_nlls_old), alpha)
-        test_result = int(norm.cdf(test_stat) < alpha)
+        # Need to traverse subfam parent nodes to decide local level
+        prior_test_diffs = self._get_prior_par_losses(self.last_ffs_root, self.parallel_tree)
+        prior_thres = self._get_prior_par_thres(self.last_ffs_root, self.parallel_tree)
+        est_corr = np.corrcoef(np.array(prior_test_diffs + [test_nll_diffs]))
+        t_thres = self._solve_t_statistic_thres(est_corr, prior_thres, self.parallel_tree.local_alpha)
+        self.parallel_tree.set_test_thres(t_thres)
+        t_statistic = (np.mean(test_nll_diffs))/std_err
+        test_result = int(t_statistic < t_thres)
+        print("t_statistics", t_statistic, t_thres)
+        return test_result
+
+    def _get_test_compare_corr(self, test_y, pred_y, baseline_pred_y, predef_pred_y):
+        """
+        NOTICE that the std err used here is not the usual one!!!
+
+        @return test perf where 1 means approve and 0 means not approved,
+        """
+        test_nlls_new = get_losses(test_y, pred_y)
+        test_nlls_old = get_losses(test_y, baseline_pred_y)
+        predef_pred_test_nlls = get_losses(test_y, predef_pred_y)
+        std_err = np.sqrt(np.var(predef_pred_test_nlls - test_nlls_old)/test_nlls_old.size)
+        test_nll_diffs = test_nlls_new - test_nlls_old
+        self.test_tree.observe_losses(test_nll_diffs)
+
+        test_stat = (np.mean(test_nll_diffs))/std_err
+        t_thres = self._solve_t_statistic_thres_corr(self.test_tree.par_parent.test_thres, self.test_tree.local_alpha)
+        self.test_tree.set_test_thres(t_thres)
+        test_result = int(test_stat < t_thres)
         return test_result
 
     def _get_fwer(self, q, uniq_alpha_weights, weight_cts, desired_fwer, debug=False):
@@ -392,22 +460,6 @@ class GraphicalParallelDP(GraphicalFFSDP):
         #print("INNER OPTIM", res.fun, res.x)
         return res.fun
 
-    def get_corrected_fwer_thresholds(self, uniq_alpha_weights, weight_cts, desired_fwer):
-        mask = uniq_alpha_weights > 0
-        def fwer_dist(x):
-            fwer = self._get_fwer(x, uniq_alpha_weights[mask], weight_cts[mask], desired_fwer)
-            return np.power(np.abs(fwer - desired_fwer)/desired_fwer, 2)
-
-        # Now fine tune it using an optimization algo. maybe it'll tell us something new
-        if np.sum(uniq_alpha_weights > 0) == 1 or np.isclose(1, 1/uniq_alpha_weights.max()):
-            return uniq_alpha_weights * desired_fwer
-        else:
-            print("UNIQ WEIG", uniq_alpha_weights)
-            new_fwer_res = scipy.optimize.minimize_scalar(fwer_dist, bounds=[1, 1/uniq_alpha_weights.max()], method="bounded")
-            fwer_inflat = new_fwer_res.x
-            print("SEPNT", self._get_fwer(fwer_inflat, uniq_alpha_weights, weight_cts, desired_fwer), desired_fwer)
-            return uniq_alpha_weights * fwer_inflat * desired_fwer
-
     def _do_adapt_tree_update(self, test_result):
         # update adaptive tree
         self.num_queries += 1
@@ -416,17 +468,12 @@ class GraphicalParallelDP(GraphicalFFSDP):
             # remove node and propagate weights
             self.test_tree.success.earn(self.test_tree.weight * self.test_tree.success_edge)
             self.test_tree = self.test_tree.success
-
-            # TODO: there are other same level nodes with other weights. need to be a bit more careful here
-            self.same_level_node = Node(self.test_tree.weight * self.test_tree.failure_edge, success_edge = 0, history=[0] * len(self.test_tree.history))
         else:
             self.test_tree.failure.earn(self.test_tree.weight * self.test_tree.failure_edge)
             self.test_tree = self.test_tree.failure
 
-            self.same_level_node = Node(0, success_edge = 0, history=[0] * len(self.test_tree.history))
-
         self.num_same_level_nodes = np.power(2, len(self.test_tree.history))
-        self._create_children(self.test_tree)
+        self._create_children(self.test_tree, self.parallel_tree.par_child)
 
     def _do_par_tree_update(self, test_result):
         # Update parallel tree
@@ -435,10 +482,8 @@ class GraphicalParallelDP(GraphicalFFSDP):
         if test_result == 1:
             self.parallel_tree.par_child.earn(self.parallel_tree.weight * self.parallel_tree.par_weight)
             self.test_tree.earn(self.parallel_tree.weight * self.parallel_tree.adapt_tree_node_weight)
-            # TODO: this is a hack. fix this
-            self.same_level_node = Node(self.parallel_tree.weight * self.parallel_tree.adapt_tree_node_weight, success_edge = 0, history=[0] * len(self.test_tree.history))
-            self.num_same_level_nodes = np.power(2, len(self.test_tree.history))
-            print("WEIHGS", self.same_level_node.weight, self.parallel_tree.adapt_tree_node_weight * self.num_same_level_nodes)
+            # TODO: check if this FFS root is correct
+            self.last_ffs_root = self.parallel_tree.par_child
 
         # Increment the par tree node regardless of success
         self.parallel_tree = self.parallel_tree.par_child
@@ -448,29 +493,15 @@ class GraphicalParallelDP(GraphicalFFSDP):
         # Test the parallel tree stuff, do any weight propagation
         self.parallel_tree.local_alpha = self.parallel_tree.weight * self.alpha
         orig_alpha = self.parallel_tree.local_alpha
-        parallel_test_result = self._get_test_eval(test_y, predef_pred_y, predef_pred_y, self.parallel_tree, do_ffs=self.do_ffs)
+        print("ORIG_", orig_alpha)
+        parallel_test_result = self._get_test_eval_ffs(test_y, predef_pred_y, predef_pred_y)
         self._do_par_tree_update(parallel_test_result)
 
-        # get the corrected levels for testing the current node, accounting for modification similarity
-        curr_weights= np.array([self.test_tree.weight] + [self.same_level_node.weight] * (self.num_same_level_nodes - 1))
-        tot_weight = np.sum(curr_weights)
-        desired_fwer = tot_weight * self.alpha
-        # TODO: make sure this check passes
-        assert tot_weight <= 1
-        if desired_fwer == 0:
+        if self.test_tree.weight == 0:
             test_result = 0
         else:
-            eps = np.power(10.,-self.num_adapt_queries)
-            uniq_alpha_weights = np.array([self.test_tree.weight, self.same_level_node.weight])
-            uniq_alpha_weights = (uniq_alpha_weights + eps)/(tot_weight + eps * self.num_same_level_nodes)
-            assert uniq_alpha_weights.max() <= 1
-            weight_cts = np.array([1, self.num_same_level_nodes - 1])
-            corrected_alphas = self.get_corrected_fwer_thresholds(
-                    uniq_alpha_weights = uniq_alpha_weights,
-                    weight_cts=weight_cts,
-                    desired_fwer=desired_fwer)
-            self.test_tree.local_alpha = corrected_alphas[0]
-            test_result = self._get_test_eval(test_y, pred_y, predef_pred_y, self.test_tree, do_ffs=False)
+            self.test_tree.local_alpha = self.test_tree.weight * self.alpha
+            test_result = self._get_test_eval_corr(test_y, pred_y, predef_pred_y)
 
         # update tree
         self._do_adapt_tree_update(test_result)
@@ -480,26 +511,17 @@ class GraphicalParallelDP(GraphicalFFSDP):
         return test_result
 
     def get_test_compare(self, test_y, pred_y, prev_pred_y, predef_pred_y):
-        parallel_test_result = self._get_test_compare(test_y, predef_pred_y, prev_pred_y, predef_pred_y, alpha=self.parallel_tree.weight * self.alpha, do_ffs=self.do_ffs)
+        # Test the parallel tree stuff, do any weight propagation
+        self.parallel_tree.local_alpha = self.parallel_tree.weight * self.alpha
+        orig_alpha = self.parallel_tree.local_alpha
+        parallel_test_result = self._get_test_compare_ffs(test_y, predef_pred_y, prev_pred_y, predef_pred_y, self.parallel_tree)
         self._do_par_tree_update(parallel_test_result)
 
-        # get the corrected levels for testing the current node, accounting for modification similarity
-        if np.isclose(self.test_tree.weight, 0):
+        if self.test_tree.weight == 0:
             test_result = 0
         else:
-            eps = np.power(10.,-self.num_adapt_queries)
-            tot_weight = self.test_tree.weight + (self.num_same_level_nodes - 1) * self.same_level_node.weight
-            desired_fwer = self.alpha * tot_weight
-            print("TOT WEIGHT", tot_weight)
-            assert tot_weight <= 1
-            #print("orig alph", curr_level_alphas)
-            uniq_alpha_weights = np.array([self.test_tree.weight, self.same_level_node.weight])
-            uniq_alpha_weights = (uniq_alpha_weights + eps)/(tot_weight + eps * self.num_same_level_nodes)
-            assert uniq_alpha_weights.max() <= 1
-            weight_cts = np.array([1, self.num_same_level_nodes - 1])
-            corrected_alphas = self.get_corrected_fwer_thresholds(uniq_alpha_weights = uniq_alpha_weights, weight_cts = weight_cts, desired_fwer=desired_fwer)
-            #print("CORRE ALPHA", corrected_alphas)
-            test_result = self._get_test_compare(test_y, pred_y, prev_pred_y, predef_pred_y, alpha=corrected_alphas[0], do_ffs=False)
+            self.test_tree.local_alpha = self.test_tree.weight * self.alpha
+            test_result = self._get_test_compare_corr(test_y, pred_y, predef_pred_y, self.test_tree)
 
         # update tree
         self._do_adapt_tree_update(test_result)
