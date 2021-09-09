@@ -13,7 +13,7 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 RUN_STATUS = localenv['clusters']
 NUM_SEEDS = localenv['num_seeds']
-REUSE_ITERS = 100
+REUSE_ITERS = 50
 SPARSE_P = 1
 SPARSE_COEF_VAL = 1.5
 
@@ -105,8 +105,8 @@ def create_dp(env, outdir, c):
         '--seed',
 	c['seed'],
         '--threshold 0.3',
-        '--parallel-ratio 0.9' if "graphical_parallel" == c['dp_mech'] else '',
-        '--loss-to-diff-ratio 400' if "graphical_parallel" == c['dp_mech'] else '',
+        '--parallel-ratio 0.8' if "graphical_parallel" == c['dp_mech'] else '',
+        '--loss-to-diff-ratio 100' if "graphical_parallel" == c['dp_mech'] else '',
         '--success-weight 0.9' if "graphical" in c['dp_mech'] else '',
         '--alpha 0.1',
         '--dp-mech',

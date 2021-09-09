@@ -503,16 +503,13 @@ class GraphicalParallelDP(GraphicalFFSDP):
         # Test the parallel tree stuff, do any weight propagation
         self.parallel_tree.local_alpha = self.parallel_tree.weight * self.alpha
         orig_alpha = self.parallel_tree.local_alpha
-        parallel_test_result = self._get_test_compare_ffs(test_y, predef_pred_y, prev_pred_y, predef_pred_y, self.parallel_tree)
-        self._do_par_tree_update(parallel_test_result)
+        parallel_test_result = self._get_test_compare_ffs(test_y, predef_pred_y, prev_pred_y, predef_pred_y)
 
-        if self.test_tree.weight == 0:
-            test_result = 0
-        else:
-            self.test_tree.local_alpha = self.test_tree.weight * self.alpha
-            test_result = self._get_test_compare_corr(test_y, pred_y, predef_pred_y, self.test_tree)
+        self.test_tree.local_alpha = self.test_tree.weight * self.alpha
+        test_result = self._get_test_compare_corr(test_y, pred_y, prev_pred_y, predef_pred_y)
 
         # update tree
+        self._do_par_tree_update(parallel_test_result)
         self._do_adapt_tree_update(test_result)
 
         print("PARALLL", self.parallel_test_hist)

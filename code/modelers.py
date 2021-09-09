@@ -34,7 +34,6 @@ class LockedModeler:
         mdl.classes_ = np.array([0,1])
         mdl.coef_ = params[1:].reshape((1,-1))
         mdl.intercept_ = np.array([params[0]])
-        return mdl
 
     def predict_prob(self, x):
         return self.modeler.predict_proba(x)[:,1].reshape((-1,1))
@@ -62,7 +61,7 @@ class NelderMeadModeler(LockedModeler):
         def get_test_perf(params):
             lr = sklearn.base.clone(self.modeler)
             #print(params)
-            lr = self.set_model(lr, np.concatenate([
+            self.set_model(lr, np.concatenate([
                 self.modeler.intercept_,
                 self.modeler.coef_.flatten()[:self.min_var_idx],
                 params]))
@@ -75,7 +74,7 @@ class NelderMeadModeler(LockedModeler):
         # TODO: add callback to append to history
         res = scipy.optimize.minimize(get_test_perf, x0=init_coef, method="Nelder-Mead", options={"maxfev": maxfev, "adaptive": True})
         print(res.x)
-        self.modeler = self.set_model(self.modeler, np.concatenate([
+        self.set_model(self.modeler, np.concatenate([
                 self.modeler.intercept_,
                 self.modeler.coef_.flatten()[:self.min_var_idx],
                 res.x]))
@@ -109,7 +108,7 @@ class CtsAdversaryModeler(LockedModeler):
 
         def get_test_perf(params):
             lr = sklearn.base.clone(self.modeler)
-            lr = self.set_model(lr, params)
+            self.set_model(lr, params)
             pred_y = lr.predict_proba(test_x)[:,1].reshape((-1,1))
             mtp_answer = dp_engine.get_test_eval(test_y, pred_y)
             return mtp_answer
@@ -165,13 +164,14 @@ class CtsAdversaryModeler(LockedModeler):
         return test_hist
 
 class BinaryAdversaryModeler(LockedModeler):
-    def __init__(self, dat: Dataset, preset_coef:float = 0, min_var_idx: int = 1, update_incr: float = 0.02):
+    def __init__(self, dat: Dataset, preset_coef:float = 0, min_var_idx: int = 1, update_incr: float = 0.02, predef_perturb: float = 0.1):
         """
         @param min_var_idx: nelder mead only tunes coefficients with idx at least min_var_idx
         """
         self.modeler = LogisticRegression(penalty="none", solver="lbfgs")
         self.dat = dat
         self.update_incr = update_incr
+        self.predef_perturb = predef_perturb
         self.min_var_idx = min_var_idx
         self.preset_coef = preset_coef
         self.modeler.fit(self.dat.x, self.dat.y.flatten())
@@ -188,15 +188,26 @@ class BinaryAdversaryModeler(LockedModeler):
         self.modeler.intercept_[:] = 0
         self.modeler.coef_[0,:self.min_var_idx] = self.preset_coef
         self.modeler.coef_[0,self.min_var_idx:] = 0
-        orig_pred_y = self.modeler.predict_proba(test_x)[:,1].reshape((-1,1))
+
+        # Also have some predefined perturber for reference
+        # just so we can use the parallel procedure
+        self.predef_modeler = sklearn.base.clone(self.modeler)
+        self.predef_modeler.fit(self.dat.x, self.dat.y.flatten())
+        self.predef_modeler.intercept_[:] += np.random.rand() * self.predef_perturb
+        self.predef_modeler.coef_[0,:] += np.random.rand(self.predef_modeler.coef_.size) * self.predef_perturb
 
 
         def get_test_perf(params):
             lr = sklearn.base.clone(self.modeler)
-            lr = self.set_model(lr, params)
+            self.set_model(lr, params)
             pred_y = lr.predict_proba(test_x)[:,1].reshape((-1,1))
             prev_pred_y = self.modeler.predict_proba(test_x)[:,1].reshape((-1,1))
-            mtp_answer = dp_engine.get_test_compare(test_y, pred_y, prev_pred_y, predef_pred_y=orig_pred_y)
+
+            self.predef_modeler.intercept_[:] += np.random.rand() * self.predef_perturb
+            self.predef_modeler.coef_[0,:] += np.random.rand(self.predef_modeler.coef_.size) * self.predef_perturb
+            predef_pred_y = self.predef_modeler.predict_proba(test_x)[:,1].reshape((-1,1))
+
+            mtp_answer = dp_engine.get_test_compare(test_y, pred_y, prev_pred_y, predef_pred_y=predef_pred_y)
             return mtp_answer
 
         # Now search in each direction and do a greedy search
