@@ -284,7 +284,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
     def name(self):
         return "graphical_par_%.1f" % self.loss_to_diff_std_ratio
 
-    def __init__(self, base_threshold, alpha, success_weight, parallel_success_weight: float = 0.5, parallel_ratio: float = 0.9, loss_to_diff_std_ratio: float = 100.0, alpha_alloc_max_depth: int = 0):
+    def __init__(self, base_threshold, alpha, success_weight, parallel_ratio: float = 0.9, loss_to_diff_std_ratio: float = 100.0, alpha_alloc_max_depth: int = 0):
         """
         @param loss_to_diff_std_ratio: the minimum ratio between the stdev of the loss of the predef model and the loss of the modifications in that level (maybe in the future, consider an avg?)
                                     bigger the ratio the more similar the adaptive strategy is to the prespecified strategy
@@ -292,18 +292,15 @@ class GraphicalParallelDP(GraphicalFFSDP):
         self.base_threshold = base_threshold
         self.alpha = alpha
         self.success_weight = success_weight
-        self.parallel_success_weight = parallel_success_weight
         self.parallel_ratio = parallel_ratio
         assert loss_to_diff_std_ratio >= 1
         self.loss_to_diff_std_ratio = loss_to_diff_std_ratio
         self.alpha_alloc_max_depth = alpha_alloc_max_depth
 
-    def _create_children(self, node, next_par_node):
+    def _create_children(self, node):
         child_weight = (1 - self.parallel_ratio)/np.power(2, self.alpha_alloc_max_depth) if self.num_queries < self.alpha_alloc_max_depth else 0
         node.success = Node(child_weight, success_edge=self.success_weight, history=node.history + [1], subfam_root=None, parent=node)
-        node.success.par_parent = next_par_node
         node.failure = Node(child_weight, success_edge=self.success_weight, history=node.history + [0], subfam_root=node.subfam_root, parent=node)
-        node.failure.par_parent = next_par_node
 
     def set_num_queries(self, num_adapt_queries):
         # reset num queries
@@ -314,36 +311,20 @@ class GraphicalParallelDP(GraphicalFFSDP):
         self.num_adapt_queries = num_adapt_queries
 
         # Create parallel sequence
-        self.parallel_tree = Node(1/num_adapt_queries * self.parallel_ratio, success_edge=self.parallel_success_weight, history=[], subfam_root=None)
+        self.parallel_tree = Node(1/num_adapt_queries * self.parallel_ratio, success_edge=1, history=[], subfam_root=None)
         self.last_ffs_root = self.parallel_tree
         curr_par_node = self.parallel_tree
         for i in range(1, num_adapt_queries + 1):
-            # TODO: this this history thing matter? It's just a placeholder
             weight = 1/num_adapt_queries * self.parallel_ratio if i < num_adapt_queries else 0
-            next_par_node = Node(weight, success_edge=self.parallel_success_weight, history=[None] * i, subfam_root=self.parallel_tree, parent=curr_par_node)
-            curr_par_node.par_child = next_par_node
-            curr_par_node.par_weight  = self.parallel_success_weight
-            curr_par_node.adapt_tree_node_weight  = (1 - self.parallel_success_weight)/np.power(2, i - 1)
-
+            next_par_node = Node(weight, success_edge=1, history=[None] * i, subfam_root=self.parallel_tree, parent=curr_par_node)
+            curr_par_node.failure = next_par_node
+            curr_par_node.success = next_par_node
             curr_par_node = next_par_node
-            curr_par_node.par_child = None
+            curr_par_node.failure = None
 
         # Create adapt tree
         self.test_tree = Node(1 - self.parallel_ratio, success_edge=self.success_weight, history=[], subfam_root=None)
-        self.test_tree.par_parent = self.parallel_tree
-        self._create_children(self.test_tree, self.parallel_tree.par_child)
-        self.num_same_level_nodes = 1
-        self.same_level_node = Node(0, success_edge=self.success_weight, history=[], subfam_root=None)
-
-    def _get_prior_par_losses(self, node, last_node):
-        if node == last_node:
-            return []
-        return [node.test_losses] + self._get_prior_par_losses(node.par_child, last_node)
-
-    def _get_prior_par_thres(self, node, last_node):
-        if node == last_node:
-            return []
-        return [node.test_thres] + self._get_prior_par_thres(node.par_child, last_node)
+        self._create_children(self.test_tree)
 
     def _get_test_eval_ffs(self, test_y, pred_y, predef_pred_y):
         """
@@ -359,8 +340,8 @@ class GraphicalParallelDP(GraphicalFFSDP):
         self.parallel_tree.observe_losses(test_nlls)
 
         # Need to traverse subfam parent nodes to decide local level
-        prior_test_nlls = self._get_prior_par_losses(self.last_ffs_root, self.parallel_tree)
-        prior_thres = self._get_prior_par_thres(self.last_ffs_root, self.parallel_tree)
+        prior_test_nlls = self._get_prior_losses(self.last_ffs_root, self.parallel_tree)
+        prior_thres = self._get_prior_thres(self.last_ffs_root, self.parallel_tree)
         est_corr = np.corrcoef(np.array(prior_test_nlls + [test_nlls]))
         print("LOCAL FFS par ALPHA", self.parallel_tree.local_alpha)
         if self.parallel_tree.subfam_root == self.parallel_tree:
@@ -400,7 +381,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
 
         test_stat = (np.mean(test_nlls) - self.base_threshold)/std_err
         print("LOCAL ALPHA TREE", self.test_tree.local_alpha, norm.ppf(self.test_tree.local_alpha))
-        t_thres = self._solve_t_statistic_thres_corr(self.test_tree.par_parent.test_thres, self.test_tree.local_alpha)
+        t_thres = self._solve_t_statistic_thres_corr(self.parallel_tree.test_thres, self.test_tree.local_alpha)
         print("T THRES adjust", norm.cdf(t_thres), t_thres)
         self.test_tree.set_test_thres(t_thres)
         test_result = int(test_stat < t_thres)
@@ -421,8 +402,8 @@ class GraphicalParallelDP(GraphicalFFSDP):
         self.parallel_tree.observe_losses(test_nll_diffs)
 
         # Need to traverse subfam parent nodes to decide local level
-        prior_test_diffs = self._get_prior_par_losses(self.last_ffs_root, self.parallel_tree)
-        prior_thres = self._get_prior_par_thres(self.last_ffs_root, self.parallel_tree)
+        prior_test_diffs = self._get_prior_losses(self.last_ffs_root, self.parallel_tree)
+        prior_thres = self._get_prior_thres(self.last_ffs_root, self.parallel_tree)
         est_corr = np.corrcoef(np.array(prior_test_diffs + [test_nll_diffs]))
         t_thres = self._solve_t_statistic_thres(est_corr, prior_thres, self.parallel_tree.local_alpha)
         self.parallel_tree.set_test_thres(t_thres)
@@ -445,7 +426,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
         self.test_tree.observe_losses(test_nll_diffs)
 
         test_stat = (np.mean(test_nll_diffs))/std_err
-        t_thres = self._solve_t_statistic_thres_corr(self.test_tree.par_parent.test_thres, self.test_tree.local_alpha)
+        t_thres = self._solve_t_statistic_thres_corr(self.parallel_tree.test_thres, self.test_tree.local_alpha)
         self.test_tree.set_test_thres(t_thres)
         test_result = int(test_stat < t_thres)
         return test_result
@@ -480,8 +461,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
             self.test_tree.failure.earn(self.test_tree.weight * self.test_tree.failure_edge)
             self.test_tree = self.test_tree.failure
 
-        self.num_same_level_nodes = np.power(2, len(self.test_tree.history))
-        self._create_children(self.test_tree, self.parallel_tree.par_child)
+        self._create_children(self.test_tree)
 
     def _do_par_tree_update(self, test_result):
         # Update parallel tree
@@ -489,13 +469,16 @@ class GraphicalParallelDP(GraphicalFFSDP):
 
         if test_result == 1:
             print("DO EARN")
-            self.parallel_tree.par_child.earn(self.parallel_tree.weight * self.parallel_tree.par_weight)
-            self.test_tree.earn(self.parallel_tree.weight * self.parallel_tree.adapt_tree_node_weight)
-            # TODO: check if this FFS root is correct
-            self.last_ffs_root = self.parallel_tree.par_child
+            self.parallel_tree.success.earn(self.parallel_tree.weight * self.parallel_tree.success_edge)
+            if self.parallel_tree.parent is not None:
+                # Reconnect the nodes for FFS
+                self.parallel_tree.parent.success = self.parallel_tree.success
+                self.parallel_tree.parent.failure = self.parallel_tree.success
+            else:
+                self.last_ffs_root = self.parallel_tree.success
 
         # Increment the par tree node regardless of success
-        self.parallel_tree = self.parallel_tree.par_child
+        self.parallel_tree = self.parallel_tree.success
         self.parallel_tree.local_alpha = self.parallel_tree.weight * self.alpha
 
     def get_test_eval(self, test_y, pred_y, predef_pred_y):
@@ -504,15 +487,12 @@ class GraphicalParallelDP(GraphicalFFSDP):
         orig_alpha = self.parallel_tree.local_alpha
         print("ORIG_", orig_alpha)
         parallel_test_result = self._get_test_eval_ffs(test_y, predef_pred_y, predef_pred_y)
-        self._do_par_tree_update(parallel_test_result)
 
-        if self.test_tree.weight == 0:
-            test_result = 0
-        else:
-            self.test_tree.local_alpha = self.test_tree.weight * self.alpha
-            test_result = self._get_test_eval_corr(test_y, pred_y, predef_pred_y)
+        self.test_tree.local_alpha = self.test_tree.weight * self.alpha
+        test_result = self._get_test_eval_corr(test_y, pred_y, predef_pred_y)
 
         # update tree
+        self._do_par_tree_update(parallel_test_result)
         self._do_adapt_tree_update(test_result)
 
         print("PARALLL", self.parallel_test_hist)
