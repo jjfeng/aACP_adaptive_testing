@@ -13,9 +13,10 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 RUN_STATUS = localenv['clusters']
 NUM_SEEDS = localenv['num_seeds']
-REUSE_ITERS = 50
+REUSE_ITERS = 5
 SPARSE_P = 1
 SPARSE_COEF_VAL = 1.5
+FWER = 0.1
 
 #nest.add_aggregate("summary_res_combo_refit", list)
 #nest.add_aggregate("summary_res_combo_boxed", list)
@@ -26,6 +27,7 @@ nest.add(
     [100],
     label_func=lambda c: "test_%d" % c)
 
+nest.add_aggregate("summary_res", list)
 nest.add(
     'seed',
     range(NUM_SEEDS),
@@ -93,8 +95,8 @@ nest.add(
         "binary_thres_dp",
         #"bonferroni",
         #"bonferroni_nonadapt",
-        "graphical_bonf",
-        "graphical_parallel",
+        #"graphical_bonf",
+        #"graphical_parallel",
         #"graphical_ffs",
     ])
 
@@ -108,7 +110,8 @@ def create_dp(env, outdir, c):
         '--parallel-ratio 0.8' if "graphical_parallel" == c['dp_mech'] else '',
         '--loss-to-diff-ratio 100' if "graphical_parallel" == c['dp_mech'] else '',
         '--success-weight 0.9' if "graphical" in c['dp_mech'] else '',
-        '--alpha 0.1',
+        '--alpha',
+        FWER,
         '--dp-mech',
         c['dp_mech'],
 	'--out ${TARGETS[0]}'
@@ -125,19 +128,25 @@ def run_experiment(env, outdir, c):
         'python main.py',
         '--seed',
 	c['seed'],
-        '--maxfev',
+        '--min-iter',
+        REUSE_ITERS,
+        '--max-iter',
         REUSE_ITERS,
 	'--data ${SOURCES[0]}',
 	'--model ${SOURCES[1]}',
 	'--dp-mech ${SOURCES[2]}',
 	'--log ${TARGETS[0]}',
-	'--plot ${TARGETS[1]}'
+	'--out-csv ${TARGETS[1]}',
+	#'--plot ${TARGETS[1]}'
     ]
-    return env.Command(
-        [
+    targets = [
             join(outdir, 'log.txt'),
-            join(outdir, 'plot_nll.png'),
-        ],
+            join(outdir, 'res.csv'),
+            #join(outdir, 'plot_nll.png'),
+        ]
+    c['summary_res'].append(targets[1])
+    return env.Command(
+        targets,
         [
             c["generate_data"][0],
             c["create_modeler"][0],
@@ -145,3 +154,27 @@ def run_experiment(env, outdir, c):
         ],
         ' '.join(map(str, cmd)))
 
+nest.pop("seed")
+
+@nest.add_target_with_env(localenv)
+def summarize(env, outdir, c):
+    cmd = [
+        'python summarize.py',
+	'--id-cols',
+	'measure,dataset,dp,max_iter',
+	'--pivot-rows',
+	'measure,dataset,dp',
+	'--pivot-cols',
+	'max_iter',
+	'--measure-filter',
+	'num_approvals',
+	'--results',
+        ",".join(["simulation_adversary/%s" % r for r in c['summary_res']]),
+	'--out-csv ${TARGETS[0]}',
+    ]
+    return env.Command(
+        [
+            join(outdir, 'res_summary.csv'),
+        ],
+        c["summary_res"],
+        ' '.join(map(str, cmd)))

@@ -33,9 +33,13 @@ def parse_args():
         type=int,
         default=1)
     parser.add_argument(
-        '--maxfev',
+        '--min-iter',
         type=int,
-        default=100)
+        default=0)
+    parser.add_argument(
+        '--max-iter',
+        type=int,
+        default=1)
     parser.add_argument(
         '--data-file',
         type=str,
@@ -49,9 +53,9 @@ def parse_args():
         type=str,
         default="_output/model.pkl")
     parser.add_argument(
-        '--out-file',
+        '--out-csv',
         type=str,
-        default="_output/res.pkl")
+        default="_output/res.csv")
     parser.add_argument(
         '--log-file',
         type=str,
@@ -59,7 +63,7 @@ def parse_args():
     parser.add_argument(
         '--plot-file',
         type=str,
-        default="_output/plot.png")
+        default=None)
     args = parser.parse_args()
     return args
 
@@ -92,13 +96,13 @@ def main():
     test_aucs = []
     prev_approval_time = 0
     last_approval_times = []
-    for maxfev in range(args.maxfev + 1):
-    #for maxfev in [6]:
-        print("===========RUN PROCEDURE FOR NUM STPES", maxfev)
+    max_iters = np.arange(args.min_iter, args.max_iter + 1)
+    for max_iter in max_iters:
+        print("===========RUN PROCEDURE FOR NUM STPES", max_iter)
         curr_approval_time = 0
-        if maxfev > 0:
-            dp_mech.set_num_queries(maxfev)
-            full_hist = modeler.do_minimize(data.reuse_test_dat.x, data.reuse_test_dat.y, dp_mech, dat_stream=data.train_dat_stream, maxfev=maxfev)
+        if max_iter > 0:
+            dp_mech.set_num_queries(max_iter)
+            full_hist = modeler.do_minimize(data.reuse_test_dat.x, data.reuse_test_dat.y, dp_mech, dat_stream=data.train_dat_stream, maxfev=max_iter)
             print("APPROVAL", full_hist.approval_times)
             curr_approval_time = full_hist.approval_times[-1]
             logging.info("APPROVAL %s", full_hist.approval_times)
@@ -122,33 +126,35 @@ def main():
             last_approval_times.append(len(full_hist.approval_times) - 1)
 
     # Compile results
-    reuse_nll_df = pd.DataFrame({"value": reuse_nlls,  "idx": np.arange(len(reuse_nlls))})
+    reuse_nll_df = pd.DataFrame({"value": reuse_nlls,  "max_iter": max_iters})
     reuse_nll_df["dataset"] = "reuse_test"
-    reuse_nll_df["name"] = "nll, %s" % dp_mech.name
-    reuse_auc_df = pd.DataFrame({"value": reuse_aucs,  "idx": np.arange(len(reuse_aucs))})
+    reuse_nll_df["measure"] = "nll"
+    reuse_auc_df = pd.DataFrame({"value": reuse_aucs,  "max_iter": max_iters})
     reuse_auc_df["dataset"] = "reuse_test"
-    reuse_auc_df["name"] = "auc, %s" % dp_mech.name
-    count_df = pd.DataFrame({"value": last_approval_times,  "idx": np.arange(len(reuse_aucs))})
+    reuse_auc_df["measure"] = "auc"
+    count_df = pd.DataFrame({"value": last_approval_times,  "max_iter": max_iters})
     count_df["dataset"] = "reuse_test"
-    count_df["name"] = "num_approvals"
-    test_nll_df = pd.DataFrame({"value": test_nlls,  "idx": np.arange(len(test_nlls))})
+    count_df["measure"] = "num_approvals"
+    test_nll_df = pd.DataFrame({"value": test_nlls,  "max_iter": max_iters})
     test_nll_df["dataset"] = "test"
-    test_nll_df["name"] = "nll, %s" % dp_mech.name
-    test_auc_df = pd.DataFrame({"value": test_aucs,  "idx": np.arange(len(test_aucs))})
+    test_nll_df["measure"] = "nll"
+    test_auc_df = pd.DataFrame({"value": test_aucs,  "max_iter": max_iters})
     test_auc_df["dataset"] = "test"
-    test_auc_df["name"] = "auc, %s" % dp_mech.name
+    test_auc_df["measure"] = "auc"
     df = pd.concat([reuse_nll_df, reuse_auc_df, count_df, test_auc_df, test_nll_df])
     df["dp"] = dp_mech.name
+    print("results")
+    print(df)
 
     # Plot
-    print(df)
-    sns.set_context("paper", font_scale=2)
-    sns.relplot(data=df, x="idx", y="value", hue="dataset", col="name", kind="line", facet_kws={'sharey': False, 'sharex': True})
-    plt.savefig(args.plot_file)
-    print("Fig", args.plot_file)
+    if args.plot_file:
+        print(df)
+        sns.set_context("paper", font_scale=2)
+        sns.relplot(data=df, x="max_iter", y="value", hue="dataset", col="measure", kind="line", facet_kws={'sharey': False, 'sharex': True})
+        plt.savefig(args.plot_file)
+        print("Fig", args.plot_file)
 
-    with open(args.out_file, "wb") as f:
-        pickle.dump(df, f)
+    df.to_csv(args.out_csv, index=False)
 
 
 if __name__ == "__main__":
