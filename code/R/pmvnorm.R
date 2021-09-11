@@ -1,4 +1,11 @@
 #!/usr/bin/env Rscript
+# Solves for the threshold that will spend exactly alpha
+# in a sequential test
+# Arg 1: csv file for covariance matrix
+# Arg 2: alpha to spend
+# Arg 3 and more: critical values for prior normalized statistics
+# Stdout: the critical value for desired alpha spending
+
 library(mvtnorm)
 
 args = commandArgs(trailingOnly=TRUE)
