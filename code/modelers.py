@@ -1,3 +1,4 @@
+from copy import deepcopy
 from typing import List
 import numpy as np
 import pandas as pd
@@ -17,7 +18,7 @@ class TestHistory:
     def update(self, test_res, curr_mdl):
         if test_res == 1:
             self.approval_times.append(self.curr_time)
-            self.approved_mdls.append(curr_mdl)
+            self.approved_mdls.append(deepcopy(curr_mdl))
 
         self.curr_time += 1
 
@@ -164,9 +165,9 @@ class CtsAdversaryModeler(LockedModeler):
         return test_hist
 
 class BinaryAdversaryModeler(LockedModeler):
-    update_dir = 1
+    update_dirs = [1]
 
-    def __init__(self, dat: Dataset, preset_coef:float = 0, min_var_idx: int = 1, update_incr: float = 0.01, predef_perturb: float = 0.1):
+    def __init__(self, dat: Dataset, preset_coef:float = 0, min_var_idx: int = 1, update_incr: float = 0.02, predef_perturb: float = 0.1):
         """
         @param min_var_idx: nelder mead only tunes coefficients with idx at least min_var_idx
         """
@@ -190,6 +191,7 @@ class BinaryAdversaryModeler(LockedModeler):
         self.modeler.intercept_[:] = 0
         self.modeler.coef_[0,:self.min_var_idx] = self.preset_coef
         self.modeler.coef_[0,self.min_var_idx:] = 0
+        prev_pred_y = self.modeler.predict_proba(test_x)[:,1].reshape((-1,1))
 
         # Also have some predefined perturber for reference
         # just so we can use the parallel procedure
@@ -202,7 +204,7 @@ class BinaryAdversaryModeler(LockedModeler):
             lr = sklearn.base.clone(self.modeler)
             self.set_model(lr, params)
             pred_y = lr.predict_proba(test_x)[:,1].reshape((-1,1))
-            prev_pred_y = self.modeler.predict_proba(test_x)[:,1].reshape((-1,1))
+            #prev_pred_y = self.modeler.predict_proba(test_x)[:,1].reshape((-1,1))
             print(lr.coef_)
             print(self.modeler.coef_)
 
@@ -219,19 +221,19 @@ class BinaryAdversaryModeler(LockedModeler):
             # Test each variable (that's known to be irrelevant)
             for var_idx in range(1 + self.min_var_idx, 1 + test_x.shape[1]):
                 # Test update for the variable
-                if test_hist.curr_time >= maxfev:
-                    break
-                curr_coef = np.concatenate([self.modeler.intercept_, self.modeler.coef_.flatten()])
-                curr_coef[var_idx] += self.update_dir * self.update_incr
-                print("curr", curr_coef)
-                test_res = get_test_perf(curr_coef)
-                print("perturb?", var_idx, test_res)
-                test_hist.update(
-                        test_res=test_res,
-                        curr_mdl=self.modeler)
-                if test_res == 1:
-                    self.set_model(self.modeler, curr_coef)
-                    break
+                for update_dir in self.update_dirs:
+                    if test_hist.curr_time >= maxfev:
+                        break
+                    curr_coef = np.concatenate([self.modeler.intercept_, self.modeler.coef_.flatten()])
+                    curr_coef[var_idx] += update_dir * self.update_incr
+                    print("curr", curr_coef)
+                    test_res = get_test_perf(curr_coef)
+                    print("perturb?", test_hist.curr_time, var_idx, test_res)
+                    test_hist.update(
+                            test_res=test_res,
+                            curr_mdl=self.modeler)
+                    if test_res == 1:
+                        self.set_model(self.modeler, curr_coef)
 
                 # If we found a good direction, keep walking in that direction
                 ctr = 2
@@ -239,7 +241,7 @@ class BinaryAdversaryModeler(LockedModeler):
                     if test_hist.curr_time >= maxfev:
                         break
                     curr_coef = np.concatenate([self.modeler.intercept_, self.modeler.coef_.flatten()])
-                    curr_coef[var_idx] += self.update_dir * self.update_incr * ctr
+                    curr_coef[var_idx] += update_dir * self.update_incr * ctr
                     test_res = get_test_perf(curr_coef)
                     print("perturb cont", var_idx, test_res)
                     test_hist.update(
