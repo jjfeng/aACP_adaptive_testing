@@ -13,7 +13,7 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 RUN_STATUS = localenv['clusters']
 NUM_SEEDS = localenv['num_seeds']
-REUSE_ITERS = 50
+REUSE_ITERS = 10
 SPARSE_P = 1
 SPARSE_COEF_VAL = 1.5
 FWER = 0.1
@@ -91,8 +91,8 @@ nest.add(
         #"bonferroni",
         #"bonferroni_nonadapt",
         #"graphical_bonf",
-        "graphical_ffs",
-        #"graphical_parallel",
+        #"graphical_ffs",
+        "graphical_parallel",
     ])
 
 @nest.add_target_with_env(localenv)

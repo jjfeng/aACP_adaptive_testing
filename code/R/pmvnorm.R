@@ -1,0 +1,29 @@
+#!/usr/bin/env Rscript
+library(mvtnorm)
+
+args = commandArgs(trailingOnly=TRUE)
+
+corr_mat_df = read.csv(args[1], sep=",", header = F)
+corr_mat = data.matrix(corr_mat_df)
+corr_mat = unname(corr_mat)
+corr_mat = (corr_mat + t(corr_mat))/2
+alpha_spend = as.numeric(args[2])
+lower_prior = as.numeric(args[seq(3, length(args))])
+
+corr_prior = corr_mat[seq(length(lower_prior)), seq(length(lower_prior))]
+surv_prior = pmvnorm(lower=lower_prior, sigma=corr_prior)
+
+get_sequential_spend <- function(thres) {
+  lower_all = c(lower_prior, thres)
+  surv_all = pmvnorm(lower=lower_all, sigma=corr_mat)
+  surv_prior - surv_all
+}
+
+
+get_sequential_spend_diff <- function(thres) {
+  reject_prob = get_sequential_spend(thres)
+  reject_prob - alpha_spend
+}
+
+res = uniroot(get_sequential_spend_diff, c(-10, 0))
+print(res$root)

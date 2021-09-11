@@ -1,4 +1,5 @@
 import logging
+import subprocess
 
 import numpy as np
 from scipy.stats import norm, multivariate_normal
@@ -221,31 +222,19 @@ class GraphicalFFSDP(GraphicalBonfDP):
         return [node.test_thres] + self._get_prior_thres(node.failure, last_node)
 
     def _solve_t_statistic_thres(self, est_cov, prior_thres, alpha_level):
-        """
-        @param est_cov: an estimated covariance matrix between the test statistics (not normalized, just differences of losses)
-        @param prior_thres: the thresholds for all but the last test statistic
-        @param alpha_level: the level of alpha we want to spend for the last test statistic
-
-        @return the threshold for the last test statistic to satisfy the spending schedule
-        """
-        mvn = multivariate_normal(cov=est_cov)
-        num_prior = len(prior_thres)
-        def check_reject_prob_marg(thres):
-            reject_prob = mvn.cdf([np.inf] * num_prior + [thres])
-            return np.abs(reject_prob - alpha_level)
-        def check_reject_prob_ffs(thres):
-            reject_prob = mvn.cdf([np.inf] * num_prior + [thres]) - mvn.cdf(prior_thres + [thres])
-            return np.abs(reject_prob - alpha_level)
-
-        if num_prior == 0:
-            res_marg = scipy.optimize.minimize_scalar(check_reject_prob_marg)
-            assert res_marg.success
-            return res_marg.x
+        if len(prior_thres) == 0:
+            thres = scipy.stats.norm.ppf(alpha_level)
+            print("THRES", thres, scipy.stats.norm.cdf(thres), alpha_level)
+            return thres
         else:
-            res_ffs = scipy.optimize.minimize_scalar(check_reject_prob_ffs, method="bounded", bounds=[-4, 0])
-            assert res_ffs.success
-            return res_ffs.x
-
+            cov_file = "_output/cov.txt"
+            np.savetxt(cov_file, est_cov, delimiter=",")
+            cmd = ["Rscript", "R/pmvnorm.R", cov_file, str(alpha_level)] + list(map(str, prior_thres))
+            #print("CMD", cmd)
+            res = subprocess.run(cmd, stdout=subprocess.PIPE)
+            thres = float(res.stdout.decode('utf-8')[4:])
+            print("THRES FROM R", thres)
+            return thres
 
     def get_test_eval(self, test_y, pred_y, predef_pred_y=None):
         test_y = test_y.flatten()
@@ -259,7 +248,7 @@ class GraphicalFFSDP(GraphicalBonfDP):
         # Need to traverse subfam parent nodes to decide local level
         prior_test_nlls = self._get_prior_losses(self.test_tree.subfam_root, self.test_tree)
         prior_thres = self._get_prior_thres(self.test_tree.subfam_root, self.test_tree)
-        est_cov = np.corrcoef(np.array(prior_test_nlls + [test_nlls]))
+        est_cov = np.corrcoef(np.array(prior_test_nlls + [test_nlls])) if len(prior_test_nlls) else np.array([[1]])
         t_thres = self._solve_t_statistic_thres(est_cov, prior_thres, self.test_tree.local_alpha)
         self.test_tree.set_test_thres(t_thres)
 
@@ -312,6 +301,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
 
         # Create parallel sequence
         self.parallel_tree = Node(1/num_adapt_queries * self.parallel_ratio, success_edge=1, history=[], subfam_root=None)
+        self.parallel_tree.local_alpha = self.parallel_tree.weight * self.alpha
         self.last_ffs_root = self.parallel_tree
         curr_par_node = self.parallel_tree
         for i in range(1, num_adapt_queries + 1):
@@ -324,6 +314,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
 
         # Create adapt tree
         self.test_tree = Node(1 - self.parallel_ratio, success_edge=self.success_weight, history=[], subfam_root=None)
+        self.test_tree.local_alpha = self.test_tree.weight * self.alpha
         self._create_children(self.test_tree)
 
     def _get_test_eval_ffs(self, test_y, pred_y, predef_pred_y):
@@ -342,7 +333,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
         # Need to traverse subfam parent nodes to decide local level
         prior_test_nlls = self._get_prior_losses(self.last_ffs_root, self.parallel_tree)
         prior_thres = self._get_prior_thres(self.last_ffs_root, self.parallel_tree)
-        est_corr = np.corrcoef(np.array(prior_test_nlls + [test_nlls]))
+        est_corr = np.corrcoef(np.array(prior_test_nlls + [test_nlls])) if len(prior_test_nlls) else np.array([[1]])
         print("LOCAL FFS par ALPHA", self.parallel_tree.local_alpha)
         if self.parallel_tree.subfam_root == self.parallel_tree:
             t_thres = norm.ppf(self.parallel_tree.local_alpha)
@@ -404,7 +395,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
         # Need to traverse subfam parent nodes to decide local level
         prior_test_diffs = self._get_prior_losses(self.last_ffs_root, self.parallel_tree)
         prior_thres = self._get_prior_thres(self.last_ffs_root, self.parallel_tree)
-        est_corr = np.corrcoef(np.array(prior_test_diffs + [test_nll_diffs]))
+        est_corr = np.corrcoef(np.array(prior_test_diffs + [test_nll_diffs])) if len(prior_test_diffs) else np.array([[1]])
         t_thres = self._solve_t_statistic_thres(est_corr, prior_thres, self.parallel_tree.local_alpha)
         self.parallel_tree.set_test_thres(t_thres)
         t_statistic = (np.mean(test_nll_diffs))/std_err
@@ -449,68 +440,39 @@ class GraphicalParallelDP(GraphicalFFSDP):
         #print("INNER OPTIM", res.fun, res.x)
         return res.fun
 
-    def _do_adapt_tree_update(self, test_result):
+    def _do_tree_update(self, par_tree_res, adapt_tree_res):
         # update adaptive tree
         self.num_queries += 1
-        self.test_hist.append(test_result)
-        if test_result == 1:
+        self.parallel_test_hist.append(par_tree_res)
+        self.test_hist.append(adapt_tree_res)
+
+        if adapt_tree_res == 1:
             # remove node and propagate weights
             self.test_tree.success.earn(self.test_tree.weight * self.test_tree.success_edge)
             self.test_tree = self.test_tree.success
         else:
             self.test_tree.failure.earn(self.test_tree.weight * self.test_tree.failure_edge)
             self.test_tree = self.test_tree.failure
+        self.test_tree.local_alpha = self.test_tree.weight * self.alpha
 
         self._create_children(self.test_tree)
-
-    def _do_par_tree_update(self, test_result):
-        # Update parallel tree
-        self.parallel_test_hist.append(test_result)
-
-        if test_result == 1:
-            print("DO EARN")
-            self.parallel_tree.success.earn(self.parallel_tree.weight * self.parallel_tree.success_edge)
-            if self.parallel_tree.parent is not None:
-                # Reconnect the nodes for FFS
-                self.parallel_tree.parent.success = self.parallel_tree.success
-                self.parallel_tree.parent.failure = self.parallel_tree.success
-            else:
-                self.last_ffs_root = self.parallel_tree.success
-
         # Increment the par tree node regardless of success
         self.parallel_tree = self.parallel_tree.success
         self.parallel_tree.local_alpha = self.parallel_tree.weight * self.alpha
 
     def get_test_eval(self, test_y, pred_y, predef_pred_y):
-        # Test the parallel tree stuff, do any weight propagation
-        self.parallel_tree.local_alpha = self.parallel_tree.weight * self.alpha
-        orig_alpha = self.parallel_tree.local_alpha
-        print("ORIG_", orig_alpha)
         parallel_test_result = self._get_test_eval_ffs(test_y, predef_pred_y, predef_pred_y)
-
-        self.test_tree.local_alpha = self.test_tree.weight * self.alpha
         test_result = self._get_test_eval_corr(test_y, pred_y, predef_pred_y)
-
-        # update tree
-        self._do_par_tree_update(parallel_test_result)
-        self._do_adapt_tree_update(test_result)
+        self._do_tree_update(parallel_test_result, test_result)
 
         print("PARALLL", self.parallel_test_hist)
         print("TEST TREE", self.test_hist)
         return test_result
 
     def get_test_compare(self, test_y, pred_y, prev_pred_y, predef_pred_y):
-        # Test the parallel tree stuff, do any weight propagation
-        self.parallel_tree.local_alpha = self.parallel_tree.weight * self.alpha
-        orig_alpha = self.parallel_tree.local_alpha
         parallel_test_result = self._get_test_compare_ffs(test_y, predef_pred_y, prev_pred_y, predef_pred_y)
-
-        self.test_tree.local_alpha = self.test_tree.weight * self.alpha
         test_result = self._get_test_compare_corr(test_y, pred_y, prev_pred_y, predef_pred_y)
-
-        # update tree
-        self._do_par_tree_update(parallel_test_result)
-        self._do_adapt_tree_update(test_result)
+        self._do_tree_update(parallel_test_result, test_result)
 
         print("PARALLL", self.parallel_test_hist)
         print("TEST TREE", self.test_hist)

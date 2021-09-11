@@ -43,7 +43,8 @@ nest.add(
 def generate_data(env, outdir, c):
     cmd = [
         'python generate_data_single_pop.py',
-        '--meta-seed 1',
+        '--meta-seed',
+        c['seed'],
         '--sparse',
         c['num_p'],
         '--p',
@@ -80,8 +81,6 @@ nest.add(
 def create_modeler(env, outdir, c):
     cmd = [
         'python create_modeler.py',
-        '--seed',
-	c['seed'],
         '--simulation',
         c['model_sim'],
 	'--data ${SOURCES[0]}',
@@ -96,8 +95,8 @@ def create_modeler(env, outdir, c):
 nest.add(
     'thres',
     [
-        0.396,
-        0.4,
+        #0.396,
+        #0.4,
         0.41
     ],
     label_func=lambda c: "thres_%.3f" % c)
@@ -118,8 +117,6 @@ nest.add(
 def create_dp(env, outdir, c):
     cmd = [
         'python create_dp_mechanism.py',
-        '--seed',
-	c['seed'],
         '--threshold',
         c['thres'],
         '--parallel-ratio 0.8' if "parallel" in c['dp_mech'] else '',
@@ -142,7 +139,7 @@ def run_experiment(env, outdir, c):
         'python main.py',
         '--seed',
 	c['seed'],
-        '--maxfev',
+        '--max-iter',
         REUSE_ITERS,
 	'--data ${SOURCES[0]}',
 	'--model ${SOURCES[1]}',
