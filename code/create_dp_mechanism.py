@@ -46,6 +46,10 @@ def parse_args():
         default=0.05,
         help='ci alpha')
     parser.add_argument(
+        '--scratch-file',
+        type=str,
+        default="_output/scratch.txt")
+    parser.add_argument(
         '--out-file',
         type=str,
         default="_output/dp_mech.pkl")
@@ -67,11 +71,9 @@ def main():
     elif args.dp_mech == "graphical_bonf":
         dp_mech = GraphicalBonfDP(args.threshold, args.alpha, success_weight=args.success_weight)
     elif args.dp_mech == "graphical_parallel":
-        dp_mech = GraphicalParallelDP(args.threshold, args.alpha, success_weight=args.success_weight, parallel_ratio=args.parallel_ratio, loss_to_diff_std_ratio=args.loss_to_diff_ratio)
+        dp_mech = GraphicalParallelDP(args.threshold, args.alpha, success_weight=args.success_weight, parallel_ratio=args.parallel_ratio, loss_to_diff_std_ratio=args.loss_to_diff_ratio, scratch_file=args.scratch_file)
     elif args.dp_mech == "graphical_ffs":
-        dp_mech = GraphicalFFSDP(args.threshold, args.alpha, success_weight=args.success_weight)
-    elif args.dp_mech == "graphical_ffs_parallel":
-        dp_mech = GraphicalParallelDP(args.threshold, args.alpha, success_weight=args.success_weight, parallel_ratio=args.parallel_ratio, loss_to_diff_std_ratio=args.loss_to_diff_ratio, do_ffs=True)
+        dp_mech = GraphicalFFSDP(args.threshold, args.alpha, success_weight=args.success_weight, scratch_file=args.scratch_file)
 
     with open(args.out_file, "wb") as f:
         pickle.dump(dp_mech, f)

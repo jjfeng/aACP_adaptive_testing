@@ -130,12 +130,13 @@ class Node:
 
 class GraphicalBonfDP(BinaryThresholdDP):
     name = "graphical_bonf_thres"
-    def __init__(self, base_threshold, alpha, success_weight, alpha_alloc_max_depth: int = 0):
+    def __init__(self, base_threshold, alpha, success_weight, alpha_alloc_max_depth: int = 0, scratch_file: str = None):
         self.base_threshold = base_threshold
         self.alpha = alpha
         self.success_weight = success_weight
         self.alpha_alloc_max_depth = alpha_alloc_max_depth
         self.parallel_ratio = 0
+        self.scratch_file = scratch_file
 
     def _create_children(self, node):
         child_weight = (1 - self.parallel_ratio)/np.power(2, self.alpha_alloc_max_depth) if self.num_queries < self.alpha_alloc_max_depth else 0
@@ -227,10 +228,8 @@ class GraphicalFFSDP(GraphicalBonfDP):
             print("THRES", thres, scipy.stats.norm.cdf(thres), alpha_level)
             return thres
         else:
-            cov_file = "_output/cov.txt"
-            np.savetxt(cov_file, est_cov, delimiter=",")
-            cmd = ["Rscript", "R/pmvnorm.R", cov_file, str(alpha_level)] + list(map(str, prior_thres))
-            #print("CMD", cmd)
+            np.savetxt(self.scratch_file, est_cov, delimiter=",")
+            cmd = ["Rscript", "R/pmvnorm.R", self.scratch_file, str(alpha_level)] + list(map(str, prior_thres))
             res = subprocess.run(cmd, stdout=subprocess.PIPE)
             thres = float(res.stdout.decode('utf-8')[4:])
             print("THRES FROM R", thres)
@@ -273,7 +272,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
     def name(self):
         return "graphical_par_%.1f" % self.loss_to_diff_std_ratio
 
-    def __init__(self, base_threshold, alpha, success_weight, parallel_ratio: float = 0.9, loss_to_diff_std_ratio: float = 100.0, alpha_alloc_max_depth: int = 0):
+    def __init__(self, base_threshold, alpha, success_weight, parallel_ratio: float = 0.9, loss_to_diff_std_ratio: float = 100.0, alpha_alloc_max_depth: int = 0, scratch_file: str = None):
         """
         @param loss_to_diff_std_ratio: the minimum ratio between the stdev of the loss of the predef model and the loss of the modifications in that level (maybe in the future, consider an avg?)
                                     bigger the ratio the more similar the adaptive strategy is to the prespecified strategy
@@ -285,6 +284,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
         assert loss_to_diff_std_ratio >= 1
         self.loss_to_diff_std_ratio = loss_to_diff_std_ratio
         self.alpha_alloc_max_depth = alpha_alloc_max_depth
+        self.scratch_file = scratch_file
 
     def _create_children(self, node):
         child_weight = (1 - self.parallel_ratio)/np.power(2, self.alpha_alloc_max_depth) if self.num_queries < self.alpha_alloc_max_depth else 0

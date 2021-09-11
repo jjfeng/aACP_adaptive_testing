@@ -87,11 +87,11 @@ nest.add(
     'dp_mech',
     [
         #"no_dp",
-        #"binary_thres_dp",
+        "binary_thres_dp",
         #"bonferroni",
         #"bonferroni_nonadapt",
         #"graphical_bonf",
-        #"graphical_ffs",
+        "graphical_ffs",
         "graphical_parallel",
     ])
 
@@ -106,11 +106,14 @@ def create_dp(env, outdir, c):
         FWER,
         '--dp-mech',
         c['dp_mech'],
+	'--scratch ${TARGETS[1]}',
 	'--out ${TARGETS[0]}'
     ]
     return env.Command(
         [
-            join(outdir, 'dp_mech.pkl')],
+            join(outdir, 'dp_mech.pkl'),
+            join(outdir, 'scratch.txt'),
+        ],
         [],
         ' '.join(map(str, cmd)))
 
