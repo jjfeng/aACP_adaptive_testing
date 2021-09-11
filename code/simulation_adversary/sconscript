@@ -13,15 +13,11 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 RUN_STATUS = localenv['clusters']
 NUM_SEEDS = localenv['num_seeds']
-REUSE_ITERS = 5
+REUSE_ITERS = 10
 SPARSE_P = 1
 SPARSE_COEF_VAL = 1.5
 FWER = 0.1
 
-#nest.add_aggregate("summary_res_combo_refit", list)
-#nest.add_aggregate("summary_res_combo_boxed", list)
-#nest.add_aggregate("summary_res_refit", list)
-#nest.add_aggregate("summary_res_boxed", list)
 nest.add(
     'reuse_test_n',
     [100],
@@ -37,13 +33,14 @@ nest.add(
 def generate_data(env, outdir, c):
     cmd = [
         'python generate_data_single_pop.py',
-        '--meta-seed 2',
+        '--meta-seed',
+        c['seed'],
         '--sparse',
         SPARSE_P,
-        '--p 30',
-        '--init-train-n 100',
+        '--p',
+        REUSE_ITERS,
+        '--init-train-n 10',
         '--train-batch-n 0',
-        '--train-incr 1',
         '--train-iters',
         REUSE_ITERS,
         '--init-reuse-test-n',
@@ -71,8 +68,6 @@ nest.add(
 def create_modeler(env, outdir, c):
     cmd = [
         'python create_modeler.py',
-        '--seed',
-	c['seed'],
         '--simulation',
         c['model_sim'],
         '--min-var-idx',
@@ -92,12 +87,12 @@ nest.add(
     'dp_mech',
     [
         #"no_dp",
-        "binary_thres_dp",
+        #"binary_thres_dp",
         #"bonferroni",
         #"bonferroni_nonadapt",
         #"graphical_bonf",
+        "graphical_ffs",
         #"graphical_parallel",
-        #"graphical_ffs",
     ])
 
 @nest.add_target_with_env(localenv)
@@ -106,10 +101,9 @@ def create_dp(env, outdir, c):
         'python create_dp_mechanism.py',
         '--seed',
 	c['seed'],
-        '--threshold 0.3',
         '--parallel-ratio 0.8' if "graphical_parallel" == c['dp_mech'] else '',
         '--loss-to-diff-ratio 100' if "graphical_parallel" == c['dp_mech'] else '',
-        '--success-weight 0.9' if "graphical" in c['dp_mech'] else '',
+        '--success-weight 0.5' if "graphical" in c['dp_mech'] else '',
         '--alpha',
         FWER,
         '--dp-mech',
@@ -137,12 +131,10 @@ def run_experiment(env, outdir, c):
 	'--dp-mech ${SOURCES[2]}',
 	'--log ${TARGETS[0]}',
 	'--out-csv ${TARGETS[1]}',
-	#'--plot ${TARGETS[1]}'
     ]
     targets = [
             join(outdir, 'log.txt'),
             join(outdir, 'res.csv'),
-            #join(outdir, 'plot_nll.png'),
         ]
     c['summary_res'].append(targets[1])
     return env.Command(
@@ -161,13 +153,13 @@ def summarize(env, outdir, c):
     cmd = [
         'python summarize.py',
 	'--id-cols',
-	'measure,dataset,dp,max_iter',
+	'dataset,measure,dp,max_iter',
 	'--pivot-rows',
-	'measure,dataset,dp',
+	'dataset,measure,dp',
 	'--pivot-cols',
 	'max_iter',
-	'--measure-filter',
-	'num_approvals',
+	#'--id-filter',
+	#'num_approvals,nll,auc',
 	'--results',
         ",".join(["simulation_adversary/%s" % r for r in c['summary_res']]),
 	'--out-csv ${TARGETS[0]}',

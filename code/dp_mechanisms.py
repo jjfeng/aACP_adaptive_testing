@@ -38,7 +38,7 @@ class BinaryThresholdDP(NoDP):
         test_nlls = get_losses(test_y, pred_y)
         t_stat_se = np.sqrt(np.var(test_nlls)/test_nlls.size)
         upper_ci = np.mean(test_nlls) + t_stat_se * norm.ppf(1 - self.alpha)
-        print("upper ci", upper_ci)
+        print("upper ci", upper_ci, test_nlls.mean())
         return int(upper_ci < self.base_threshold)
 
     def get_test_compare(self, test_y, pred_y, prev_pred_y, predef_pred_y=None):
@@ -50,7 +50,7 @@ class BinaryThresholdDP(NoDP):
         loss_diffs = test_nlls_new - test_nlls_prev
         t_stat_se = np.sqrt(np.var(loss_diffs)/loss_diffs.size)
         upper_ci = np.mean(loss_diffs) + t_stat_se * norm.ppf(1 - self.alpha)
-        print("upper ci", upper_ci)
+        print("upper ci", upper_ci, loss_diffs.mean(), "THRES")
         return int(upper_ci < 0)
 
 class BonferroniThresholdDP(BinaryThresholdDP):

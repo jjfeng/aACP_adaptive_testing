@@ -27,10 +27,9 @@ def parse_args():
         type=str,
         help="pivot rows")
     parser.add_argument(
-        '--measure-filter',
+        '--id-filters',
         type=str,
-        help="measure to summarize",
-        default="nll")
+        help="which filters, comma separated")
     parser.add_argument(
         '--id-cols',
         type=str,
@@ -46,7 +45,7 @@ def parse_args():
         '--out-csv',
         type=str)
     args = parser.parse_args()
-    args.measure_filter = args.measure_filter.split(",")
+    args.id_filters = args.id_filters.split(",") if args.id_filters else []
     args.pivot_rows = args.pivot_rows.split(",")
     args.pivot_cols = args.pivot_cols.split(",")
     args.results = args.results.split(",")
@@ -67,14 +66,23 @@ def main():
             print("file missing", res_file)
     num_replicates = len(all_res)
     all_res = pd.concat(all_res)
+
+    # Do any filtering
+    if args.id_filters:
+        for id_col in args.id_cols:
+            mask = all_res[id_col].isin(args.id_filters)
+            if np.sum(mask) == 0:
+                continue
+            all_res = all_res[all_res[id_col].isin(args.id_filters)]
     print(all_res)
+
     all_res_mean = all_res.groupby(args.id_cols).mean().reset_index()
     all_res_std = (all_res.groupby(args.id_cols).std()/np.sqrt(num_replicates)).reset_index()
     all_res_std["zagg"] = "se"
     all_res_mean["zagg"] = "mean"
     all_res = pd.concat([all_res_mean, all_res_std]) #.sort_values(["measure", "zagg", "mdl"])
-    mask = all_res.measure.isin(args.measure_filter)
-    out_df = all_res[mask].pivot(args.pivot_rows, args.pivot_cols + ["zagg"], ["value"])
+    #mask = all_res.measure.isin(args.measure_filter)
+    out_df = all_res.pivot(args.pivot_rows, args.pivot_cols + ["zagg"], ["value"])
     print(out_df)
 
     with open(args.out_csv, "w") as f:

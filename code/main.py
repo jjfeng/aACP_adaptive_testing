@@ -96,7 +96,7 @@ def main():
     test_aucs = []
     prev_approval_time = 0
     last_approval_times = []
-    max_iters = np.arange(args.min_iter, args.max_iter + 1)
+    max_iters = np.concatenate([[0], np.arange(args.min_iter, args.max_iter + 1)])
     for max_iter in max_iters:
         print("===========RUN PROCEDURE FOR NUM STPES", max_iter)
         curr_approval_time = 0
@@ -133,15 +133,18 @@ def main():
     reuse_auc_df["dataset"] = "reuse_test"
     reuse_auc_df["measure"] = "auc"
     count_df = pd.DataFrame({"value": last_approval_times,  "max_iter": max_iters})
-    count_df["dataset"] = "reuse_test"
+    count_df["dataset"] = "test"
     count_df["measure"] = "num_approvals"
+    approve_df = pd.DataFrame({"value": np.array(last_approval_times) > 0,  "max_iter": max_iters})
+    approve_df["dataset"] = "test"
+    approve_df["measure"] = "did_approval"
     test_nll_df = pd.DataFrame({"value": test_nlls,  "max_iter": max_iters})
     test_nll_df["dataset"] = "test"
     test_nll_df["measure"] = "nll"
     test_auc_df = pd.DataFrame({"value": test_aucs,  "max_iter": max_iters})
     test_auc_df["dataset"] = "test"
     test_auc_df["measure"] = "auc"
-    df = pd.concat([reuse_nll_df, reuse_auc_df, count_df, test_auc_df, test_nll_df])
+    df = pd.concat([reuse_nll_df, reuse_auc_df, count_df, approve_df, test_auc_df, test_nll_df])
     df["dp"] = dp_mech.name
     print("results")
     print(df)

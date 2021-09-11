@@ -37,14 +37,6 @@ def parse_args():
         type=int,
         default=1)
     parser.add_argument(
-        '--max-box',
-        type=str,
-        default="100")
-    parser.add_argument(
-        '--switch-time',
-        type=int,
-        default=None)
-    parser.add_argument(
         '--data-file',
         type=str,
         default="_output/data.pkl")
@@ -53,12 +45,10 @@ def parse_args():
         type=str,
         default="_output/models.pkl")
     args = parser.parse_args()
-    args.max_box = list(map(int, args.max_box.split(",")))
     return args
 
 def main():
     args = parse_args()
-    # parameters
     np.random.seed(args.seed)
 
     with open(args.data_file, "rb") as f:

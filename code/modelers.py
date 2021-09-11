@@ -164,7 +164,9 @@ class CtsAdversaryModeler(LockedModeler):
         return test_hist
 
 class BinaryAdversaryModeler(LockedModeler):
-    def __init__(self, dat: Dataset, preset_coef:float = 0, min_var_idx: int = 1, update_incr: float = 0.02, predef_perturb: float = 0.1):
+    update_dir = 1
+
+    def __init__(self, dat: Dataset, preset_coef:float = 0, min_var_idx: int = 1, update_incr: float = 0.01, predef_perturb: float = 0.1):
         """
         @param min_var_idx: nelder mead only tunes coefficients with idx at least min_var_idx
         """
@@ -196,12 +198,13 @@ class BinaryAdversaryModeler(LockedModeler):
         self.predef_modeler.intercept_[:] += np.random.rand() * self.predef_perturb
         self.predef_modeler.coef_[0,:] += np.random.rand(self.predef_modeler.coef_.size) * self.predef_perturb
 
-
         def get_test_perf(params):
             lr = sklearn.base.clone(self.modeler)
             self.set_model(lr, params)
             pred_y = lr.predict_proba(test_x)[:,1].reshape((-1,1))
             prev_pred_y = self.modeler.predict_proba(test_x)[:,1].reshape((-1,1))
+            print(lr.coef_)
+            print(self.modeler.coef_)
 
             self.predef_modeler.intercept_[:] += np.random.rand() * self.predef_perturb
             self.predef_modeler.coef_[0,:] += np.random.rand(self.predef_modeler.coef_.size) * self.predef_perturb
@@ -215,28 +218,28 @@ class BinaryAdversaryModeler(LockedModeler):
         while test_hist.curr_time < maxfev:
             # Test each variable (that's known to be irrelevant)
             for var_idx in range(1 + self.min_var_idx, 1 + test_x.shape[1]):
-                # Test each direction for the variable
-                for update_dir in [-1,1]:
-                    if test_hist.curr_time >= maxfev:
-                        break
-                    curr_coef = np.concatenate([self.modeler.intercept_, self.modeler.coef_.flatten()])
-                    curr_coef[var_idx] += update_dir * self.update_incr
-                    test_res = get_test_perf(curr_coef)
-                    print("perturb?", var_idx, update_dir, test_res)
-                    test_hist.update(
-                            test_res=test_res,
-                            curr_mdl=self.modeler)
-                    if test_res == 1:
-                        self.set_model(self.modeler, curr_coef)
-                        break
+                # Test update for the variable
+                if test_hist.curr_time >= maxfev:
+                    break
+                curr_coef = np.concatenate([self.modeler.intercept_, self.modeler.coef_.flatten()])
+                curr_coef[var_idx] += self.update_dir * self.update_incr
+                print("curr", curr_coef)
+                test_res = get_test_perf(curr_coef)
+                print("perturb?", var_idx, test_res)
+                test_hist.update(
+                        test_res=test_res,
+                        curr_mdl=self.modeler)
+                if test_res == 1:
+                    self.set_model(self.modeler, curr_coef)
+                    break
 
                 # If we found a good direction, keep walking in that direction
-                ctr = 1
+                ctr = 2
                 while test_res == 1:
                     if test_hist.curr_time >= maxfev:
                         break
                     curr_coef = np.concatenate([self.modeler.intercept_, self.modeler.coef_.flatten()])
-                    curr_coef[var_idx] += update_dir * self.update_incr * ctr
+                    curr_coef[var_idx] += self.update_dir * self.update_incr * ctr
                     test_res = get_test_perf(curr_coef)
                     print("perturb cont", var_idx, test_res)
                     test_hist.update(
