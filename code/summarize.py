@@ -41,16 +41,10 @@ def parse_args():
         help="value to plot")
     parser.add_argument(
         '--results',
-        type=str,
-        default="_output/calib_scores.csv")
+        type=str)
     parser.add_argument(
         '--out-csv',
-        type=str,
-        default="_output/hyperparam_res.csv")
-    parser.add_argument(
-        '--out-fig',
-        type=str,
-        default=None)
+        type=str)
     args = parser.parse_args()
     args.measure_filter = args.measure_filter.split(",")
     args.pivot_rows = args.pivot_rows.split(",")
@@ -81,27 +75,10 @@ def main():
     all_res = pd.concat([all_res_mean, all_res_std]) #.sort_values(["measure", "zagg", "mdl"])
     mask = all_res.measure.isin(args.measure_filter)
     out_df = all_res[mask].pivot(args.pivot_rows, args.pivot_cols + ["zagg"], ["value"])
-
-    # Format so that we get mean (standard error) in each cell
-    #for col1 in out_df.columns.get_level_values(1).unique():
-    #    for col2 in out_df.columns.get_level_values(2).unique():
-    #        slice_df12 = out_df.iloc[:, (out_df.columns.get_level_values(1)==col1) & (out_df.columns.get_level_values(2)==col2)]
-    #        col_select = ((out_df.columns.get_level_values(1)==col1) & (out_df.columns.get_level_values(2)==col2) & (out_df.columns.get_level_values(3)=="mean"))
-    #        col_select = np.where(col_select)[0]
-    #        out_df.iloc[:, col_select] = slice_df12.iloc[:,slice_df12.columns.get_level_values(3) == 'mean'].iloc[:,0].map('{:,.3f}'.format) + " (" + slice_df12.iloc[:,slice_df12.columns.get_level_values(3) == 'se'].iloc[:,0].map('{:,.3f}'.format) + ")"
-    #out_df = out_df.iloc[:,out_df.columns.get_level_values(3)=="mean"]
     print(out_df)
 
     with open(args.out_csv, "w") as f:
         f.writelines(out_df.to_csv(index=True, float_format="%.3f"))
-    #all_res.to_csv(args.out_csv, index=False)
-    #print(all_res)
-
-    if args.out_fig:
-        all_res_pivot = all_res.pivot(args.id_cols[0], args.id_cols[1], args.value_col)
-        print(all_res_pivot)
-        ax = sns.heatmap(all_res_pivot, cmap="YlGnBu")
-        plt.savefig(args.out_fig)
 
 if __name__ == "__main__":
     main()
