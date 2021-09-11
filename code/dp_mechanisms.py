@@ -88,7 +88,10 @@ class BonferroniThresholdDP(BinaryThresholdDP):
         test_nlls_prev = get_losses(test_y, prev_pred_y)
         loss_diffs = test_nlls_new - test_nlls_prev
         t_stat_se = np.sqrt(np.var(loss_diffs)/loss_diffs.size)
+        t_thres = norm.ppf(self.alpha/self.correction_factor)
+        t_statistic = np.mean(loss_diffs)/t_stat_se
         upper_ci = np.mean(loss_diffs) + t_stat_se * norm.ppf(1 - self.alpha/self.correction_factor)
+        print("BONF t statistic", t_statistic, t_thres)
         print("BONF upper ci", upper_ci)
         return int(upper_ci < 0)
 
@@ -379,47 +382,50 @@ class GraphicalParallelDP(GraphicalFFSDP):
         print("corr test resl", test_stat, t_thres)
         return test_result
 
-    def _get_test_compare_ffs(self, test_y, pred_y, baseline_pred_y, predef_pred_y):
+    def _get_test_compare_ffs(self, test_y, pred_y, prev_pred_y, predef_pred_y):
         """
         NOTICE that the std err used here is not the usual one!!!
 
         @return test perf where 1 means approve and 0 means not approved,
         """
-        test_nlls_new = get_losses(test_y, pred_y)
-        test_nlls_old = get_losses(test_y, baseline_pred_y)
-        predef_pred_test_nlls = get_losses(test_y, predef_pred_y)
-        std_err = np.sqrt(np.var(predef_pred_test_nlls - test_nlls_old)/test_nlls_old.size)
-        test_nll_diffs = test_nlls_new - test_nlls_old
-        self.parallel_tree.observe_losses(test_nll_diffs)
+        loss_new = get_losses(test_y, pred_y)
+        loss_prev = get_losses(test_y, prev_pred_y)
+        predef_loss = get_losses(test_y, predef_pred_y)
+        # This is a special std err calc for predef model refs
+        std_err = np.sqrt(np.var(predef_loss - loss_prev)/loss_prev.size)
+        loss_diffs = loss_new - loss_prev
+        self.parallel_tree.observe_losses(loss_diffs)
 
         # Need to traverse subfam parent nodes to decide local level
         prior_test_diffs = self._get_prior_losses(self.last_ffs_root, self.parallel_tree)
         prior_thres = self._get_prior_thres(self.last_ffs_root, self.parallel_tree)
-        est_corr = np.corrcoef(np.array(prior_test_diffs + [test_nll_diffs])) if len(prior_test_diffs) else np.array([[1]])
+        est_corr = np.corrcoef(np.array(prior_test_diffs + [loss_diffs])) if len(prior_test_diffs) else np.array([[1]])
         t_thres = self._solve_t_statistic_thres(est_corr, prior_thres, self.parallel_tree.local_alpha)
         self.parallel_tree.set_test_thres(t_thres)
-        t_statistic = (np.mean(test_nll_diffs))/std_err
+        t_statistic = (np.mean(loss_diffs))/std_err
         test_result = int(t_statistic < t_thres)
-        print("t_statistics", t_statistic, t_thres)
+        print("COMPARE t_statistics", t_statistic, t_thres)
         return test_result
 
-    def _get_test_compare_corr(self, test_y, pred_y, baseline_pred_y, predef_pred_y):
+    def _get_test_compare_corr(self, test_y, pred_y, prev_pred_y, predef_pred_y):
         """
         NOTICE that the std err used here is not the usual one!!!
 
         @return test perf where 1 means approve and 0 means not approved,
         """
-        test_nlls_new = get_losses(test_y, pred_y)
-        test_nlls_old = get_losses(test_y, baseline_pred_y)
-        predef_pred_test_nlls = get_losses(test_y, predef_pred_y)
-        std_err = np.sqrt(np.var(predef_pred_test_nlls - test_nlls_old)/test_nlls_old.size)
-        test_nll_diffs = test_nlls_new - test_nlls_old
-        self.test_tree.observe_losses(test_nll_diffs)
+        loss_new = get_losses(test_y, pred_y)
+        loss_prev = get_losses(test_y, prev_pred_y)
+        predef_pred_loss = get_losses(test_y, predef_pred_y)
+        loss_diffs = loss_new - loss_prev
+        # This is a special std err calc for predef model refs
+        std_err = np.sqrt(np.var(predef_pred_loss - loss_prev)/loss_prev.size)
+        self.test_tree.observe_losses(loss_diffs)
 
-        test_stat = (np.mean(test_nll_diffs))/std_err
+        test_stat = (np.mean(loss_diffs))/std_err
         t_thres = self._solve_t_statistic_thres_corr(self.parallel_tree.test_thres, self.test_tree.local_alpha)
         self.test_tree.set_test_thres(t_thres)
         test_result = int(test_stat < t_thres)
+        print("ADAPT COMPARE", test_stat, t_thres)
         return test_result
 
     def _get_fwer(self, q, uniq_alpha_weights, weight_cts, desired_fwer, debug=False):

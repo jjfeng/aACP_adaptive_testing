@@ -167,20 +167,15 @@ class CtsAdversaryModeler(LockedModeler):
 class BinaryAdversaryModeler(LockedModeler):
     update_dirs = [1]
 
-    def __init__(self, dat: Dataset, preset_coef:float = 0, min_var_idx: int = 1, update_incr: float = 0.02, predef_perturb: float = 0.1):
+    def __init__(self, dat: Dataset, preset_coef:float = 0, min_var_idx: int = 1, update_incr: float = 0.02):
         """
         @param min_var_idx: nelder mead only tunes coefficients with idx at least min_var_idx
         """
         self.modeler = LogisticRegression(penalty="none", solver="lbfgs")
         self.dat = dat
         self.update_incr = update_incr
-        self.predef_perturb = predef_perturb
         self.min_var_idx = min_var_idx
         self.preset_coef = preset_coef
-        self.modeler.fit(self.dat.x, self.dat.y.flatten())
-        self.modeler.intercept_[:] = 0
-        self.modeler.coef_[0,:self.min_var_idx] = preset_coef
-        self.modeler.coef_[0,self.min_var_idx:] = 0
 
     def do_minimize(self, test_x, test_y, dp_engine, dat_stream=None, maxfev=10):
         """
@@ -191,25 +186,25 @@ class BinaryAdversaryModeler(LockedModeler):
         self.modeler.intercept_[:] = 0
         self.modeler.coef_[0,:self.min_var_idx] = self.preset_coef
         self.modeler.coef_[0,self.min_var_idx:] = 0
+        orig_coefs = self.modeler.coef_[:]
         prev_pred_y = self.modeler.predict_proba(test_x)[:,1].reshape((-1,1))
 
         # Also have some predefined perturber for reference
         # just so we can use the parallel procedure
         self.predef_modeler = sklearn.base.clone(self.modeler)
         self.predef_modeler.fit(self.dat.x, self.dat.y.flatten())
-        self.predef_modeler.intercept_[:] += np.random.rand() * self.predef_perturb
-        self.predef_modeler.coef_[0,:] += np.random.rand(self.predef_modeler.coef_.size) * self.predef_perturb
+        self.predef_modeler.intercept_[:] = 0
+        self.predef_modeler.coef_[0,:self.min_var_idx] = self.preset_coef
+        self.predef_modeler.coef_[0,self.min_var_idx:] = 0
 
-        def get_test_perf(params):
+        def get_test_perf(params, curr_time):
             lr = sklearn.base.clone(self.modeler)
             self.set_model(lr, params)
             pred_y = lr.predict_proba(test_x)[:,1].reshape((-1,1))
-            #prev_pred_y = self.modeler.predict_proba(test_x)[:,1].reshape((-1,1))
-            print(lr.coef_)
-            print(self.modeler.coef_)
 
-            self.predef_modeler.intercept_[:] += np.random.rand() * self.predef_perturb
-            self.predef_modeler.coef_[0,:] += np.random.rand(self.predef_modeler.coef_.size) * self.predef_perturb
+            self.predef_modeler.coef_[0,:] = orig_coefs
+            self.predef_modeler.coef_[0,curr_time - 1 + self.min_var_idx] += self.update_dirs[0] * self.update_incr
+            print("PREFER", self.predef_modeler.coef_)
             predef_pred_y = self.predef_modeler.predict_proba(test_x)[:,1].reshape((-1,1))
 
             mtp_answer = dp_engine.get_test_compare(test_y, pred_y, prev_pred_y, predef_pred_y=predef_pred_y)
@@ -227,7 +222,7 @@ class BinaryAdversaryModeler(LockedModeler):
                     curr_coef = np.concatenate([self.modeler.intercept_, self.modeler.coef_.flatten()])
                     curr_coef[var_idx] += update_dir * self.update_incr
                     print("curr", curr_coef)
-                    test_res = get_test_perf(curr_coef)
+                    test_res = get_test_perf(curr_coef, test_hist.curr_time)
                     print("perturb?", test_hist.curr_time, var_idx, test_res)
                     test_hist.update(
                             test_res=test_res,
@@ -242,7 +237,7 @@ class BinaryAdversaryModeler(LockedModeler):
                         break
                     curr_coef = np.concatenate([self.modeler.intercept_, self.modeler.coef_.flatten()])
                     curr_coef[var_idx] += update_dir * self.update_incr * ctr
-                    test_res = get_test_perf(curr_coef)
+                    test_res = get_test_perf(curr_coef, test_hist.curr_time)
                     print("perturb cont", var_idx, test_res)
                     test_hist.update(
                             test_res=test_res,
