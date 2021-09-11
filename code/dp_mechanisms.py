@@ -80,7 +80,7 @@ class BonferroniThresholdDP(BinaryThresholdDP):
         print("BONF upper ci", upper_ci)
         return int(t_statistic < t_thres)
 
-    def get_test_compare(self, test_y, pred_y, prev_pred_y):
+    def get_test_compare(self, test_y, pred_y, prev_pred_y, predef_pred_y=None):
         """
         @return test perf where 1 means approve and 0 means not approved
         """
