@@ -17,11 +17,6 @@ from dp_mechanisms import *
 def parse_args():
     parser = argparse.ArgumentParser(description='create dp mechanism')
     parser.add_argument(
-        '--seed',
-        type=int,
-        default=0,
-        help='seed')
-    parser.add_argument(
         '--dp-mech',
         type=str,
         default="no_dp")
@@ -54,19 +49,11 @@ def parse_args():
         '--out-file',
         type=str,
         default="_output/dp_mech.pkl")
-    parser.add_argument(
-        '--log-file',
-        type=str,
-        default="_output/log.txt")
     args = parser.parse_args()
     return args
 
 def main():
     args = parse_args()
-    logging.basicConfig(format="%(message)s", filename=args.log_file, level=logging.INFO)
-    # parameters
-    np.random.seed(args.seed)
-    logging.info(args)
 
     # Create DP mech
     if args.dp_mech == "no_dp":

@@ -99,8 +99,6 @@ nest.add(
 def create_dp(env, outdir, c):
     cmd = [
         'python create_dp_mechanism.py',
-        '--seed',
-	c['seed'],
         '--parallel-ratio 0.8' if "graphical_parallel" == c['dp_mech'] else '',
         '--loss-to-diff-ratio 100' if "graphical_parallel" == c['dp_mech'] else '',
         '--success-weight 0.5' if "graphical" in c['dp_mech'] else '',
