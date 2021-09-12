@@ -6,11 +6,20 @@ import pandas as pd
 
 from constants import SIM_SETTINGS
 
+
 def make_safe_prob(p, eps=1e-10):
-    return np.maximum(eps, np.minimum(1-eps, p))
+    return np.maximum(eps, np.minimum(1 - eps, p))
+
 
 class FullDataset:
-    def __init__(self, init_train_dat, train_dat_stream, reuse_test_dat, test_dat, timestamps=None):
+    def __init__(
+        self,
+        init_train_dat,
+        train_dat_stream,
+        reuse_test_dat,
+        test_dat,
+        timestamps=None,
+    ):
         self.init_train_dat = init_train_dat
         self.train_dat_stream = train_dat_stream
         self.reuse_test_dat = reuse_test_dat
@@ -24,12 +33,13 @@ class FullDataset:
             return t_idx
 
     def get_accum_dat(self, t_idx: int):
-        x = self.reuse_test_dat.x[:t_idx + 1]
-        y = self.reuse_test_dat.y[:t_idx + 1]
+        x = self.reuse_test_dat.x[: t_idx + 1]
+        y = self.reuse_test_dat.y[: t_idx + 1]
         return x, y
 
+
 class Dataset:
-    def __init__(self, x, y, mu: np.ndarray =None, weight: np.ndarray=None):
+    def __init__(self, x, y, mu: np.ndarray = None, weight: np.ndarray = None):
         self.x = x
         self.y = y
         self.mu = mu
@@ -41,18 +51,20 @@ class Dataset:
 
     def subset_idxs(self, selected_idxs):
         return Dataset(
-                x=self.x[selected_idxs,:],
-                y=self.y[selected_idxs,:],
-                mu=self.mu[selected_idxs,:] if self.mu is not None else None,
-                weight=self.weight[selected_idxs,:] if self.weight is not None else None)
+            x=self.x[selected_idxs, :],
+            y=self.y[selected_idxs, :],
+            mu=self.mu[selected_idxs, :] if self.mu is not None else None,
+            weight=self.weight[selected_idxs, :] if self.weight is not None else None,
+        )
 
     def subset(self, n, start_n=0):
         assert start_n >= 0
         return Dataset(
-                x=self.x[start_n:n,:],
-                y=self.y[start_n:n,:],
-                mu=self.mu[start_n:n,:] if self.mu is not None else None,
-                weight=self.weight[start_n:n,:] if self.weight is not None else None)
+            x=self.x[start_n:n, :],
+            y=self.y[start_n:n, :],
+            mu=self.mu[start_n:n, :] if self.mu is not None else None,
+            weight=self.weight[start_n:n, :] if self.weight is not None else None,
+        )
 
     @staticmethod
     def merge(datasets, dataset_weights=None):
@@ -71,10 +83,19 @@ class Dataset:
         else:
             has_weight = False
         return Dataset(
-                x=np.vstack([dat.x for dat in datasets]),
-                y=np.vstack([dat.y for dat in datasets]),
-                mu=np.vstack([dat.mu for dat in datasets]) if has_mu else None,
-                weight=np.vstack([dat.weight * dat_weight for dat, dat_weight in zip(datasets, dataset_weights)]) if has_weight else None)
+            x=np.vstack([dat.x for dat in datasets]),
+            y=np.vstack([dat.y for dat in datasets]),
+            mu=np.vstack([dat.mu for dat in datasets]) if has_mu else None,
+            weight=np.vstack(
+                [
+                    dat.weight * dat_weight
+                    for dat, dat_weight in zip(datasets, dataset_weights)
+                ]
+            )
+            if has_weight
+            else None,
+        )
+
 
 class DataGenerator:
     def __init__(self, init_beta: np.ndarray, mean_x: np.ndarray):
@@ -83,13 +104,28 @@ class DataGenerator:
         self.p = init_beta.size
         self.mean_x = mean_x
 
-    def generate_data(self, init_train_n, train_stream_n, train_iters, init_reuse_test_n, test_n: int, seed: int=0, train_batch_incr_factor: int = 1):
+    def generate_data(
+        self,
+        init_train_n,
+        train_stream_n,
+        train_iters,
+        init_reuse_test_n,
+        test_n: int,
+        seed: int = 0,
+        train_batch_incr_factor: int = 1,
+    ):
         test_dat = self.make_data(test_n, self.init_beta)
         reuse_test_dat = self.make_data(init_reuse_test_n, self.init_beta)
 
         np.random.seed(seed)
         init_train_dat = self.make_data(init_train_n, self.init_beta)
-        train_dats = [self.make_data(int(train_stream_n * np.power(train_batch_incr_factor, i)), self.init_beta) for i in range(train_iters)]
+        train_dats = [
+            self.make_data(
+                int(train_stream_n * np.power(train_batch_incr_factor, i)),
+                self.init_beta,
+            )
+            for i in range(train_iters)
+        ]
 
         full_dat = FullDataset(init_train_dat, train_dats, reuse_test_dat, test_dat)
 
@@ -99,8 +135,7 @@ class DataGenerator:
         p = beta.size
         x = np.random.normal(size=(n, p), loc=self.mean_x)
 
-        mu = 1/(1 + np.exp(-(np.matmul(x, beta))))
+        mu = 1 / (1 + np.exp(-(np.matmul(x, beta))))
         y = np.random.binomial(n=1, p=mu, size=(n, 1))
 
         return Dataset(x, y, mu)
-

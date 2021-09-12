@@ -11,39 +11,21 @@ import pandas as pd
 import seaborn as sns
 from matplotlib import pyplot as plt
 
+
 def parse_args():
-    parser = argparse.ArgumentParser(description='Summarize csvs by taking mean')
+    parser = argparse.ArgumentParser(description="Summarize csvs by taking mean")
+    parser.add_argument("--seed", type=int, default=0, help="seed")
+    parser.add_argument("--pivot-cols", type=str, help="pivot cols")
+    parser.add_argument("--pivot-rows", type=str, help="pivot rows")
+    parser.add_argument("--id-filters", type=str, help="which filters, comma separated")
     parser.add_argument(
-        '--seed',
-        type=int,
-        default=0,
-        help='seed')
-    parser.add_argument(
-        '--pivot-cols',
+        "--id-cols",
         type=str,
-        help="pivot cols")
-    parser.add_argument(
-        '--pivot-rows',
-        type=str,
-        help="pivot rows")
-    parser.add_argument(
-        '--id-filters',
-        type=str,
-        help="which filters, comma separated")
-    parser.add_argument(
-        '--id-cols',
-        type=str,
-        help="columns to use as ids, remaining will be treated as values to summarize")
-    parser.add_argument(
-        '--value-col',
-        type=str,
-        help="value to plot")
-    parser.add_argument(
-        '--results',
-        type=str)
-    parser.add_argument(
-        '--out-csv',
-        type=str)
+        help="columns to use as ids, remaining will be treated as values to summarize",
+    )
+    parser.add_argument("--value-col", type=str, help="value to plot")
+    parser.add_argument("--results", type=str)
+    parser.add_argument("--out-csv", type=str)
     args = parser.parse_args()
     args.id_filters = args.id_filters.split(",") if args.id_filters else []
     args.pivot_rows = args.pivot_rows.split(",")
@@ -51,6 +33,7 @@ def parse_args():
     args.results = args.results.split(",")
     args.id_cols = args.id_cols.split(",")
     return args
+
 
 def main():
     args = parse_args()
@@ -77,7 +60,9 @@ def main():
     print(all_res)
 
     all_res_mean = all_res.groupby(args.id_cols).mean().reset_index()
-    all_res_std = (all_res.groupby(args.id_cols).std()/np.sqrt(num_replicates)).reset_index()
+    all_res_std = (
+        all_res.groupby(args.id_cols).std() / np.sqrt(num_replicates)
+    ).reset_index()
     all_res_std["zagg"] = "se"
     all_res_mean["zagg"] = "mean"
     all_res = pd.concat([all_res_mean, all_res_std])
@@ -87,6 +72,6 @@ def main():
     with open(args.out_csv, "w") as f:
         f.writelines(out_df.to_csv(index=True, float_format="%.3f"))
 
+
 if __name__ == "__main__":
     main()
-

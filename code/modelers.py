@@ -9,6 +9,7 @@ from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 
 from dataset import Dataset
 
+
 class TestHistory:
     def __init__(self, init_model):
         self.approval_times = [0]
@@ -26,20 +27,22 @@ class TestHistory:
     def tot_approves(self):
         return len(self.approval_times)
 
+
 class LockedModeler:
     """
     Logistic reg only right now
     """
+
     def __init__(self):
         self.modeler = LogisticRegression(penalty="none", solver="lbfgs")
 
     def set_model(self, mdl, params):
-        mdl.classes_ = np.array([0,1])
-        mdl.coef_ = params[1:].reshape((1,-1))
+        mdl.classes_ = np.array([0, 1])
+        mdl.coef_ = params[1:].reshape((1, -1))
         mdl.intercept_ = np.array([params[0]])
 
     def predict_prob(self, x):
-        return self.modeler.predict_proba(x)[:,1].reshape((-1,1))
+        return self.modeler.predict_proba(x)[:, 1].reshape((-1, 1))
 
 
 class NelderMeadModeler(LockedModeler):
@@ -55,34 +58,54 @@ class NelderMeadModeler(LockedModeler):
         @param dat_stream: ignores this
         """
         self.modeler.fit(dat.x, dat.y.flatten())
-        self.modeler.coef_[0,self.min_var_idx:] = 0
+        self.modeler.coef_[0, self.min_var_idx :] = 0
 
         # Just for initialization
         def get_test_perf(params):
             lr = sklearn.base.clone(self.modeler)
-            #print(params)
-            self.set_model(lr, np.concatenate([
-                self.modeler.intercept_,
-                self.modeler.coef_.flatten()[:self.min_var_idx],
-                params]))
-            pred_y = lr.predict_proba(test_x)[:,1].reshape((-1,1))
+            # print(params)
+            self.set_model(
+                lr,
+                np.concatenate(
+                    [
+                        self.modeler.intercept_,
+                        self.modeler.coef_.flatten()[: self.min_var_idx],
+                        params,
+                    ]
+                ),
+            )
+            pred_y = lr.predict_proba(test_x)[:, 1].reshape((-1, 1))
             mtp_answer = dp_engine.get_test_eval(test_y, pred_y)
             return mtp_answer
 
         test_hist = TestHistory(self.modeler)
-        init_coef = np.concatenate([self.modeler.coef_.flatten()[self.min_var_idx:]])
+        init_coef = np.concatenate([self.modeler.coef_.flatten()[self.min_var_idx :]])
         # TODO: add callback to append to history
-        res = scipy.optimize.minimize(get_test_perf, x0=init_coef, method="Nelder-Mead", options={"maxfev": maxfev, "adaptive": True})
+        res = scipy.optimize.minimize(
+            get_test_perf,
+            x0=init_coef,
+            method="Nelder-Mead",
+            options={"maxfev": maxfev, "adaptive": True},
+        )
         print(res.x)
-        self.set_model(self.modeler, np.concatenate([
-                self.modeler.intercept_,
-                self.modeler.coef_.flatten()[:self.min_var_idx],
-                res.x]))
+        self.set_model(
+            self.modeler,
+            np.concatenate(
+                [
+                    self.modeler.intercept_,
+                    self.modeler.coef_.flatten()[: self.min_var_idx],
+                    res.x,
+                ]
+            ),
+        )
 
         return test_hist
 
+
 class CtsAdversaryModeler(LockedModeler):
-    def __init__(self, preset_coef:float = 0, min_var_idx: int = 1, update_incr: float = 0.02):
+    def __init__(
+        self, preset_coef: float = 0, min_var_idx: int = 1, update_incr: float = 0.02
+    ):
         """
         @param min_var_idx: nelder mead only tunes coefficients with idx at least min_var_idx
         """
@@ -98,36 +121,40 @@ class CtsAdversaryModeler(LockedModeler):
         # Train a good initial model
         self.modeler.fit(dat.x, dat.y.flatten())
         self.modeler.intercept_[:] = 0
-        self.modeler.coef_[0,:self.min_var_idx] = self.preset_coef
-        self.modeler.coef_[0,self.min_var_idx:] = 0
+        self.modeler.coef_[0, : self.min_var_idx] = self.preset_coef
+        self.modeler.coef_[0, self.min_var_idx :] = 0
 
         def get_test_perf(params):
             lr = sklearn.base.clone(self.modeler)
             self.set_model(lr, params)
-            pred_y = lr.predict_proba(test_x)[:,1].reshape((-1,1))
+            pred_y = lr.predict_proba(test_x)[:, 1].reshape((-1, 1))
             mtp_answer = dp_engine.get_test_eval(test_y, pred_y)
             return mtp_answer
 
         # Now search in each direction and do a greedy search
         test_hist = TestHistory(self.modeler)
-        curr_coef = np.concatenate([self.modeler.intercept_, self.modeler.coef_.flatten()])
+        curr_coef = np.concatenate(
+            [self.modeler.intercept_, self.modeler.coef_.flatten()]
+        )
         curr_perf = get_test_perf(curr_coef)
         while test_hist.curr_time < maxfev:
             # Test each variable (that's known to be irrelevant)
-            for var_idx in range(1+self.min_var_idx, 1+test_x.shape[1]):
+            for var_idx in range(1 + self.min_var_idx, 1 + test_x.shape[1]):
                 # Test each direction for the variable
                 is_success = False
-                for update_dir in [-1,1]:
+                for update_dir in [-1, 1]:
                     if test_hist.curr_time >= maxfev:
                         break
-                    curr_coef = np.concatenate([self.modeler.intercept_, self.modeler.coef_.flatten()])
+                    curr_coef = np.concatenate(
+                        [self.modeler.intercept_, self.modeler.coef_.flatten()]
+                    )
                     curr_coef[var_idx] += update_dir * self.update_incr
                     test_res = get_test_perf(curr_coef)
                     print("preturb?", var_idx, curr_perf, test_res)
                     test_hist.update(
-                            test_res=test_res < curr_perf,
-                            curr_mdl=self.modeler)
-                    #print(test_res, curr_perf, var_idx, update_dir)
+                        test_res=test_res < curr_perf, curr_mdl=self.modeler
+                    )
+                    # print(test_res, curr_perf, var_idx, update_dir)
                     if test_res < curr_perf:
                         is_success = True
                         self.set_model(self.modeler, curr_coef)
@@ -140,13 +167,15 @@ class CtsAdversaryModeler(LockedModeler):
                     print("success!!!")
                     if test_hist.curr_time >= maxfev:
                         break
-                    curr_coef = np.concatenate([self.modeler.intercept_, self.modeler.coef_.flatten()])
+                    curr_coef = np.concatenate(
+                        [self.modeler.intercept_, self.modeler.coef_.flatten()]
+                    )
                     curr_coef[var_idx] += update_dir * self.update_incr * ctr
                     test_res = get_test_perf(curr_coef)
                     print("preturb cont?", var_idx, curr_perf, test_res)
                     test_hist.update(
-                            test_res=test_res < curr_perf,
-                            curr_mdl=self.modeler)
+                        test_res=test_res < curr_perf, curr_mdl=self.modeler
+                    )
                     if test_res < curr_perf:
                         self.set_model(self.modeler, curr_coef)
                         curr_perf = test_res
@@ -158,10 +187,13 @@ class CtsAdversaryModeler(LockedModeler):
 
         return test_hist
 
+
 class BinaryAdversaryModeler(LockedModeler):
     update_dirs = [1]
 
-    def __init__(self, preset_coef:float = 0, min_var_idx: int = 1, update_incr: float = 0.02):
+    def __init__(
+        self, preset_coef: float = 0, min_var_idx: int = 1, update_incr: float = 0.02
+    ):
         """
         @param min_var_idx: nelder mead only tunes coefficients with idx at least min_var_idx
         """
@@ -177,30 +209,36 @@ class BinaryAdversaryModeler(LockedModeler):
         # Train a good initial model
         self.modeler.fit(dat.x, dat.y.flatten())
         self.modeler.intercept_[:] = 0
-        self.modeler.coef_[0,:self.min_var_idx] = self.preset_coef
-        self.modeler.coef_[0,self.min_var_idx:] = 0
+        self.modeler.coef_[0, : self.min_var_idx] = self.preset_coef
+        self.modeler.coef_[0, self.min_var_idx :] = 0
         orig_coefs = self.modeler.coef_[:]
-        prev_pred_y = self.modeler.predict_proba(test_x)[:,1].reshape((-1,1))
+        prev_pred_y = self.modeler.predict_proba(test_x)[:, 1].reshape((-1, 1))
 
         # Also have some predefined perturber for reference
         # just so we can use the parallel procedure
         self.predef_modeler = sklearn.base.clone(self.modeler)
         self.predef_modeler.fit(dat.x, dat.y.flatten())
         self.predef_modeler.intercept_[:] = 0
-        self.predef_modeler.coef_[0,:self.min_var_idx] = self.preset_coef
-        self.predef_modeler.coef_[0,self.min_var_idx:] = 0
+        self.predef_modeler.coef_[0, : self.min_var_idx] = self.preset_coef
+        self.predef_modeler.coef_[0, self.min_var_idx :] = 0
 
         def get_test_perf(params, curr_time):
             lr = sklearn.base.clone(self.modeler)
             self.set_model(lr, params)
-            pred_y = lr.predict_proba(test_x)[:,1].reshape((-1,1))
+            pred_y = lr.predict_proba(test_x)[:, 1].reshape((-1, 1))
 
-            self.predef_modeler.coef_[0,:] = orig_coefs
-            self.predef_modeler.coef_[0,curr_time - 1 + self.min_var_idx] += self.update_dirs[0] * self.update_incr
+            self.predef_modeler.coef_[0, :] = orig_coefs
+            self.predef_modeler.coef_[0, curr_time - 1 + self.min_var_idx] += (
+                self.update_dirs[0] * self.update_incr
+            )
             print("PREFER", self.predef_modeler.coef_)
-            predef_pred_y = self.predef_modeler.predict_proba(test_x)[:,1].reshape((-1,1))
+            predef_pred_y = self.predef_modeler.predict_proba(test_x)[:, 1].reshape(
+                (-1, 1)
+            )
 
-            mtp_answer = dp_engine.get_test_compare(test_y, pred_y, prev_pred_y, predef_pred_y=predef_pred_y)
+            mtp_answer = dp_engine.get_test_compare(
+                test_y, pred_y, prev_pred_y, predef_pred_y=predef_pred_y
+            )
             return mtp_answer
 
         # Now search in each direction and do a greedy search
@@ -212,14 +250,14 @@ class BinaryAdversaryModeler(LockedModeler):
                 for update_dir in self.update_dirs:
                     if test_hist.curr_time >= maxfev:
                         break
-                    curr_coef = np.concatenate([self.modeler.intercept_, self.modeler.coef_.flatten()])
+                    curr_coef = np.concatenate(
+                        [self.modeler.intercept_, self.modeler.coef_.flatten()]
+                    )
                     curr_coef[var_idx] += update_dir * self.update_incr
                     print("curr", curr_coef)
                     test_res = get_test_perf(curr_coef, test_hist.curr_time)
                     print("perturb?", test_hist.curr_time, var_idx, test_res)
-                    test_hist.update(
-                            test_res=test_res,
-                            curr_mdl=self.modeler)
+                    test_hist.update(test_res=test_res, curr_mdl=self.modeler)
                     if test_res == 1:
                         self.set_model(self.modeler, curr_coef)
 
@@ -228,21 +266,22 @@ class BinaryAdversaryModeler(LockedModeler):
                 while test_res == 1:
                     if test_hist.curr_time >= maxfev:
                         break
-                    curr_coef = np.concatenate([self.modeler.intercept_, self.modeler.coef_.flatten()])
+                    curr_coef = np.concatenate(
+                        [self.modeler.intercept_, self.modeler.coef_.flatten()]
+                    )
                     curr_coef[var_idx] += update_dir * self.update_incr * ctr
                     test_res = get_test_perf(curr_coef, test_hist.curr_time)
                     print("perturb cont", var_idx, test_res)
-                    test_hist.update(
-                            test_res=test_res,
-                            curr_mdl=self.modeler)
+                    test_hist.update(test_res=test_res, curr_mdl=self.modeler)
                     if test_res == 1:
                         self.set_model(self.modeler, curr_coef)
                         ctr *= 2
         print("coefs", self.modeler.coef_)
         return test_hist
 
+
 class AdversarialModeler(LockedModeler):
-    def __init__(self, preset_coef: float=0, min_var_idx: int = 1):
+    def __init__(self, preset_coef: float = 0, min_var_idx: int = 1):
         self.cts_modeler = CtsAdversaryModeler(preset_coef, min_var_idx)
         self.binary_modeler = BinaryAdversaryModeler(preset_coef, min_var_idx)
         self.modeler = self.cts_modeler.modeler
@@ -254,18 +293,24 @@ class AdversarialModeler(LockedModeler):
         @return perf_value
         """
         if dp_engine.name == "no_dp":
-            test_hist = self.cts_modeler.do_minimize(dat, test_x, test_y, dp_engine, dat_stream, maxfev)
+            test_hist = self.cts_modeler.do_minimize(
+                dat, test_x, test_y, dp_engine, dat_stream, maxfev
+            )
             self.modeler = self.cts_modeler.modeler
         else:
-            test_hist = self.binary_modeler.do_minimize(dat, test_x, test_y, dp_engine, dat_stream, maxfev)
+            test_hist = self.binary_modeler.do_minimize(
+                dat, test_x, test_y, dp_engine, dat_stream, maxfev
+            )
             self.modeler = self.binary_modeler.modeler
         return test_hist
+
 
 class OnlineLearnerFixedModeler(LockedModeler):
     """
     Just do online learning on a separate dataset
     only does logistic reg
     """
+
     def do_minimize(self, dat, test_x, test_y, dp_engine, dat_stream, maxfev=10):
         """
         @param dat_stream: a list of datasets for further training the model
@@ -280,15 +325,14 @@ class OnlineLearnerFixedModeler(LockedModeler):
             lr = sklearn.base.clone(self.modeler)
             lr.fit(merged_dat.x, merged_dat.y.flatten())
 
-            pred_y = lr.predict_proba(test_x)[:,1].reshape((-1,1))
+            pred_y = lr.predict_proba(test_x)[:, 1].reshape((-1, 1))
             test_res = dp_engine.get_test_eval(test_y, pred_y, predef_pred_y=pred_y)
             if test_res == 1:
                 # replace current modeler only if successful
                 self.modeler = lr
-            test_hist.update(
-                    test_res=test_res,
-                    curr_mdl=self.modeler)
+            test_hist.update(test_res=test_res, curr_mdl=self.modeler)
         return test_hist
+
 
 class OnlineAdaptiveLearnerModeler(OnlineLearnerFixedModeler):
     """
@@ -299,6 +343,7 @@ class OnlineAdaptiveLearnerModeler(OnlineLearnerFixedModeler):
 
     only does logistic reg
     """
+
     def do_minimize(self, dat, test_x, test_y, dp_engine, dat_stream, maxfev=10):
         """
         @param dat_stream: a list of datasets for further training the model
@@ -312,20 +357,24 @@ class OnlineAdaptiveLearnerModeler(OnlineLearnerFixedModeler):
         curr_idx = 0
         test_hist = TestHistory(self.modeler)
         for i in range(maxfev):
-            batches_read = dat_stream[curr_idx:curr_idx + num_read_batches]
-            print("BATCHES READ", len(batches_read), curr_idx, curr_idx + num_read_batches)
+            batches_read = dat_stream[curr_idx : curr_idx + num_read_batches]
+            print(
+                "BATCHES READ", len(batches_read), curr_idx, curr_idx + num_read_batches
+            )
             adapt_dat = Dataset.merge([adapt_dat] + batches_read)
             curr_idx += num_read_batches
             adapt_lr = sklearn.base.clone(self.modeler)
             adapt_lr.fit(adapt_dat.x, adapt_dat.y.flatten())
-            adapt_pred_y = adapt_lr.predict_proba(test_x)[:,1].reshape((-1,1))
+            adapt_pred_y = adapt_lr.predict_proba(test_x)[:, 1].reshape((-1, 1))
 
-            predef_dat = Dataset.merge([predef_dat] + dat_stream[i:i + 1])
+            predef_dat = Dataset.merge([predef_dat] + dat_stream[i : i + 1])
             predef_lr = sklearn.base.clone(self.modeler)
             predef_lr.fit(predef_dat.x, predef_dat.y.flatten())
-            predef_pred_y = predef_lr.predict_proba(test_x)[:,1].reshape((-1,1))
+            predef_pred_y = predef_lr.predict_proba(test_x)[:, 1].reshape((-1, 1))
 
-            test_res = dp_engine.get_test_eval(test_y, adapt_pred_y, predef_pred_y=predef_pred_y)
+            test_res = dp_engine.get_test_eval(
+                test_y, adapt_pred_y, predef_pred_y=predef_pred_y
+            )
             if test_res == 1:
                 # replace current modeler only if successful
                 self.modeler = adapt_lr
@@ -333,7 +382,5 @@ class OnlineAdaptiveLearnerModeler(OnlineLearnerFixedModeler):
                 # read more batches if failed
                 print("ADAPT", num_read_batches)
                 num_read_batches *= 2
-            test_hist.update(
-                    test_res=test_res,
-                    curr_mdl=self.modeler)
+            test_hist.update(test_res=test_res, curr_mdl=self.modeler)
         return test_hist
