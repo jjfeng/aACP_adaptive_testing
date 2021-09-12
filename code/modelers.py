@@ -22,6 +22,10 @@ class TestHistory:
 
         self.curr_time += 1
 
+    @property
+    def tot_approves(self):
+        return len(self.approval_times)
+
 class LockedModeler:
     """
     Logistic reg only right now

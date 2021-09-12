@@ -14,6 +14,7 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 RUN_STATUS = localenv['clusters']
 NUM_SEEDS = localenv['num_seeds']
 REUSE_ITERS = 10
+FWER = 0.1
 
 nest.add(
     'num_p',
@@ -25,14 +26,56 @@ nest.add(
     [1],
     label_func=lambda c: "beta_%.2f" % c)
 
-nest.add_aggregate("summary_res_combo_refit", list)
-nest.add_aggregate("summary_res_combo_boxed", list)
-nest.add_aggregate("summary_res_refit", list)
-nest.add_aggregate("summary_res_boxed", list)
+nest.add(
+    'thres',
+    [
+        #0.396,
+        #0.4,
+        0.41
+    ],
+    label_func=lambda c: "thres_%.3f" % c)
+
 nest.add(
     'reuse_test_n',
     [2000],
     label_func=lambda c: "test_%d" % c)
+
+nest.add(
+    'dp_mech',
+    [
+        #"no_dp",
+        #"binary_thres_dp",
+        #"bonferroni",
+        #"bonferroni_nonadapt",
+        #"graphical_bonf",
+        "graphical_parallel",
+        #"graphical_ffs",
+    ])
+
+@nest.add_target_with_env(localenv)
+def create_dp(env, outdir, c):
+    targets = [join(outdir, 'dp_mech.pkl')]
+    scratch_file = join("simulation_reuse", outdir, "scratch.txt")
+    cmd = [
+        'python create_dp_mechanism.py',
+        '--threshold',
+        c['thres'],
+        '--parallel-ratio 0.8' if "parallel" in c['dp_mech'] else '',
+        '--loss-to-diff-ratio 100' if "parallel" in c['dp_mech'] else '',
+        '--success-weight 0.9' if "graphical" in c['dp_mech'] else '',
+        '--alpha',
+        FWER,
+        '--dp-mech',
+        c['dp_mech'],
+	'--scratch',
+        scratch_file,
+	'--out ${TARGETS[0]}'
+    ]
+    return env.Command(
+        [
+            join(outdir, 'dp_mech.pkl')],
+        [],
+        ' '.join(map(str, cmd)))
 
 nest.add(
     'seed',
@@ -92,46 +135,6 @@ def create_modeler(env, outdir, c):
         c["generate_data"],
         ' '.join(map(str, cmd)))
 
-nest.add(
-    'thres',
-    [
-        #0.396,
-        #0.4,
-        0.41
-    ],
-    label_func=lambda c: "thres_%.3f" % c)
-
-nest.add(
-    'dp_mech',
-    [
-        #"no_dp",
-        #"binary_thres_dp",
-        #"bonferroni",
-        #"bonferroni_nonadapt",
-        #"graphical_bonf",
-        "graphical_parallel",
-        #"graphical_ffs",
-    ])
-
-@nest.add_target_with_env(localenv)
-def create_dp(env, outdir, c):
-    cmd = [
-        'python create_dp_mechanism.py',
-        '--threshold',
-        c['thres'],
-        '--parallel-ratio 0.8' if "parallel" in c['dp_mech'] else '',
-        '--loss-to-diff-ratio 100' if "parallel" in c['dp_mech'] else '',
-        '--success-weight 0.9' if "graphical" in c['dp_mech'] else '',
-        '--alpha 0.1',
-        '--dp-mech',
-        c['dp_mech'],
-	'--out ${TARGETS[0]}'
-    ]
-    return env.Command(
-        [
-            join(outdir, 'dp_mech.pkl')],
-        [],
-        ' '.join(map(str, cmd)))
 
 @nest.add_target_with_env(localenv)
 def run_experiment(env, outdir, c):

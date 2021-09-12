@@ -425,6 +425,9 @@ class GraphicalParallelDP(GraphicalFFSDP):
 
         test_stat = (np.mean(loss_diffs))/std_err
         t_thres = self._solve_t_statistic_thres_corr(self.parallel_tree.test_thres, self.test_tree.local_alpha)
+
+        print("ORIG T THRES", norm.ppf(self.alpha/np.power(2, self.num_queries)))
+
         self.test_tree.set_test_thres(t_thres)
         test_result = int(test_stat < t_thres)
         print("ADAPT COMPARE", test_stat, t_thres)
@@ -468,7 +471,28 @@ class GraphicalParallelDP(GraphicalFFSDP):
         self.parallel_tree = self.parallel_tree.success
         self.parallel_tree.local_alpha = self.parallel_tree.weight * self.alpha
 
+    def _get_loss_to_diff_compare_ratio(self, test_y, pred_y, prev_pred_y, predef_pred_y):
+        loss_new = get_losses(test_y, pred_y)
+        loss_prev = get_losses(test_y, prev_pred_y)
+        predef_pred_loss = get_losses(test_y, predef_pred_y)
+        diff_var = np.var(loss_new - predef_pred_loss)
+        predef_var = np.var(predef_pred_loss - loss_prev)
+        print("VARs", diff_var, predef_var)
+        return np.sqrt(predef_var/diff_var)
+
+    def _get_loss_to_diff_ratio(self, test_y, pred_y, predef_pred_y):
+        pred_loss = get_losses(test_y, pred_y)
+        predef_loss = get_losses(test_y, predef_pred_y)
+        loss_var = np.var(predef_loss)
+        loss_diff_var = np.var(pred_loss - predef_loss)
+        return np.sqrt(loss_var/loss_diff_var)
+
     def get_test_eval(self, test_y, pred_y, predef_pred_y):
+        ratio = self._get_loss_to_diff_ratio(test_y, pred_y, predef_pred_y)
+        print("RATIO", ratio)
+        logging.info("ratio %f", ratio)
+        assert ratio >= self.loss_to_diff_std_ratio
+
         parallel_test_result = self._get_test_eval_ffs(test_y, predef_pred_y, predef_pred_y)
         test_result = self._get_test_eval_corr(test_y, pred_y, predef_pred_y)
         self._do_tree_update(parallel_test_result, test_result)
@@ -478,6 +502,12 @@ class GraphicalParallelDP(GraphicalFFSDP):
         return test_result
 
     def get_test_compare(self, test_y, pred_y, prev_pred_y, predef_pred_y):
+        ratio = self._get_loss_to_diff_compare_ratio(test_y, pred_y, prev_pred_y, predef_pred_y)
+        print("RATIO", ratio)
+        logging.info("ratio %f", ratio)
+        self.loss_to_diff_std_ratio = min(ratio, self.loss_to_diff_std_ratio)
+        assert ratio >= self.loss_to_diff_std_ratio
+
         parallel_test_result = self._get_test_compare_ffs(test_y, predef_pred_y, prev_pred_y, predef_pred_y)
         test_result = self._get_test_compare_corr(test_y, pred_y, prev_pred_y, predef_pred_y)
         self._do_tree_update(parallel_test_result, test_result)

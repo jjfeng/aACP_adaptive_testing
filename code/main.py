@@ -33,10 +33,6 @@ def parse_args():
         type=int,
         default=1)
     parser.add_argument(
-        '--min-iter',
-        type=int,
-        default=0)
-    parser.add_argument(
         '--max-iter',
         type=int,
         default=1)
@@ -72,13 +68,16 @@ def get_nll(test_y, pred_y):
     pred_y = np.maximum(np.minimum(1 - 1e-10, pred_y.flatten()), 1e-10)
     return -np.mean(test_y * np.log(pred_y) + (1 - test_y) * np.log(1 - pred_y))
 
-def get_all_scores(test_hist, test_dat):
+def get_all_scores(test_hist, test_dat, max_iter):
+    last_approve_time = 0
     scores = []
-    for mdl, time_idx in zip(test_hist.approved_mdls, test_hist.approval_times):
+    for approve_idx, (mdl, time_idx) in enumerate(zip(test_hist.approved_mdls, test_hist.approval_times)):
         pred_y = mdl.predict_proba(test_dat.x)[:,1].reshape((-1,1))
         auc = roc_auc_score(test_dat.y, pred_y)
         nll = get_nll(test_dat.y, pred_y)
-        scores.append({"auc": auc, "nll": nll, "time": time_idx})
+        next_approve_time = test_hist.approval_times[approve_idx + 1] if test_hist.tot_approves > (approve_idx + 1) else max_iter + 1
+        for idx in range(time_idx, next_approve_time):
+            scores.append({"auc": auc, "nll": nll, "time": idx})
     scores = pd.DataFrame(scores)
     return scores
 
@@ -100,49 +99,31 @@ def main():
         modeler = pickle.load(f)
 
     # Run simulation
-    reuse_nlls = []
-    reuse_aucs = []
-    test_nlls = []
-    test_aucs = []
-    prev_approval_time = 0
-    last_approval_times = []
-    max_iters = np.concatenate([[0], np.arange(args.min_iter, args.max_iter + 1)])
-    for max_iter in max_iters:
-        print("===========RUN PROCEDURE FOR NUM STPES", max_iter)
-        curr_approval_time = 0
-        dp_mech.set_num_queries(max_iter)
-        full_hist = modeler.do_minimize(data.reuse_test_dat.x, data.reuse_test_dat.y, dp_mech, dat_stream=data.train_dat_stream, maxfev=max_iter)
-        print("APPROVAL", full_hist.approval_times)
-        curr_approval_time = full_hist.approval_times[-1]
-        logging.info("APPROVAL %s", full_hist.approval_times)
+    dp_mech.set_num_queries(args.max_iter)
+    full_hist = modeler.do_minimize(data.reuse_test_dat.x, data.reuse_test_dat.y, dp_mech, dat_stream=data.train_dat_stream, maxfev=args.max_iter)
+    print("APPROVAL", full_hist.approval_times)
 
-        reuse_res = get_all_scores(full_hist, data.reuse_test_dat)
-        test_res = get_all_scores(full_hist, data.test_dat)
-        worst_mdl_idx = np.argmax(test_res.nll)
-        test_res = test_res.iloc[worst_mdl_idx]
-        reuse_res = reuse_res.iloc[worst_mdl_idx]
-
-        test_nlls.append(test_res.nll)
-        test_aucs.append(test_res.auc)
-        reuse_aucs.append(reuse_res.auc)
-        reuse_nlls.append(reuse_res.nll)
-
-        if curr_approval_time == 0:
-            last_approval_times.append(0)
-        else:
-            last_approval_times.append(len(full_hist.approval_times) - 1)
+    reuse_res = get_all_scores(full_hist, data.reuse_test_dat, args.max_iter)
+    test_res = get_all_scores(full_hist, data.test_dat, args.max_iter)
+    test_nlls = test_res.nll
+    test_aucs = test_res.auc
+    reuse_nlls = reuse_res.nll
+    reuse_aucs = reuse_res.auc
+    num_approvals = np.array([np.sum(np.array(full_hist.approval_times) <= i) - 1 for i in range(args.max_iter + 1)])
 
     # Compile results
+    print(reuse_nlls.size)
+    max_iters = np.arange(args.max_iter + 1)
     reuse_nll_df = pd.DataFrame({"value": reuse_nlls,  "max_iter": max_iters})
     reuse_nll_df["dataset"] = "reuse_test"
     reuse_nll_df["measure"] = "nll"
     reuse_auc_df = pd.DataFrame({"value": reuse_aucs,  "max_iter": max_iters})
     reuse_auc_df["dataset"] = "reuse_test"
     reuse_auc_df["measure"] = "auc"
-    count_df = pd.DataFrame({"value": last_approval_times,  "max_iter": max_iters})
+    count_df = pd.DataFrame({"value": num_approvals,  "max_iter": max_iters})
     count_df["dataset"] = "test"
     count_df["measure"] = "num_approvals"
-    approve_df = pd.DataFrame({"value": np.array(last_approval_times) > 0,  "max_iter": max_iters})
+    approve_df = pd.DataFrame({"value": num_approvals > 0,  "max_iter": max_iters})
     approve_df["dataset"] = "test"
     approve_df["measure"] = "did_approval"
     test_nll_df = pd.DataFrame({"value": test_nlls,  "max_iter": max_iters})
