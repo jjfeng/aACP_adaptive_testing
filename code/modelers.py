@@ -377,6 +377,8 @@ class OnlineAdaptiveLearnerModeler(OnlineLearnerFixedModeler):
 
             test_res = dp_engine.get_test_compare(
                 test_y, adapt_pred_y, prev_pred_y=prev_pred_y, predef_pred_y=predef_pred_y
+            #test_res = dp_engine.get_test_eval(
+            #    test_y, adapt_pred_y, predef_pred_y=predef_pred_y
             )
             if test_res == 1:
                 # replace current modeler only if successful

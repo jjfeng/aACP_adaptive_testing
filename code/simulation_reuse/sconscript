@@ -39,7 +39,7 @@ nest.add(
 
 nest.add(
     'reuse_test_n',
-    [2000],
+    [1500],
     label_func=lambda c: "test_%d" % c)
 
 nest.add(
@@ -85,9 +85,9 @@ def create_dp(env, outdir, c):
         'python create_dp_mechanism.py',
         #'--threshold',
         #c['thres'],
-        '--parallel-ratio 0.5' if "parallel" in c['dp_mech'] else '',
+        '--parallel-ratio 0.6' if "parallel" in c['dp_mech'] else '',
         '--loss-to-diff-ratio %s' % ratio_str if "parallel" in c['dp_mech'] else '',
-        '--success-weight 0.8' if "graphical" in c['dp_mech'] else '',
+        '--success-weight 0.6' if "graphical" in c['dp_mech'] else '',
         '--alpha',
         FWER,
         '--dp-mech',
