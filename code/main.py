@@ -100,7 +100,7 @@ def main():
 
     # Run simulation
     dp_mech.set_num_queries(args.max_iter)
-    full_hist = modeler.do_minimize(data.reuse_test_dat.x, data.reuse_test_dat.y, dp_mech, dat_stream=data.train_dat_stream, maxfev=args.max_iter)
+    full_hist = modeler.do_minimize(data.init_train_dat, data.reuse_test_dat.x, data.reuse_test_dat.y, dp_mech, dat_stream=data.train_dat_stream, maxfev=args.max_iter)
     print("APPROVAL", full_hist.approval_times)
 
     reuse_res = get_all_scores(full_hist, data.reuse_test_dat, args.max_iter)

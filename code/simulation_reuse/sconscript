@@ -29,7 +29,8 @@ nest.add(
 nest.add(
     'thres',
     [
-        0.41
+        0.41,
+        #0.42
     ],
     label_func=lambda c: "thres_%.3f" % c)
 
@@ -37,6 +38,28 @@ nest.add(
     'reuse_test_n',
     [2000],
     label_func=lambda c: "test_%d" % c)
+
+nest.add(
+    'model_sim',
+    [
+        #"neldermead",
+        "online",
+        #"online_fixed",
+    ])
+
+@nest.add_target_with_env(localenv)
+def create_modeler(env, outdir, c):
+    cmd = [
+        'python create_modeler.py',
+        '--simulation',
+        c['model_sim'],
+	'--out ${TARGETS[0]}'
+    ]
+    return env.Command(
+        [
+            join(outdir, 'model.pkl')],
+        [],
+        ' '.join(map(str, cmd)))
 
 nest.add(
     'dp_mech',
@@ -59,7 +82,7 @@ def create_dp(env, outdir, c):
         '--threshold',
         c['thres'],
         '--parallel-ratio 0.8' if "parallel" in c['dp_mech'] else '',
-        '--loss-to-diff-ratio 100' if "parallel" in c['dp_mech'] else '',
+        '--loss-to-diff-ratio 4' if "parallel" in c['dp_mech'] else '',
         '--success-weight 0.9' if "graphical" in c['dp_mech'] else '',
         '--alpha',
         FWER,
@@ -94,7 +117,7 @@ def generate_data(env, outdir, c):
         '--train-batch-n 200',
         '--train-incr 1',
         '--train-iters',
-        REUSE_ITERS,
+        2**REUSE_ITERS,
         '--init-reuse-test-n',
         c['reuse_test_n'],
         '--init-sparse-beta',
@@ -106,31 +129,8 @@ def generate_data(env, outdir, c):
     return env.Command(
         [
             join(outdir, 'data.pkl'),
-            join(outdir, 'log.txt')],
+            join(outdir, 'data_log.txt')],
         [],
-        ' '.join(map(str, cmd)))
-
-nest.add(
-    'model_sim',
-    [
-        #"neldermead",
-        #"online",
-        "online_fixed",
-    ])
-
-@nest.add_target_with_env(localenv)
-def create_modeler(env, outdir, c):
-    cmd = [
-        'python create_modeler.py',
-        '--simulation',
-        c['model_sim'],
-	'--data ${SOURCES[0]}',
-	'--out ${TARGETS[0]}'
-    ]
-    return env.Command(
-        [
-            join(outdir, 'model.pkl')],
-        c["generate_data"],
         ' '.join(map(str, cmd)))
 
 

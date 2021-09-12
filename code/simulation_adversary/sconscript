@@ -23,6 +23,32 @@ nest.add(
     [100],
     label_func=lambda c: "test_%d" % c)
 
+nest.add(
+    'model_sim',
+    [
+        "adversary",
+    ])
+
+@nest.add_target_with_env(localenv)
+def create_modeler(env, outdir, c):
+    cmd = [
+        'python create_modeler.py',
+        '--simulation',
+        c['model_sim'],
+        '--min-var-idx',
+        SPARSE_P,
+        '--preset-coef',
+        SPARSE_COEF_VAL,
+	'--data ${SOURCES[0]}',
+	'--out ${TARGETS[0]}'
+    ]
+    return env.Command(
+        [
+            join(outdir, 'model.pkl')],
+        [],
+        ' '.join(map(str, cmd)))
+
+
 nest.add_aggregate("summary_res", list)
 nest.add(
     'dp_mech',
@@ -89,33 +115,8 @@ def generate_data(env, outdir, c):
     return env.Command(
         [
             join(outdir, 'data.pkl'),
-            join(outdir, 'log.txt')],
+            join(outdir, 'data_log.txt')],
         [],
-        ' '.join(map(str, cmd)))
-
-nest.add(
-    'model_sim',
-    [
-        "adversary",
-    ])
-
-@nest.add_target_with_env(localenv)
-def create_modeler(env, outdir, c):
-    cmd = [
-        'python create_modeler.py',
-        '--simulation',
-        c['model_sim'],
-        '--min-var-idx',
-        SPARSE_P,
-        '--preset-coef',
-        SPARSE_COEF_VAL,
-	'--data ${SOURCES[0]}',
-	'--out ${TARGETS[0]}'
-    ]
-    return env.Command(
-        [
-            join(outdir, 'model.pkl')],
-        c["generate_data"],
         ' '.join(map(str, cmd)))
 
 @nest.add_target_with_env(localenv)

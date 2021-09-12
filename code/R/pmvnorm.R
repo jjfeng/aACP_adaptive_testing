@@ -22,7 +22,7 @@ surv_prior = pmvnorm(lower=lower_prior, sigma=corr_prior)
 
 get_sequential_spend <- function(thres) {
   lower_all = c(lower_prior, thres)
-  surv_all = pmvnorm(lower=lower_all, sigma=corr_mat, abseps =0.00001)
+  surv_all = pmvnorm(lower=lower_all, sigma=corr_mat, maxpts=50000, abseps =0.00001)
   surv_prior - surv_all
 }
 
@@ -32,5 +32,7 @@ get_sequential_spend_diff <- function(thres) {
   reject_prob - alpha_spend
 }
 
-res = uniroot(get_sequential_spend_diff, c(-20, 0))
+#print(get_sequential_spend_diff(-100))
+#print(get_sequential_spend_diff(0))
+res = uniroot(get_sequential_spend_diff, c(min(lower_prior) - 10, 0))
 print(res$root)

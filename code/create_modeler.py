@@ -33,14 +33,6 @@ def parse_args():
         type=float,
         default=0)
     parser.add_argument(
-        '--refit-freq',
-        type=int,
-        default=1)
-    parser.add_argument(
-        '--data-file',
-        type=str,
-        default="_output/data.pkl")
-    parser.add_argument(
         '--out-file',
         type=str,
         default="_output/models.pkl")
@@ -51,18 +43,15 @@ def main():
     args = parse_args()
     np.random.seed(args.seed)
 
-    with open(args.data_file, "rb") as f:
-        data = pickle.load(f)["full_dat"]
-
     # Create model
     if args.simulation == "neldermead":
-        clf = NelderMeadModeler(data.init_train_dat, min_var_idx=args.min_var_idx)
+        clf = NelderMeadModeler(min_var_idx=args.min_var_idx)
     elif args.simulation == "adversary":
-        clf = AdversarialModeler(data.init_train_dat, min_var_idx=args.min_var_idx, preset_coef=args.preset_coef)
+        clf = AdversarialModeler(min_var_idx=args.min_var_idx, preset_coef=args.preset_coef)
     elif args.simulation == "online":
-        clf = OnlineLearnerModeler(data.init_train_dat)
+        clf = OnlineAdaptiveLearnerModeler()
     elif args.simulation == "online_fixed":
-        clf = OnlineLearnerFixedModeler(data.init_train_dat)
+        clf = OnlineLearnerFixedModeler()
 
 
     with open(args.out_file, "wb") as f:

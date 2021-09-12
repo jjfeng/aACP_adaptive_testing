@@ -30,10 +30,8 @@ class LockedModeler:
     """
     Logistic reg only right now
     """
-    def __init__(self, dat: Dataset):
+    def __init__(self):
         self.modeler = LogisticRegression(penalty="none", solver="lbfgs")
-        self.dat = dat
-        self.modeler.fit(self.dat.x, self.dat.y.flatten())
 
     def set_model(self, mdl, params):
         mdl.classes_ = np.array([0,1])
@@ -45,21 +43,18 @@ class LockedModeler:
 
 
 class NelderMeadModeler(LockedModeler):
-    def __init__(self, dat: Dataset, min_var_idx: int = 1):
+    def __init__(self, min_var_idx: int = 1):
         """
         @param min_var_idx: nelder mead only tunes coefficients with idx at least min_var_idx
         """
         self.modeler = LogisticRegression(penalty="none", solver="lbfgs")
-        self.dat = dat
-        self.modeler.fit(self.dat.x, self.dat.y.flatten())
         self.min_var_idx = min_var_idx
-        self.modeler.coef_[0,self.min_var_idx:] = 0
 
-    def do_minimize(self, test_x, test_y, dp_engine, dat_stream=None, maxfev=10):
+    def do_minimize(self, dat, test_x, test_y, dp_engine, dat_stream=None, maxfev=10):
         """
         @param dat_stream: ignores this
         """
-        self.modeler.fit(self.dat.x, self.dat.y.flatten())
+        self.modeler.fit(dat.x, dat.y.flatten())
         self.modeler.coef_[0,self.min_var_idx:] = 0
 
         # Just for initialization
@@ -87,26 +82,21 @@ class NelderMeadModeler(LockedModeler):
         return test_hist
 
 class CtsAdversaryModeler(LockedModeler):
-    def __init__(self, dat: Dataset, preset_coef:float = 0, min_var_idx: int = 1, update_incr: float = 0.02):
+    def __init__(self, preset_coef:float = 0, min_var_idx: int = 1, update_incr: float = 0.02):
         """
         @param min_var_idx: nelder mead only tunes coefficients with idx at least min_var_idx
         """
         self.modeler = LogisticRegression(penalty="none", solver="lbfgs")
-        self.dat = dat
         self.update_incr = update_incr
         self.min_var_idx = min_var_idx
         self.preset_coef = preset_coef
-        self.modeler.fit(self.dat.x, self.dat.y.flatten())
-        self.modeler.intercept_[:] = 0
-        self.modeler.coef_[0,:self.min_var_idx] = preset_coef
-        self.modeler.coef_[0,self.min_var_idx:] = 0
 
-    def do_minimize(self, test_x, test_y, dp_engine, dat_stream=None, maxfev=10):
+    def do_minimize(self, dat, test_x, test_y, dp_engine, dat_stream=None, maxfev=10):
         """
         @param dat_stream: ignores this
         """
         # Train a good initial model
-        self.modeler.fit(self.dat.x, self.dat.y.flatten())
+        self.modeler.fit(dat.x, dat.y.flatten())
         self.modeler.intercept_[:] = 0
         self.modeler.coef_[0,:self.min_var_idx] = self.preset_coef
         self.modeler.coef_[0,self.min_var_idx:] = 0
@@ -171,22 +161,21 @@ class CtsAdversaryModeler(LockedModeler):
 class BinaryAdversaryModeler(LockedModeler):
     update_dirs = [1]
 
-    def __init__(self, dat: Dataset, preset_coef:float = 0, min_var_idx: int = 1, update_incr: float = 0.02):
+    def __init__(self, preset_coef:float = 0, min_var_idx: int = 1, update_incr: float = 0.02):
         """
         @param min_var_idx: nelder mead only tunes coefficients with idx at least min_var_idx
         """
         self.modeler = LogisticRegression(penalty="none", solver="lbfgs")
-        self.dat = dat
         self.update_incr = update_incr
         self.min_var_idx = min_var_idx
         self.preset_coef = preset_coef
 
-    def do_minimize(self, test_x, test_y, dp_engine, dat_stream=None, maxfev=10):
+    def do_minimize(self, dat, test_x, test_y, dp_engine, dat_stream=None, maxfev=10):
         """
         @param dat_stream: ignores this
         """
         # Train a good initial model
-        self.modeler.fit(self.dat.x, self.dat.y.flatten())
+        self.modeler.fit(dat.x, dat.y.flatten())
         self.modeler.intercept_[:] = 0
         self.modeler.coef_[0,:self.min_var_idx] = self.preset_coef
         self.modeler.coef_[0,self.min_var_idx:] = 0
@@ -196,7 +185,7 @@ class BinaryAdversaryModeler(LockedModeler):
         # Also have some predefined perturber for reference
         # just so we can use the parallel procedure
         self.predef_modeler = sklearn.base.clone(self.modeler)
-        self.predef_modeler.fit(self.dat.x, self.dat.y.flatten())
+        self.predef_modeler.fit(dat.x, dat.y.flatten())
         self.predef_modeler.intercept_[:] = 0
         self.predef_modeler.coef_[0,:self.min_var_idx] = self.preset_coef
         self.predef_modeler.coef_[0,self.min_var_idx:] = 0
@@ -253,69 +242,38 @@ class BinaryAdversaryModeler(LockedModeler):
         return test_hist
 
 class AdversarialModeler(LockedModeler):
-    def __init__(self, dat, preset_coef: float=0, min_var_idx: int = 1):
-        self.cts_modeler = CtsAdversaryModeler(dat, preset_coef, min_var_idx)
-        #self.cts_modeler = NelderMeadModeler(dat, min_var_idx)
-        self.binary_modeler = BinaryAdversaryModeler(dat, preset_coef, min_var_idx)
+    def __init__(self, preset_coef: float=0, min_var_idx: int = 1):
+        self.cts_modeler = CtsAdversaryModeler(preset_coef, min_var_idx)
+        self.binary_modeler = BinaryAdversaryModeler(preset_coef, min_var_idx)
         self.modeler = self.cts_modeler.modeler
 
-    def do_minimize(self, test_x, test_y, dp_engine, dat_stream=None, maxfev=10):
+    def do_minimize(self, dat, test_x, test_y, dp_engine, dat_stream=None, maxfev=10):
         """
         @param dat_stream: ignores this
 
         @return perf_value
         """
         if dp_engine.name == "no_dp":
-            test_hist = self.cts_modeler.do_minimize(test_x, test_y, dp_engine, dat_stream, maxfev)
+            test_hist = self.cts_modeler.do_minimize(dat, test_x, test_y, dp_engine, dat_stream, maxfev)
             self.modeler = self.cts_modeler.modeler
         else:
-            test_hist = self.binary_modeler.do_minimize(test_x, test_y, dp_engine, dat_stream, maxfev)
+            test_hist = self.binary_modeler.do_minimize(dat, test_x, test_y, dp_engine, dat_stream, maxfev)
             self.modeler = self.binary_modeler.modeler
         return test_hist
 
-class OnlineLearnerModeler(LockedModeler):
+class OnlineLearnerFixedModeler(LockedModeler):
     """
     Just do online learning on a separate dataset
     only does logistic reg
     """
-    def do_minimize(self, test_x, test_y, dp_engine, dat_stream, maxfev=10):
+    def do_minimize(self, dat, test_x, test_y, dp_engine, dat_stream, maxfev=10):
         """
         @param dat_stream: a list of datasets for further training the model
         @return perf_value
         """
-        self.modeler.fit(self.dat.x, self.dat.y.flatten())
+        self.modeler.fit(dat.x, dat.y.flatten())
 
-        merged_dat = self.dat
-        test_hist = TestHistory(self.modeler)
-        for i, batch_dat in enumerate(dat_stream[:maxfev]):
-            merged_dat = Dataset.merge([merged_dat, batch_dat])
-            lr = sklearn.base.clone(self.modeler)
-            lr.fit(merged_dat.x, merged_dat.y.flatten())
-
-            pred_y = lr.predict_proba(test_x)[:,1].reshape((-1,1))
-            test_res = dp_engine.get_test_eval(test_y, pred_y)
-            if test_res == 1:
-                # replace current modeler only if successful
-                self.modeler = lr
-            test_hist.update(
-                    test_res=test_res,
-                    curr_mdl=self.modeler)
-
-        return test_hist
-
-class OnlineLearnerFixedModeler(OnlineLearnerModeler):
-    """
-    Just do online learning on a separate dataset
-    only does logistic reg
-    """
-    def do_minimize(self, test_x, test_y, dp_engine, dat_stream, maxfev=10):
-        """
-        @param dat_stream: a list of datasets for further training the model
-        @return perf_value
-        """
-        self.modeler.fit(self.dat.x, self.dat.y.flatten())
-
-        merged_dat = self.dat
+        merged_dat = dat
         test_hist = TestHistory(self.modeler)
         for i, batch_dat in enumerate(dat_stream[:maxfev]):
             merged_dat = Dataset.merge([merged_dat, batch_dat])
@@ -327,6 +285,54 @@ class OnlineLearnerFixedModeler(OnlineLearnerModeler):
             if test_res == 1:
                 # replace current modeler only if successful
                 self.modeler = lr
+            test_hist.update(
+                    test_res=test_res,
+                    curr_mdl=self.modeler)
+        return test_hist
+
+class OnlineAdaptiveLearnerModeler(OnlineLearnerFixedModeler):
+    """
+    Just do online learning on a separate dataset
+
+    This learner adapts the number of training batches it will read.
+    Collect more training data if the modification is not approved
+
+    only does logistic reg
+    """
+    def do_minimize(self, dat, test_x, test_y, dp_engine, dat_stream, maxfev=10):
+        """
+        @param dat_stream: a list of datasets for further training the model
+        @return perf_value
+        """
+        self.modeler.fit(dat.x, dat.y.flatten())
+
+        adapt_dat = dat
+        predef_dat = dat
+        num_read_batches = 1
+        curr_idx = 0
+        test_hist = TestHistory(self.modeler)
+        for i in range(maxfev):
+            batches_read = dat_stream[curr_idx:curr_idx + num_read_batches]
+            print("BATCHES READ", len(batches_read), curr_idx, curr_idx + num_read_batches)
+            adapt_dat = Dataset.merge([adapt_dat] + batches_read)
+            curr_idx += num_read_batches
+            adapt_lr = sklearn.base.clone(self.modeler)
+            adapt_lr.fit(adapt_dat.x, adapt_dat.y.flatten())
+            adapt_pred_y = adapt_lr.predict_proba(test_x)[:,1].reshape((-1,1))
+
+            predef_dat = Dataset.merge([predef_dat] + dat_stream[i:i + 1])
+            predef_lr = sklearn.base.clone(self.modeler)
+            predef_lr.fit(predef_dat.x, predef_dat.y.flatten())
+            predef_pred_y = predef_lr.predict_proba(test_x)[:,1].reshape((-1,1))
+
+            test_res = dp_engine.get_test_eval(test_y, adapt_pred_y, predef_pred_y=predef_pred_y)
+            if test_res == 1:
+                # replace current modeler only if successful
+                self.modeler = adapt_lr
+            else:
+                # read more batches if failed
+                print("ADAPT", num_read_batches)
+                num_read_batches *= 2
             test_hist.update(
                     test_res=test_res,
                     curr_mdl=self.modeler)
