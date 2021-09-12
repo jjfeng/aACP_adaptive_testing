@@ -355,20 +355,13 @@ class GraphicalParallelDP(GraphicalFFSDP):
         alpha,
         success_weight,
         parallel_ratio: float = 0.9,
-        loss_to_diff_std_ratios: List[float] = 100.0,
         alpha_alloc_max_depth: int = 0,
         scratch_file: str = None,
     ):
-        """
-        @param loss_to_diff_std_ratio: the minimum ratio between the stdev of the loss of the predef model and the loss of the modifications in that level (maybe in the future, consider an avg?)
-                                    bigger the ratio the more similar the adaptive strategy is to the prespecified strategy
-        """
         self.base_threshold = base_threshold
         self.alpha = alpha
         self.success_weight = success_weight
         self.parallel_ratio = parallel_ratio
-        assert np.min(loss_to_diff_std_ratios) >= 1
-        self.loss_to_diff_std_ratios = loss_to_diff_std_ratios
         self.alpha_alloc_max_depth = alpha_alloc_max_depth
         self.scratch_file = scratch_file
 
@@ -449,7 +442,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
         self.test_tree.local_alpha = self.test_tree.weight * self.alpha
         self._create_children(self.test_tree)
 
-    def _get_test_eval_ffs(self, test_y, pred_y, predef_pred_y):
+    def _get_test_eval_ffs(self, test_y, predef_pred_y):
         """
         NOTICE that the std err used here is not the usual one!!!
 
@@ -457,9 +450,8 @@ class GraphicalParallelDP(GraphicalFFSDP):
             test perf where 1 means approve and 0 means not approved,
             test nlls)
         """
-        test_nlls = get_losses(test_y, pred_y)
-        predef_pred_test_nlls = get_losses(test_y, predef_pred_y)
-        std_err = np.sqrt(np.var(predef_pred_test_nlls) / predef_pred_test_nlls.size)
+        test_nlls = get_losses(test_y, predef_pred_y)
+        std_err = np.sqrt(np.var(test_nlls) / test_nlls.size)
         self.parallel_tree.observe_losses(test_nlls)
 
         # Need to traverse subfam parent nodes to decide local level
@@ -481,17 +473,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
         print("t_statistics", t_statistic, t_thres)
         return test_result
 
-    def _solve_t_statistic_thres_corr(self, prior_thres, alpha_level):
-        """
-        @param prior_thres: the thresholds for all but the last test statistic
-        @param alpha_level: the level of alpha we want to spend for the last test statistic
-
-        @return the threshold for the last test statistic to satisfy the spending schedule
-        """
-        new_thres = norm.ppf(alpha_level) / self.loss_to_diff_std_ratios[self.num_queries] + prior_thres
-        return new_thres
-
-    def _get_test_eval_corr(self, test_y, pred_y, predef_pred_y):
+    def _get_test_eval_corr(self, test_y, pred_y):
         """
         NOTICE that the std err used here is not the usual one!!!
 
@@ -500,8 +482,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
             test nlls)
         """
         test_nlls = get_losses(test_y, pred_y)
-        predef_pred_test_nlls = get_losses(test_y, predef_pred_y)
-        std_err = np.sqrt(np.var(predef_pred_test_nlls) / test_nlls.size)
+        std_err = np.sqrt(np.var(test_nlls) / test_nlls.size)
         self.test_tree.observe_losses(test_nlls)
 
         prior_test_nlls = self._get_prior_losses(self.parallel_tree)
@@ -521,18 +502,16 @@ class GraphicalParallelDP(GraphicalFFSDP):
         print("corr test resl", test_stat, t_thres)
         return test_result
 
-    def _get_test_compare_ffs(self, test_y, pred_y, prev_pred_y, predef_pred_y):
+    def _get_test_compare_ffs(self, test_y, predef_pred_y, prev_pred_y):
         """
         NOTICE that the std err used here is not the usual one!!!
 
         @return test perf where 1 means approve and 0 means not approved,
         """
-        loss_new = get_losses(test_y, pred_y)
+        loss_new = get_losses(test_y, predef_pred_y)
         loss_prev = get_losses(test_y, prev_pred_y)
-        predef_loss = get_losses(test_y, predef_pred_y)
-        # This is a special std err calc for predef model refs
-        std_err = np.sqrt(np.var(predef_loss - loss_prev) / loss_prev.size)
         loss_diffs = loss_new - loss_prev
+        std_err = np.sqrt(np.var(loss_diffs) / loss_prev.size)
         self.parallel_tree.observe_losses(loss_diffs)
 
         # Need to traverse subfam parent nodes to decide local level
@@ -554,7 +533,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
         print("COMPARE t_statistics", t_statistic, t_thres)
         return test_result
 
-    def _get_test_compare_corr(self, test_y, pred_y, prev_pred_y, predef_pred_y):
+    def _get_test_compare_corr(self, test_y, pred_y, prev_pred_y):
         """
         NOTICE that the std err used here is not the usual one!!!
 
@@ -562,10 +541,8 @@ class GraphicalParallelDP(GraphicalFFSDP):
         """
         loss_new = get_losses(test_y, pred_y)
         loss_prev = get_losses(test_y, prev_pred_y)
-        predef_pred_loss = get_losses(test_y, predef_pred_y)
         loss_diffs = loss_new - loss_prev
-        # This is a special std err calc for predef model refs
-        std_err = np.sqrt(np.var(predef_pred_loss - loss_prev) / loss_prev.size)
+        std_err = np.sqrt(np.var(loss_diffs) / loss_prev.size)
         self.test_tree.observe_losses(loss_diffs)
 
         prior_test_diffs = self._get_prior_losses(self.parallel_tree)
@@ -609,34 +586,11 @@ class GraphicalParallelDP(GraphicalFFSDP):
         self.parallel_tree = self.parallel_tree.success
         self.parallel_tree.local_alpha = self.parallel_tree.weight * self.alpha
 
-    def _get_loss_to_diff_compare_ratio(
-        self, test_y, pred_y, prev_pred_y, predef_pred_y
-    ):
-        loss_new = get_losses(test_y, pred_y)
-        loss_prev = get_losses(test_y, prev_pred_y)
-        predef_pred_loss = get_losses(test_y, predef_pred_y)
-        diff_var = np.var(loss_new - predef_pred_loss)
-        predef_var = np.var(predef_pred_loss - loss_prev)
-        print("VARs", diff_var, predef_var)
-        return np.sqrt(predef_var / diff_var)
-
-    def _get_loss_to_diff_ratio(self, test_y, pred_y, predef_pred_y):
-        pred_loss = get_losses(test_y, pred_y)
-        predef_loss = get_losses(test_y, predef_pred_y)
-        loss_var = np.var(predef_loss)
-        loss_diff_var = np.var(pred_loss - predef_loss)
-        return np.sqrt(loss_var / loss_diff_var)
-
     def get_test_eval(self, test_y, pred_y, predef_pred_y):
-        #ratio = self._get_loss_to_diff_ratio(test_y, pred_y, predef_pred_y)
-        #print("RATIO", ratio)
-        #logging.info("ratio %f", ratio)
-        #assert ratio >= self.loss_to_diff_std_ratios[self.num_queries]
-
         parallel_test_result = self._get_test_eval_ffs(
-            test_y, predef_pred_y, predef_pred_y
+            test_y, predef_pred_y
         )
-        test_result = self._get_test_eval_corr(test_y, pred_y, predef_pred_y)
+        test_result = self._get_test_eval_corr(test_y, pred_y)
         self._do_tree_update(parallel_test_result, test_result)
 
         print("PARALLL", self.parallel_test_hist)
@@ -644,18 +598,11 @@ class GraphicalParallelDP(GraphicalFFSDP):
         return test_result
 
     def get_test_compare(self, test_y, pred_y, prev_pred_y, predef_pred_y):
-        #ratio = self._get_loss_to_diff_compare_ratio(
-        #    test_y, pred_y, prev_pred_y, predef_pred_y
-        #)
-        #print("RATIO", ratio)
-        #logging.info("ratio %f", ratio)
-        #assert ratio >= self.loss_to_diff_std_ratios[self.num_queries]
-
         parallel_test_result = self._get_test_compare_ffs(
-            test_y, predef_pred_y, prev_pred_y, predef_pred_y
+            test_y, predef_pred_y, prev_pred_y
         )
         test_result = self._get_test_compare_corr(
-            test_y, pred_y, prev_pred_y, predef_pred_y
+            test_y, pred_y, prev_pred_y
         )
         self._do_tree_update(parallel_test_result, test_result)
 

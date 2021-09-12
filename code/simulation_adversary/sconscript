@@ -39,7 +39,6 @@ def create_modeler(env, outdir, c):
         SPARSE_P,
         '--preset-coef',
         SPARSE_COEF_VAL,
-	'--data ${SOURCES[0]}',
 	'--out ${TARGETS[0]}'
     ]
     return env.Command(
@@ -59,7 +58,7 @@ nest.add(
         #"bonferroni_nonadapt",
         "graphical_bonf",
         "graphical_ffs",
-        #"graphical_parallel",
+        "graphical_parallel",
     ])
 
 @nest.add_target_with_env(localenv)
@@ -69,8 +68,6 @@ def create_dp(env, outdir, c):
     cmd = [
         'python create_dp_mechanism.py',
         '--parallel-ratio 0.95' if "graphical_parallel" == c['dp_mech'] else '',
-        # TODO: this ratio might not hold right now, actually. this was mostly to check.
-        '--loss-to-diff-ratio 100000' if "graphical_parallel" == c['dp_mech'] else '',
         '--success-weight 0.5' if "graphical" in c['dp_mech'] else '',
         '--alpha',
         FWER,
