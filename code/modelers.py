@@ -343,6 +343,8 @@ class OnlineAdaptiveLearnerModeler(OnlineLearnerFixedModeler):
 
     only does logistic reg
     """
+    max_batches = 2
+    predef_batches = 1
 
     def do_minimize(self, dat, test_x, test_y, dp_engine, dat_stream, maxfev=10):
         """
@@ -350,6 +352,7 @@ class OnlineAdaptiveLearnerModeler(OnlineLearnerFixedModeler):
         @return perf_value
         """
         self.modeler.fit(dat.x, dat.y.flatten())
+        prev_pred_y = self.modeler.predict_proba(test_x)[:, 1].reshape((-1, 1))
 
         adapt_dat = dat
         predef_dat = dat
@@ -359,7 +362,7 @@ class OnlineAdaptiveLearnerModeler(OnlineLearnerFixedModeler):
         for i in range(maxfev):
             batches_read = dat_stream[curr_idx : curr_idx + num_read_batches]
             print(
-                "BATCHES READ", len(batches_read), curr_idx, curr_idx + num_read_batches
+                "BATCHES READ", len(batches_read), i, curr_idx, curr_idx + num_read_batches
             )
             adapt_dat = Dataset.merge([adapt_dat] + batches_read)
             curr_idx += num_read_batches
@@ -367,20 +370,22 @@ class OnlineAdaptiveLearnerModeler(OnlineLearnerFixedModeler):
             adapt_lr.fit(adapt_dat.x, adapt_dat.y.flatten())
             adapt_pred_y = adapt_lr.predict_proba(test_x)[:, 1].reshape((-1, 1))
 
-            predef_dat = Dataset.merge([predef_dat] + dat_stream[i : i + 1])
+            predef_dat = Dataset.merge([predef_dat] + dat_stream[i : i + self.predef_batches])
             predef_lr = sklearn.base.clone(self.modeler)
             predef_lr.fit(predef_dat.x, predef_dat.y.flatten())
             predef_pred_y = predef_lr.predict_proba(test_x)[:, 1].reshape((-1, 1))
 
-            test_res = dp_engine.get_test_eval(
-                test_y, adapt_pred_y, predef_pred_y=predef_pred_y
+            test_res = dp_engine.get_test_compare(
+                test_y, adapt_pred_y, prev_pred_y=prev_pred_y, predef_pred_y=predef_pred_y
             )
             if test_res == 1:
                 # replace current modeler only if successful
                 self.modeler = adapt_lr
+                num_read_batches = max(num_read_batches - 1, self.predef_batches)
             else:
                 # read more batches if failed
                 print("ADAPT", num_read_batches)
-                num_read_batches *= 2
+                num_read_batches = min(1 + num_read_batches, self.max_batches)
+
             test_hist.update(test_res=test_res, curr_mdl=self.modeler)
         return test_hist

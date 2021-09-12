@@ -22,7 +22,12 @@ surv_prior = pmvnorm(lower=lower_prior, sigma=corr_prior)
 
 get_sequential_spend <- function(thres) {
   lower_all = c(lower_prior, thres)
-  surv_all = pmvnorm(lower=lower_all, sigma=corr_mat, maxpts=50000, abseps =0.00001)
+  if (thres < -100) {
+    # When threshold is super super small, you might as well set this equal to the same as the original calculation
+    surv_all = surv_prior
+  } else {
+    surv_all = pmvnorm(lower=lower_all, sigma=corr_mat, maxpts=50000, abseps =0.00001)
+  }
   surv_prior - surv_all
 }
 
@@ -32,7 +37,8 @@ get_sequential_spend_diff <- function(thres) {
   reject_prob - alpha_spend
 }
 
-#print(get_sequential_spend_diff(-100))
+#print(min(lower_prior) - 1000)
+#print(get_sequential_spend_diff(-1000))
 #print(get_sequential_spend_diff(0))
-res = uniroot(get_sequential_spend_diff, c(min(lower_prior) - 10, 0))
+res = uniroot(get_sequential_spend_diff, c(min(lower_prior) - 100, 0))
 print(res$root)

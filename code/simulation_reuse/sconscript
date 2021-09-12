@@ -14,7 +14,9 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 RUN_STATUS = localenv['clusters']
 NUM_SEEDS = localenv['num_seeds']
 REUSE_ITERS = 10
-RATIO_LIST = [100,4,4,5,6,7,8,9,9,9,10,10]
+RATIO_LIST = [100,6,7,7,8,8,8,8,8,9,9,10,10,10]
+RATIO_LIST = [10] * REUSE_ITERS
+#RATIO_LIST = [100,4,4,4,5,5,5,5,5,5,6,7,8,9,10,10]
 FWER = 0.1
 
 nest.add(
@@ -28,12 +30,12 @@ nest.add(
     label_func=lambda c: "beta_%.2f" % c)
 
 nest.add(
-    'thres',
+    'fwer',
     [
-        0.41,
-        #0.42
+        0.1,
+        #0.05
     ],
-    label_func=lambda c: "thres_%.3f" % c)
+    label_func=lambda c: "fwer_%.3f" % c)
 
 nest.add(
     'reuse_test_n',
@@ -81,11 +83,11 @@ def create_dp(env, outdir, c):
     ratio_str = ",".join(map(str, RATIO_LIST))
     cmd = [
         'python create_dp_mechanism.py',
-        '--threshold',
-        c['thres'],
-        '--parallel-ratio 0.8' if "parallel" in c['dp_mech'] else '',
+        #'--threshold',
+        #c['thres'],
+        '--parallel-ratio 0.5' if "parallel" in c['dp_mech'] else '',
         '--loss-to-diff-ratio %s' % ratio_str if "parallel" in c['dp_mech'] else '',
-        '--success-weight 0.9' if "graphical" in c['dp_mech'] else '',
+        '--success-weight 0.8' if "graphical" in c['dp_mech'] else '',
         '--alpha',
         FWER,
         '--dp-mech',
@@ -115,11 +117,11 @@ def generate_data(env, outdir, c):
         c['num_p'],
         '--p',
         c['num_p'],
-        '--init-train-n 300',
+        '--init-train-n 500',
         '--train-batch-n 200',
         '--train-incr 1',
         '--train-iters',
-        2**REUSE_ITERS,
+        20*REUSE_ITERS,
         '--init-reuse-test-n',
         c['reuse_test_n'],
         '--init-sparse-beta',

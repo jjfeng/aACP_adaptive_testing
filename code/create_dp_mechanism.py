@@ -40,7 +40,7 @@ def parse_args():
     parser.add_argument("--scratch-file", type=str, default="_output/scratch.txt")
     parser.add_argument("--out-file", type=str, default="_output/dp_mech.pkl")
     args = parser.parse_args()
-    args.loss_to_diff_ratios = list(map(float, args.loss_to_diff_ratios.split(",")))
+    args.loss_to_diff_ratios = list(map(float, args.loss_to_diff_ratios.split(","))) if args.loss_to_diff_ratios else []
     return args
 
 

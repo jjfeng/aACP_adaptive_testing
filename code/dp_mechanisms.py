@@ -415,7 +415,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
         curr_par_node = self.parallel_tree
         for i in range(1, num_adapt_queries + 1):
             weight = (
-                1 / num_adapt_queries * self.parallel_ratio
+                1/num_adapt_queries * self.parallel_ratio
                 if i < num_adapt_queries
                 else 0
             )
@@ -666,8 +666,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
         )
         print("RATIO", ratio)
         logging.info("ratio %f", ratio)
-        #self.loss_to_diff_std_ratio = min(ratio, self.loss_to_diff_std_ratio)
-        assert ratio >= self.loss_to_diff_std_ratio
+        assert ratio >= self.loss_to_diff_std_ratios[self.num_queries]
 
         parallel_test_result = self._get_test_compare_ffs(
             test_y, predef_pred_y, prev_pred_y, predef_pred_y
