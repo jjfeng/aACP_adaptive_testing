@@ -1,4 +1,5 @@
 import logging
+from typing import List
 import subprocess
 
 import numpy as np
@@ -348,7 +349,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
 
     @property
     def name(self):
-        return "graphical_par_%.1f" % self.loss_to_diff_std_ratio
+        return "graphical_par"
 
     def __init__(
         self,
@@ -356,7 +357,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
         alpha,
         success_weight,
         parallel_ratio: float = 0.9,
-        loss_to_diff_std_ratio: float = 100.0,
+        loss_to_diff_std_ratios: List[float] = 100.0,
         alpha_alloc_max_depth: int = 0,
         scratch_file: str = None,
     ):
@@ -368,8 +369,8 @@ class GraphicalParallelDP(GraphicalFFSDP):
         self.alpha = alpha
         self.success_weight = success_weight
         self.parallel_ratio = parallel_ratio
-        assert loss_to_diff_std_ratio >= 1
-        self.loss_to_diff_std_ratio = loss_to_diff_std_ratio
+        assert np.min(loss_to_diff_std_ratios) >= 1
+        self.loss_to_diff_std_ratios = loss_to_diff_std_ratios
         self.alpha_alloc_max_depth = alpha_alloc_max_depth
         self.scratch_file = scratch_file
 
@@ -483,7 +484,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
 
         @return the threshold for the last test statistic to satisfy the spending schedule
         """
-        new_thres = norm.ppf(alpha_level) / self.loss_to_diff_std_ratio + prior_thres
+        new_thres = norm.ppf(alpha_level) / self.loss_to_diff_std_ratios[self.num_queries] + prior_thres
         return new_thres
 
     def _get_test_eval_corr(self, test_y, pred_y, predef_pred_y):
@@ -647,7 +648,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
         ratio = self._get_loss_to_diff_ratio(test_y, pred_y, predef_pred_y)
         print("RATIO", ratio)
         logging.info("ratio %f", ratio)
-        assert ratio >= self.loss_to_diff_std_ratio
+        assert ratio >= self.loss_to_diff_std_ratios[self.num_queries]
 
         parallel_test_result = self._get_test_eval_ffs(
             test_y, predef_pred_y, predef_pred_y
@@ -665,7 +666,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
         )
         print("RATIO", ratio)
         logging.info("ratio %f", ratio)
-        self.loss_to_diff_std_ratio = min(ratio, self.loss_to_diff_std_ratio)
+        #self.loss_to_diff_std_ratio = min(ratio, self.loss_to_diff_std_ratio)
         assert ratio >= self.loss_to_diff_std_ratio
 
         parallel_test_result = self._get_test_compare_ffs(
