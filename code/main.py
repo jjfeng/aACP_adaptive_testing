@@ -141,7 +141,8 @@ def main():
     if args.plot_file:
         print(df)
         sns.set_context("paper", font_scale=2)
-        sns.relplot(data=df, x="max_iter", y="value", hue="dataset", col="measure", kind="line", facet_kws={'sharey': False, 'sharex': True})
+        rel_plt = sns.relplot(data=df[df.measure != "did_approval"], x="max_iter", y="value", hue="dataset", col="measure", kind="line", facet_kws={'sharey': False, 'sharex': True})
+        rel_plt.fig.suptitle(dp_mech.name)
         plt.savefig(args.plot_file)
         print("Fig", args.plot_file)
 

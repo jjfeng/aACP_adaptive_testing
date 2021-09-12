@@ -29,8 +29,6 @@ nest.add(
 nest.add(
     'thres',
     [
-        #0.396,
-        #0.4,
         0.41
     ],
     label_func=lambda c: "thres_%.3f" % c)
@@ -45,11 +43,11 @@ nest.add(
     [
         #"no_dp",
         #"binary_thres_dp",
-        #"bonferroni",
+        "bonferroni",
         #"bonferroni_nonadapt",
-        #"graphical_bonf",
+        "graphical_bonf",
+        "graphical_ffs",
         "graphical_parallel",
-        #"graphical_ffs",
     ])
 
 @nest.add_target_with_env(localenv)

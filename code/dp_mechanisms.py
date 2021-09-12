@@ -233,6 +233,7 @@ class GraphicalFFSDP(GraphicalBonfDP):
         else:
             np.savetxt(self.scratch_file, est_cov, delimiter=",")
             cmd = ["Rscript", "R/pmvnorm.R", self.scratch_file, str(alpha_level)] + list(map(str, prior_thres))
+            print(" ".join(cmd))
             res = subprocess.run(cmd, stdout=subprocess.PIPE)
             thres = float(res.stdout.decode('utf-8')[4:])
             print("THRES FROM R", thres)

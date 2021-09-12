@@ -80,8 +80,7 @@ def main():
     all_res_std = (all_res.groupby(args.id_cols).std()/np.sqrt(num_replicates)).reset_index()
     all_res_std["zagg"] = "se"
     all_res_mean["zagg"] = "mean"
-    all_res = pd.concat([all_res_mean, all_res_std]) #.sort_values(["measure", "zagg", "mdl"])
-    #mask = all_res.measure.isin(args.measure_filter)
+    all_res = pd.concat([all_res_mean, all_res_std])
     out_df = all_res.pivot(args.pivot_rows, args.pivot_cols + ["zagg"], ["value"])
     print(out_df)
 
