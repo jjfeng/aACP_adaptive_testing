@@ -30,7 +30,7 @@ nest.add(
     'fwer',
     [
         0.1,
-        #0.05
+        0.05
     ],
     label_func=lambda c: "fwer_%.3f" % c)
 
@@ -42,7 +42,6 @@ nest.add(
 nest.add(
     'model_sim',
     [
-        #"neldermead",
         "online",
         #"online_fixed",
     ])
@@ -67,7 +66,7 @@ nest.add(
         #"no_dp",
         #"binary_thres_dp",
         "bonferroni",
-        #"bonferroni_nonadapt",
+        "bonferroni_nonadapt",
         "graphical_bonf",
         "graphical_ffs",
         "graphical_parallel",

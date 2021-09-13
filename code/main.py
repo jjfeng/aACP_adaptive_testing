@@ -93,10 +93,6 @@ def main():
 
     reuse_res = get_all_scores(full_hist, data.reuse_test_dat, args.max_iter)
     test_res = get_all_scores(full_hist, data.test_dat, args.max_iter)
-    test_nlls = test_res.nll
-    test_aucs = test_res.auc
-    reuse_nlls = reuse_res.nll
-    reuse_aucs = reuse_res.auc
     num_approvals = np.array(
         [
             np.sum(np.array(full_hist.approval_times) <= i) - 1
@@ -105,12 +101,11 @@ def main():
     )
 
     # Compile results
-    print(reuse_nlls.size)
     max_iters = np.arange(args.max_iter + 1)
-    reuse_nll_df = pd.DataFrame({"value": reuse_nlls, "max_iter": max_iters})
+    reuse_nll_df = pd.DataFrame({"value": reuse_res.nll, "max_iter": max_iters})
     reuse_nll_df["dataset"] = "reuse_test"
     reuse_nll_df["measure"] = "nll"
-    reuse_auc_df = pd.DataFrame({"value": reuse_aucs, "max_iter": max_iters})
+    reuse_auc_df = pd.DataFrame({"value": reuse_res.auc, "max_iter": max_iters})
     reuse_auc_df["dataset"] = "reuse_test"
     reuse_auc_df["measure"] = "auc"
     count_df = pd.DataFrame({"value": num_approvals, "max_iter": max_iters})
@@ -119,14 +114,17 @@ def main():
     approve_df = pd.DataFrame({"value": num_approvals > 0, "max_iter": max_iters})
     approve_df["dataset"] = "test"
     approve_df["measure"] = "did_approval"
-    test_nll_df = pd.DataFrame({"value": test_nlls, "max_iter": max_iters})
+    test_nll_df = pd.DataFrame({"value": test_res.nll, "max_iter": max_iters})
     test_nll_df["dataset"] = "test"
     test_nll_df["measure"] = "nll"
-    test_auc_df = pd.DataFrame({"value": test_aucs, "max_iter": max_iters})
+    test_auc_df = pd.DataFrame({"value": test_res.auc, "max_iter": max_iters})
     test_auc_df["dataset"] = "test"
     test_auc_df["measure"] = "auc"
+    train_num_df = pd.DataFrame({"value": full_hist.num_trains, "max_iter": max_iters})
+    train_num_df["dataset"] = "train"
+    train_num_df["measure"] = "num_train"
     df = pd.concat(
-        [reuse_nll_df, reuse_auc_df, count_df, approve_df, test_auc_df, test_nll_df]
+        [reuse_nll_df, reuse_auc_df, count_df, approve_df, test_auc_df, test_nll_df, train_num_df]
     )
     df["dp"] = dp_mech.name
     print("results")
