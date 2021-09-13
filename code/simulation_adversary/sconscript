@@ -13,7 +13,7 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 RUN_STATUS = localenv['clusters']
 NUM_SEEDS = localenv['num_seeds']
-REUSE_ITERS = 30
+REUSE_ITERS = 6
 SPARSE_P = 1
 SPARSE_COEF_VAL = 1.5
 FWER = 0.1

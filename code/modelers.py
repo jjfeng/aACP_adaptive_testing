@@ -13,17 +13,17 @@ from dataset import Dataset
 class TestHistory:
     def __init__(self, curr_mdl):
         self.approval_times = [0]
-        self.approved_mdls = [curr_mdl]
+        self.approved_mdls = [deepcopy(curr_mdl)]
         self.curr_time = 0
         self.num_trains = [0]
 
     def update(self, test_res, curr_mdl, num_train):
+        self.curr_time += 1
         if test_res == 1:
             self.approval_times.append(self.curr_time)
             self.approved_mdls.append(deepcopy(curr_mdl))
 
         self.num_trains.append(num_train)
-        self.curr_time += 1
 
     @property
     def tot_approves(self):

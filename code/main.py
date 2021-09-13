@@ -42,6 +42,8 @@ def get_nll(test_y, pred_y):
 
 def get_all_scores(test_hist, test_dat, max_iter):
     last_approve_time = 0
+    print(test_hist.approval_times)
+    print(test_hist.approved_mdls)
     scores = []
     for approve_idx, (mdl, time_idx) in enumerate(
         zip(test_hist.approved_mdls, test_hist.approval_times)
@@ -57,6 +59,7 @@ def get_all_scores(test_hist, test_dat, max_iter):
         for idx in range(time_idx, next_approve_time):
             scores.append({"auc": auc, "nll": nll, "time": idx})
     scores = pd.DataFrame(scores)
+    print(scores)
     return scores
 
 
