@@ -95,7 +95,7 @@ def generate_data(env, outdir, c):
         '--sparse',
         SPARSE_P,
         '--p',
-        REUSE_ITERS,
+        REUSE_ITERS + 1,
         '--init-train-n 10',
         '--train-batch-n 0',
         '--train-iters',
