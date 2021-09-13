@@ -6,6 +6,9 @@
 # Arg 3 and more: critical values for prior normalized statistics
 # Stdout: the critical value for desired alpha spending
 
+# TODO: there is some randomness in the R code beecause pmvnorm is doing some sort of stochastic approximation
+#       We should probably figure out how to make it less stochastic
+
 library(mvtnorm)
 
 args = commandArgs(trailingOnly=TRUE)

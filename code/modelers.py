@@ -343,7 +343,7 @@ class OnlineAdaptiveLearnerModeler(OnlineLearnerFixedModeler):
 
     only does logistic reg
     """
-    max_batches = 2
+    max_batches = 5
     predef_batches = 1
 
     def do_minimize(self, dat, test_x, test_y, dp_engine, dat_stream, maxfev=10):
@@ -376,8 +376,7 @@ class OnlineAdaptiveLearnerModeler(OnlineLearnerFixedModeler):
             predef_pred_y = predef_lr.predict_proba(test_x)[:, 1].reshape((-1, 1))
 
             test_res = dp_engine.get_test_compare(
-                test_y, adapt_pred_y, prev_pred_y=prev_pred_y, predef_pred_y=predef_pred_y
-            )
+                test_y, adapt_pred_y, prev_pred_y=prev_pred_y, predef_pred_y=predef_pred_y)
             if test_res == 1:
                 # replace current modeler only if successful
                 self.modeler = adapt_lr
