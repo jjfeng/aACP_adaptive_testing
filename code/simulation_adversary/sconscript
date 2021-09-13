@@ -13,7 +13,7 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 RUN_STATUS = localenv['clusters']
 NUM_SEEDS = localenv['num_seeds']
-REUSE_ITERS = 10
+REUSE_ITERS = 30
 SPARSE_P = 1
 SPARSE_COEF_VAL = 1.5
 FWER = 0.1
@@ -72,7 +72,7 @@ def create_dp(env, outdir, c):
     scratch_file = join("simulation_adversary", outdir, "scratch.txt")
     cmd = [
         'python create_dp_mechanism.py',
-        '--parallel-ratio 0.95' if "graphical_parallel" == c['dp_mech'] else '',
+        '--parallel-ratio 0.6' if "graphical_parallel" == c['dp_mech'] else '',
         '--success-weight 0.5' if "graphical" in c['dp_mech'] else '',
         '--alpha',
         FWER,
@@ -155,8 +155,8 @@ def summarize(env, outdir, c):
 	'dataset,measure,dp',
 	'--pivot-cols',
 	'max_iter',
-	'--id-filter',
-	REUSE_ITERS,
+	#'--id-filter',
+	#REUSE_ITERS,
 	'--results',
         ",".join(["simulation_adversary/%s" % r for r in c['summary_res']]),
 	'--out-csv ${TARGETS[0]}',
@@ -164,6 +164,21 @@ def summarize(env, outdir, c):
     return env.Command(
         [
             join(outdir, 'res_summary.csv'),
+        ],
+        c["summary_res"],
+        ' '.join(map(str, cmd)))
+
+@nest.add_target_with_env(localenv)
+def plot_avg(env, outdir, c):
+    cmd = [
+        'python plot_simulation_adversary.py',
+	'--results',
+        ",".join(["simulation_adversary/%s" % r for r in c['summary_res']]),
+	'--plot-file ${TARGETS[0]}',
+    ]
+    return env.Command(
+        [
+            join(outdir, 'res_summary.png'),
         ],
         c["summary_res"],
         ' '.join(map(str, cmd)))

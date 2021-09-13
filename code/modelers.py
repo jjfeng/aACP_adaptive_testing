@@ -11,9 +11,9 @@ from dataset import Dataset
 
 
 class TestHistory:
-    def __init__(self, init_model):
+    def __init__(self, curr_mdl):
         self.approval_times = [0]
-        self.approved_mdls = [init_model]
+        self.approved_mdls = [curr_mdl]
         self.curr_time = 0
         self.num_trains = [0]
 
@@ -46,64 +46,6 @@ class LockedModeler:
     def predict_prob(self, x):
         return self.modeler.predict_proba(x)[:, 1].reshape((-1, 1))
 
-
-class NelderMeadModeler(LockedModeler):
-    def __init__(self, min_var_idx: int = 1):
-        """
-        @param min_var_idx: nelder mead only tunes coefficients with idx at least min_var_idx
-        """
-        self.modeler = LogisticRegression(penalty="none", solver="lbfgs")
-        self.min_var_idx = min_var_idx
-
-    def do_minimize(self, dat, test_x, test_y, dp_engine, dat_stream=None, maxfev=10):
-        """
-        @param dat_stream: ignores this
-        """
-        self.modeler.fit(dat.x, dat.y.flatten())
-        self.modeler.coef_[0, self.min_var_idx :] = 0
-
-        # Just for initialization
-        def get_test_perf(params):
-            lr = sklearn.base.clone(self.modeler)
-            # print(params)
-            self.set_model(
-                lr,
-                np.concatenate(
-                    [
-                        self.modeler.intercept_,
-                        self.modeler.coef_.flatten()[: self.min_var_idx],
-                        params,
-                    ]
-                ),
-            )
-            pred_y = lr.predict_proba(test_x)[:, 1].reshape((-1, 1))
-            mtp_answer = dp_engine.get_test_eval(test_y, pred_y)
-            return mtp_answer
-
-        test_hist = TestHistory(self.modeler)
-        init_coef = np.concatenate([self.modeler.coef_.flatten()[self.min_var_idx :]])
-        # TODO: add callback to append to history
-        res = scipy.optimize.minimize(
-            get_test_perf,
-            x0=init_coef,
-            method="Nelder-Mead",
-            options={"maxfev": maxfev, "adaptive": True},
-        )
-        print(res.x)
-        self.set_model(
-            self.modeler,
-            np.concatenate(
-                [
-                    self.modeler.intercept_,
-                    self.modeler.coef_.flatten()[: self.min_var_idx],
-                    res.x,
-                ]
-            ),
-        )
-
-        return test_hist
-
-
 class CtsAdversaryModeler(LockedModeler):
     def __init__(
         self, preset_coef: float = 0, min_var_idx: int = 1, update_incr: float = 0.02
@@ -134,7 +76,7 @@ class CtsAdversaryModeler(LockedModeler):
             return mtp_answer
 
         # Now search in each direction and do a greedy search
-        test_hist = TestHistory(self.modeler)
+        test_hist = TestHistory(curr_mdl=self.modeler)
         curr_coef = np.concatenate(
             [self.modeler.intercept_, self.modeler.coef_.flatten()]
         )
@@ -225,12 +167,13 @@ class BinaryAdversaryModeler(LockedModeler):
         self.predef_modeler.coef_[0, self.min_var_idx :] = 0
 
         def get_test_perf(params, curr_time):
+            prev_pred_y = self.modeler.predict_proba(test_x)[:, 1].reshape((-1, 1))
             lr = sklearn.base.clone(self.modeler)
             self.set_model(lr, params)
             pred_y = lr.predict_proba(test_x)[:, 1].reshape((-1, 1))
 
             self.predef_modeler.coef_[0, :] = orig_coefs
-            self.predef_modeler.coef_[0, curr_time - 1 + self.min_var_idx] += (
+            self.predef_modeler.coef_[0, curr_time + self.min_var_idx] += (
                 self.update_dirs[0] * self.update_incr
             )
             print("PREFER", self.predef_modeler.coef_)
