@@ -14,7 +14,7 @@ class TestHistory:
     def __init__(self, init_model):
         self.approval_times = [0]
         self.approved_mdls = [init_model]
-        self.curr_time = 1
+        self.curr_time = 0
         self.num_trains = [0]
 
     def update(self, test_res, curr_mdl, num_train):
