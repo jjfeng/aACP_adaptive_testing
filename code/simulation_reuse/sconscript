@@ -73,6 +73,11 @@ nest.add(
         "graphical_parallel",
     ])
 
+nest.add(
+    'seed',
+    range(NUM_SEEDS),
+    label_func=lambda c: "seed_%d" % c)
+
 @nest.add_target_with_env(localenv)
 def create_dp(env, outdir, c):
     targets = [join(outdir, 'dp_mech.pkl')]
@@ -85,8 +90,7 @@ def create_dp(env, outdir, c):
         FWER,
         '--dp-mech',
         c['dp_mech'],
-	'--scratch',
-        scratch_file,
+	'--scratch %s' % scratch_file if "parallel" in c['dp_mech'] else '',
 	'--out ${TARGETS[0]}'
     ]
     return env.Command(
@@ -94,11 +98,6 @@ def create_dp(env, outdir, c):
             join(outdir, 'dp_mech.pkl')],
         [],
         ' '.join(map(str, cmd)))
-
-nest.add(
-    'seed',
-    range(NUM_SEEDS),
-    label_func=lambda c: "seed_%d" % c)
 
 @nest.add_target_with_env(localenv)
 def generate_data(env, outdir, c):
