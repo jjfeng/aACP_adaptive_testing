@@ -123,11 +123,11 @@ def main():
     test_auc_df = pd.DataFrame({"value": test_res.auc, "max_iter": max_iters})
     test_auc_df["dataset"] = "test"
     test_auc_df["measure"] = "auc"
-    train_num_df = pd.DataFrame({"value": full_hist.num_trains, "max_iter": max_iters})
-    train_num_df["dataset"] = "train"
-    train_num_df["measure"] = "num_train"
+    #train_num_df = pd.DataFrame({"value": full_hist.num_trains, "max_iter": max_iters})
+    #train_num_df["dataset"] = "train"
+    #train_num_df["measure"] = "num_train"
     df = pd.concat(
-        [reuse_nll_df, reuse_auc_df, count_df, approve_df, test_auc_df, test_nll_df, train_num_df]
+        [reuse_nll_df, reuse_auc_df, count_df, approve_df, test_auc_df, test_nll_df], #train_num_df]
     )
     df["dp"] = dp_mech.name
     print("results")

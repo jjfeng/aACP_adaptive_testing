@@ -5,7 +5,6 @@ import pandas as pd
 import scipy.optimize
 import sklearn.base
 from sklearn.linear_model import LinearRegression, LogisticRegression
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 
 from dataset import Dataset
 
@@ -36,9 +35,7 @@ class TestHistory:
 class LockedModeler:
     def __init__(self, model_type:str = "Logistic", seed:int = 0):
         if model_type == "Logistic":
-            self.modeler = LogisticRegression(penalty=None)
-        elif model_type == "RF":
-            self.modeler = RandomForestClassifier(n_estimators=300, n_jobs=None, random_state=seed)
+            self.modeler = LogisticRegression(penalty="none")
         else:
             raise NotImplementedError("model type missing")
 
@@ -319,8 +316,7 @@ class OnlineAdaptiveLearnerModeler(OnlineLearnerFixedModeler):
         test_hist = TestHistory(self.modeler)
         for i in range(maxfev):
             if read_side_batch:
-                print("READ SIDE BATCH")
-                batches_read = dat_stream[i : i + 1] + side_dat_stream[i: i + 1]
+                batches_read = side_dat_stream[i: i + 1]
             else:
                 batches_read = dat_stream[i : i + 1]
 
@@ -337,7 +333,7 @@ class OnlineAdaptiveLearnerModeler(OnlineLearnerFixedModeler):
             test_res = dp_engine.get_test_compare(
                 test_y, adapt_pred_y, prev_pred_y=prev_pred_y, predef_pred_y=predef_pred_y)
             # read side batch next iter if modification not approved
-            read_side_batch = (test_res == 0)
+            read_side_batch = not read_side_batch if (test_res == 0) else read_side_batch
 
             test_hist.update(test_res=test_res, proposed_mdl=adapt_lr, num_train=adapt_dat.size - dat.size)
         return test_hist
