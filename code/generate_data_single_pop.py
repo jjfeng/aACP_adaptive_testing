@@ -22,7 +22,7 @@ def parse_args():
     parser.add_argument("--init-sparse-beta", type=float, default=0.5)
     parser.add_argument("--perturb-beta", type=float, default=None)
     parser.add_argument("--init-reuse-test-n", type=int, default=300)
-    parser.add_argument("--init-train-n", type=int, default=1000)
+    parser.add_argument("--init-train-n", type=int, default=10)
     parser.add_argument("--train-batch-n", type=int, default=100)
     parser.add_argument("--train-iters", type=int, default=10)
     parser.add_argument("--test-n", type=int, default=2000)

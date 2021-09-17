@@ -17,8 +17,7 @@ from dp_mechanisms import *
 
 def parse_args():
     parser = argparse.ArgumentParser(description="create dp mechanism")
-    parser.add_argument("--dp-mech", type=str, default="no_dp")
-    # choices=["no_dp", "binary_thres_dp", "bonferroni", "graphical_bonf", "graphical_ffs", "graphical_similarity"])
+    parser.add_argument("--dp-mech", type=str, default="graphical_bonf")
     parser.add_argument(
         "--threshold",
         type=float,
@@ -31,7 +30,7 @@ def parse_args():
     parser.add_argument(
         "--success-weight", type=float, default=0.8, help="recycling factor"
     )
-    parser.add_argument("--alpha", type=float, default=0.05, help="ci alpha")
+    parser.add_argument("--alpha", type=float, default=0.1, help="ci alpha")
     parser.add_argument("--scratch-file", type=str, default="_output/scratch.txt")
     parser.add_argument("--out-file", type=str, default="_output/dp_mech.pkl")
     args = parser.parse_args()

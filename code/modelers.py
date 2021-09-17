@@ -168,7 +168,6 @@ class BinaryAdversaryModeler(LockedModeler):
         self.predef_modeler.coef_[0, self.min_var_idx :] = 0
 
         def get_test_perf(params, curr_time):
-            prev_pred_y = self.modeler.predict_proba(test_x)[:, 1].reshape((-1, 1))
             lr = sklearn.base.clone(self.modeler)
             self.set_model(lr, params)
             pred_y = lr.predict_proba(test_x)[:, 1].reshape((-1, 1))
@@ -177,7 +176,6 @@ class BinaryAdversaryModeler(LockedModeler):
             self.predef_modeler.coef_[0, curr_time + self.min_var_idx] += (
                 self.update_dirs[0] * self.update_incr
             )
-            print("PREFER", self.predef_modeler.coef_)
             predef_pred_y = self.predef_modeler.predict_proba(test_x)[:, 1].reshape(
                 (-1, 1)
             )
@@ -219,14 +217,12 @@ class BinaryAdversaryModeler(LockedModeler):
                     )
                     curr_coef[var_idx] += update_dir * self.update_incr * ctr
                     test_res, proposed_mdl = get_test_perf(curr_coef, test_hist.curr_time)
-                    print("perturb cont", var_idx, test_res)
                     test_hist.update(
                         test_res=test_res, proposed_mdl=proposed_mdl, num_train=0
                     )
                     if test_res == 1:
                         self.set_model(self.modeler, curr_coef)
                         ctr *= 2
-        print("coefs", self.modeler.coef_)
         return test_hist
 
 
@@ -293,12 +289,6 @@ class OnlineAdaptiveLearnerModeler(OnlineLearnerFixedModeler):
     If modification not approved, reads from the side data stream
     """
     predef_batches = 1
-
-    def is_good_approval_oracle(self, full_hist, test_scores):
-        test_nlls = test_scores.nll[full_hist.approval_times]
-        orig_nll = test_nlls[0]
-        approved_nlls = test_nlls[1:]
-        is_goodapproved_nlls < orig_nll
 
     def do_minimize(self, dat, test_x, test_y, dp_engine, dat_stream, maxfev=10, side_dat_stream=None):
         """
