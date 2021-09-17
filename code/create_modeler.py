@@ -17,7 +17,8 @@ from modelers import *
 def parse_args():
     parser = argparse.ArgumentParser(description="run simulation")
     parser.add_argument("--seed", type=int, default=0, help="seed")
-    parser.add_argument("--simulation", type=str, default="fixed")
+    parser.add_argument("--simulation", type=str)
+    parser.add_argument("--model-type", type=str, default="Logistic")
     parser.add_argument("--min-var-idx", type=int, default=0)
     parser.add_argument("--preset-coef", type=float, default=0)
     parser.add_argument("--out-file", type=str, default="_output/models.pkl")
@@ -37,9 +38,9 @@ def main():
             min_var_idx=args.min_var_idx, preset_coef=args.preset_coef
         )
     elif args.simulation == "online":
-        clf = OnlineAdaptiveLearnerModeler()
+        clf = OnlineAdaptiveLearnerModeler(args.model_type)
     elif args.simulation == "online_fixed":
-        clf = OnlineLearnerFixedModeler()
+        clf = OnlineLearnerFixedModeler(args.model_type)
 
     with open(args.out_file, "wb") as f:
         pickle.dump(clf, f)

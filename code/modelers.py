@@ -14,15 +14,18 @@ class TestHistory:
     def __init__(self, curr_mdl):
         self.approval_times = [0]
         self.approved_mdls = [deepcopy(curr_mdl)]
+        self.proposed_mdls = [deepcopy(curr_mdl)]
         self.curr_time = 0
         self.num_trains = [0]
 
-    def update(self, test_res, curr_mdl, num_train):
+    def update(self, test_res, proposed_mdl, num_train):
         self.curr_time += 1
+        proposed_mdl = deepcopy(proposed_mdl)
         if test_res == 1:
             self.approval_times.append(self.curr_time)
-            self.approved_mdls.append(deepcopy(curr_mdl))
+            self.approved_mdls.append(proposed_mdl)
 
+        self.proposed_mdls.append(proposed_mdl)
         self.num_trains.append(num_train)
 
     @property
@@ -31,12 +34,13 @@ class TestHistory:
 
 
 class LockedModeler:
-    """
-    Logistic reg only right now
-    """
-
-    def __init__(self):
-        self.modeler = LogisticRegression(penalty="none", solver="lbfgs")
+    def __init__(self, model_type:str = "Logistic", seed:int = 0):
+        if model_type == "Logistic":
+            self.modeler = LogisticRegression(penalty=None)
+        elif model_type == "RF":
+            self.modeler = RandomForestClassifier(n_estimators=300, n_jobs=None, random_state=seed)
+        else:
+            raise NotImplementedError("model type missing")
 
     def set_model(self, mdl, params):
         mdl.classes_ = np.array([0, 1])
@@ -58,7 +62,7 @@ class CtsAdversaryModeler(LockedModeler):
         self.min_var_idx = min_var_idx
         self.preset_coef = preset_coef
 
-    def do_minimize(self, dat, test_x, test_y, dp_engine, dat_stream=None, maxfev=10):
+    def do_minimize(self, dat, test_x, test_y, dp_engine, iid_dat_stream=None, maxfev=10, side_dat_stream=None):
         """
         @param dat_stream: ignores this
         """
@@ -73,14 +77,14 @@ class CtsAdversaryModeler(LockedModeler):
             self.set_model(lr, params)
             pred_y = lr.predict_proba(test_x)[:, 1].reshape((-1, 1))
             mtp_answer = dp_engine.get_test_eval(test_y, pred_y)
-            return mtp_answer
+            return mtp_answer, lr
 
         # Now search in each direction and do a greedy search
         test_hist = TestHistory(curr_mdl=self.modeler)
         curr_coef = np.concatenate(
             [self.modeler.intercept_, self.modeler.coef_.flatten()]
         )
-        curr_perf = get_test_perf(curr_coef)
+        curr_perf, _ = get_test_perf(curr_coef)
         while test_hist.curr_time < maxfev:
             # Test each variable (that's known to be irrelevant)
             for var_idx in range(1 + self.min_var_idx, 1 + test_x.shape[1]):
@@ -93,12 +97,12 @@ class CtsAdversaryModeler(LockedModeler):
                         [self.modeler.intercept_, self.modeler.coef_.flatten()]
                     )
                     curr_coef[var_idx] += update_dir * self.update_incr
-                    test_res = get_test_perf(curr_coef)
+                    test_res, proposed_mdl = get_test_perf(curr_coef)
                     print("preturb?", var_idx, curr_perf, test_res)
-                    test_hist.update(
-                        test_res=test_res < curr_perf, curr_mdl=self.modeler, num_train=0
-                    )
                     # print(test_res, curr_perf, var_idx, update_dir)
+                    test_hist.update(
+                        test_res=test_res < curr_perf, proposed_mdl=proposed_mdl, num_train=0
+                    )
                     if test_res < curr_perf:
                         is_success = True
                         self.set_model(self.modeler, curr_coef)
@@ -115,10 +119,10 @@ class CtsAdversaryModeler(LockedModeler):
                         [self.modeler.intercept_, self.modeler.coef_.flatten()]
                     )
                     curr_coef[var_idx] += update_dir * self.update_incr * ctr
-                    test_res = get_test_perf(curr_coef)
+                    test_res, proposed_mdl = get_test_perf(curr_coef)
                     print("preturb cont?", var_idx, curr_perf, test_res)
                     test_hist.update(
-                        test_res=test_res < curr_perf, curr_mdl=self.modeler, num_train=0
+                        test_res=test_res, curr_mdl=proposed_mdl, num_train=0
                     )
                     if test_res < curr_perf:
                         self.set_model(self.modeler, curr_coef)
@@ -146,7 +150,7 @@ class BinaryAdversaryModeler(LockedModeler):
         self.min_var_idx = min_var_idx
         self.preset_coef = preset_coef
 
-    def do_minimize(self, dat, test_x, test_y, dp_engine, dat_stream=None, maxfev=10):
+    def do_minimize(self, dat, test_x, test_y, dp_engine, dat_stream=None, maxfev=10, side_dat_stream=None):
         """
         @param dat_stream: ignores this
         """
@@ -184,7 +188,7 @@ class BinaryAdversaryModeler(LockedModeler):
             mtp_answer = dp_engine.get_test_compare(
                 test_y, pred_y, prev_pred_y, predef_pred_y=predef_pred_y
             )
-            return mtp_answer
+            return mtp_answer, lr
 
         # Now search in each direction and do a greedy search
         test_hist = TestHistory(self.modeler)
@@ -200,9 +204,11 @@ class BinaryAdversaryModeler(LockedModeler):
                     )
                     curr_coef[var_idx] += update_dir * self.update_incr
                     print("curr", curr_coef)
-                    test_res = get_test_perf(curr_coef, test_hist.curr_time)
+                    test_res, proposed_mdl = get_test_perf(curr_coef, test_hist.curr_time)
                     print("perturb?", test_hist.curr_time, var_idx, test_res)
-                    test_hist.update(test_res=test_res, curr_mdl=self.modeler, num_train=0)
+                    test_hist.update(
+                        test_res=test_res, proposed_mdl=proposed_mdl, num_train=0
+                    )
                     if test_res == 1:
                         self.set_model(self.modeler, curr_coef)
 
@@ -215,9 +221,11 @@ class BinaryAdversaryModeler(LockedModeler):
                         [self.modeler.intercept_, self.modeler.coef_.flatten()]
                     )
                     curr_coef[var_idx] += update_dir * self.update_incr * ctr
-                    test_res = get_test_perf(curr_coef, test_hist.curr_time)
+                    test_res, proposed_mdl = get_test_perf(curr_coef, test_hist.curr_time)
                     print("perturb cont", var_idx, test_res)
-                    test_hist.update(test_res=test_res, curr_mdl=self.modeler, num_train=0)
+                    test_hist.update(
+                        test_res=test_res, proposed_mdl=proposed_mdl, num_train=0
+                    )
                     if test_res == 1:
                         self.set_model(self.modeler, curr_coef)
                         ctr *= 2
@@ -231,7 +239,7 @@ class AdversarialModeler(LockedModeler):
         self.binary_modeler = BinaryAdversaryModeler(preset_coef, min_var_idx)
         self.modeler = self.cts_modeler.modeler
 
-    def do_minimize(self, dat, test_x, test_y, dp_engine, dat_stream=None, maxfev=10):
+    def do_minimize(self, dat, test_x, test_y, dp_engine, dat_stream=None, maxfev=10, side_dat_stream=None):
         """
         @param dat_stream: ignores this
 
@@ -239,12 +247,12 @@ class AdversarialModeler(LockedModeler):
         """
         if dp_engine.name == "no_dp":
             test_hist = self.cts_modeler.do_minimize(
-                dat, test_x, test_y, dp_engine, dat_stream, maxfev
+                dat, test_x, test_y, dp_engine, dat_stream, maxfev, side_dat_stream
             )
             self.modeler = self.cts_modeler.modeler
         else:
             test_hist = self.binary_modeler.do_minimize(
-                dat, test_x, test_y, dp_engine, dat_stream, maxfev
+                dat, test_x, test_y, dp_engine, dat_stream, maxfev, side_dat_stream
             )
             self.modeler = self.binary_modeler.modeler
         return test_hist
@@ -253,45 +261,9 @@ class AdversarialModeler(LockedModeler):
 class OnlineLearnerFixedModeler(LockedModeler):
     """
     Just do online learning on a separate dataset
-    only does logistic reg
     """
 
-    def do_minimize(self, dat, test_x, test_y, dp_engine, dat_stream, maxfev=10):
-        """
-        @param dat_stream: a list of datasets for further training the model
-        @return perf_value
-        """
-        self.modeler.fit(dat.x, dat.y.flatten())
-
-        merged_dat = dat
-        test_hist = TestHistory(self.modeler)
-        for i, batch_dat in enumerate(dat_stream[:maxfev]):
-            merged_dat = Dataset.merge([merged_dat, batch_dat])
-            lr = sklearn.base.clone(self.modeler)
-            lr.fit(merged_dat.x, merged_dat.y.flatten())
-
-            pred_y = lr.predict_proba(test_x)[:, 1].reshape((-1, 1))
-            test_res = dp_engine.get_test_eval(test_y, pred_y, predef_pred_y=pred_y)
-            if test_res == 1:
-                # replace current modeler only if successful
-                self.modeler = lr
-            test_hist.update(test_res=test_res, curr_mdl=self.modeler, num_train=merged_dat.size - dat.size)
-        return test_hist
-
-
-class OnlineAdaptiveLearnerModeler(OnlineLearnerFixedModeler):
-    """
-    Just do online learning on a separate dataset
-
-    This learner adapts the number of training batches it will read.
-    Collect more training data if the modification is not approved
-
-    only does logistic reg
-    """
-    max_batches = 5
-    predef_batches = 1
-
-    def do_minimize(self, dat, test_x, test_y, dp_engine, dat_stream, maxfev=10):
+    def do_minimize(self, dat, test_x, test_y, dp_engine, dat_stream, maxfev=10, side_dat_stream=None):
         """
         @param dat_stream: a list of datasets for further training the model
         @return perf_value
@@ -299,37 +271,73 @@ class OnlineAdaptiveLearnerModeler(OnlineLearnerFixedModeler):
         self.modeler.fit(dat.x, dat.y.flatten())
         prev_pred_y = self.modeler.predict_proba(test_x)[:, 1].reshape((-1, 1))
 
-        adapt_dat = dat
         predef_dat = dat
-        num_read_batches = 1
         curr_idx = 0
         test_hist = TestHistory(self.modeler)
         for i in range(maxfev):
-            batches_read = dat_stream[curr_idx : curr_idx + num_read_batches]
-            print(
-                "BATCHES READ", len(batches_read), i, curr_idx, curr_idx + num_read_batches
-            )
+
+            predef_dat = Dataset.merge([predef_dat] + dat_stream[i : i + 1])
+            predef_lr = sklearn.base.clone(self.modeler)
+            predef_lr.fit(predef_dat.x, predef_dat.y.flatten())
+            predef_pred_y = predef_lr.predict_proba(test_x)[:, 1].reshape((-1, 1))
+
+            test_res = dp_engine.get_test_compare(
+                test_y, predef_pred_y, prev_pred_y=prev_pred_y, predef_pred_y=predef_pred_y)
+
+            test_hist.update(test_res=test_res, proposed_mdl=predef_lr, num_train=predef_dat.size - dat.size)
+        return test_hist
+
+
+class OnlineAdaptiveLearnerModeler(OnlineLearnerFixedModeler):
+    """
+    Just do online learning on a separate dataset
+
+    This learner adapts by deciding whether or not to read from a side data stream
+    If modification not approved, reads from the side data stream
+    """
+    predef_batches = 1
+
+    def is_good_approval_oracle(self, full_hist, test_scores):
+        test_nlls = test_scores.nll[full_hist.approval_times]
+        orig_nll = test_nlls[0]
+        approved_nlls = test_nlls[1:]
+        is_goodapproved_nlls < orig_nll
+
+    def do_minimize(self, dat, test_x, test_y, dp_engine, dat_stream, maxfev=10, side_dat_stream=None):
+        """
+        @param dat_stream: a list of datasets for further training the model
+        @param side_dat_stream: a list of side datasets for further training the model (these datasets are not IID)
+        @return perf_value
+        """
+        self.modeler.fit(dat.x, dat.y.flatten())
+        prev_pred_y = self.modeler.predict_proba(test_x)[:, 1].reshape((-1, 1))
+
+        adapt_dat = dat
+        predef_dat = dat
+        read_side_batch = False
+        curr_idx = 0
+        test_hist = TestHistory(self.modeler)
+        for i in range(maxfev):
+            if read_side_batch:
+                print("READ SIDE BATCH")
+                batches_read = dat_stream[i : i + 1] + side_dat_stream[i: i + 1]
+            else:
+                batches_read = dat_stream[i : i + 1]
+
             adapt_dat = Dataset.merge([adapt_dat] + batches_read)
-            curr_idx += num_read_batches
             adapt_lr = sklearn.base.clone(self.modeler)
             adapt_lr.fit(adapt_dat.x, adapt_dat.y.flatten())
             adapt_pred_y = adapt_lr.predict_proba(test_x)[:, 1].reshape((-1, 1))
 
-            predef_dat = Dataset.merge([predef_dat] + dat_stream[i : i + self.predef_batches])
+            predef_dat = Dataset.merge([predef_dat] + dat_stream[i : i + 1])
             predef_lr = sklearn.base.clone(self.modeler)
             predef_lr.fit(predef_dat.x, predef_dat.y.flatten())
             predef_pred_y = predef_lr.predict_proba(test_x)[:, 1].reshape((-1, 1))
 
             test_res = dp_engine.get_test_compare(
                 test_y, adapt_pred_y, prev_pred_y=prev_pred_y, predef_pred_y=predef_pred_y)
-            if test_res == 1:
-                # replace current modeler only if successful
-                self.modeler = adapt_lr
-                num_read_batches = max(num_read_batches - 1, self.predef_batches)
-            else:
-                # read more batches if failed
-                print("ADAPT", num_read_batches)
-                num_read_batches = min(1 + num_read_batches, self.max_batches)
+            # read side batch next iter if modification not approved
+            read_side_batch = (test_res == 0)
 
-            test_hist.update(test_res=test_res, curr_mdl=self.modeler, num_train=adapt_dat.size - dat.size)
+            test_hist.update(test_res=test_res, proposed_mdl=adapt_lr, num_train=adapt_dat.size - dat.size)
         return test_hist

@@ -42,8 +42,6 @@ def get_nll(test_y, pred_y):
 
 def get_all_scores(test_hist, test_dat, max_iter):
     last_approve_time = 0
-    print(test_hist.approval_times)
-    print(test_hist.approved_mdls)
     scores = []
     for approve_idx, (mdl, time_idx) in enumerate(
         zip(test_hist.approved_mdls, test_hist.approval_times)
@@ -69,7 +67,6 @@ def main():
         format="%(message)s", filename=args.log_file, level=logging.INFO
     )
     # parameters
-    np.random.seed(args.seed)
     logging.info(args)
 
     with open(args.data_file, "rb") as f:
@@ -82,6 +79,8 @@ def main():
     with open(args.model_file, "rb") as f:
         modeler = pickle.load(f)
 
+    np.random.seed(args.seed)
+
     # Run simulation
     dp_mech.set_num_queries(args.max_iter)
     full_hist = modeler.do_minimize(
@@ -89,8 +88,9 @@ def main():
         data.reuse_test_dat.x,
         data.reuse_test_dat.y,
         dp_mech,
-        dat_stream=data.train_dat_stream,
+        dat_stream=data.iid_train_dat_stream,
         maxfev=args.max_iter,
+        side_dat_stream=data.side_train_dat_stream,
     )
     print("APPROVAL", full_hist.approval_times)
 

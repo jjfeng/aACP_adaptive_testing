@@ -406,7 +406,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
 
         # Create parallel sequence
         self.parallel_tree = Node(
-            1 / num_adapt_queries * self.parallel_ratio,
+            0.25 * self.parallel_ratio,
             success_edge=1,
             history=[],
             subfam_root=None,
@@ -416,7 +416,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
         curr_par_node = self.parallel_tree
         for i in range(1, num_adapt_queries + 1):
             weight = (
-                1/num_adapt_queries * self.parallel_ratio
+                0.75/num_adapt_queries * self.parallel_ratio
                 if i < num_adapt_queries
                 else 0
             )

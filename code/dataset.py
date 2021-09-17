@@ -1,4 +1,5 @@
 import logging
+from typing import List
 
 import scipy.stats
 import numpy as np
@@ -10,32 +11,6 @@ from constants import SIM_SETTINGS
 def make_safe_prob(p, eps=1e-10):
     return np.maximum(eps, np.minimum(1 - eps, p))
 
-
-class FullDataset:
-    def __init__(
-        self,
-        init_train_dat,
-        train_dat_stream,
-        reuse_test_dat,
-        test_dat,
-        timestamps=None,
-    ):
-        self.init_train_dat = init_train_dat
-        self.train_dat_stream = train_dat_stream
-        self.reuse_test_dat = reuse_test_dat
-        self.timestamps = timestamps
-        self.test_dat = test_dat
-
-    def get_timestamp(self, t_idx: int):
-        if self.timestamps is not None:
-            return self.timestamps[t_idx]
-        else:
-            return t_idx
-
-    def get_accum_dat(self, t_idx: int):
-        x = self.reuse_test_dat.x[: t_idx + 1]
-        y = self.reuse_test_dat.y[: t_idx + 1]
-        return x, y
 
 
 class Dataset:
@@ -96,40 +71,65 @@ class Dataset:
             else None,
         )
 
+class FullDataset:
+    def __init__(
+        self,
+        init_train_dat,
+        iid_train_dat_stream,
+        reuse_test_dat,
+        test_dat,
+        side_train_dat_stream: List[Dataset] = None
+    ):
+        self.init_train_dat = init_train_dat
+        self.iid_train_dat_stream = iid_train_dat_stream
+        self.side_train_dat_stream = side_train_dat_stream
+        self.reuse_test_dat = reuse_test_dat
+        self.test_dat = test_dat
+
 
 class DataGenerator:
-    def __init__(self, init_beta: np.ndarray, mean_x: np.ndarray):
-        self.init_beta = init_beta
-        logging.info("init beta %s", init_beta.ravel())
-        self.p = init_beta.size
+    def __init__(self, beta: np.ndarray, mean_x: np.ndarray, perturb_beta: np.ndarray = None):
+        self.beta = beta
+        self.perturb_beta = perturb_beta
+        logging.info("init beta %s", beta.ravel())
+        self.p = beta.size
         self.mean_x = mean_x
 
     def generate_data(
         self,
         init_train_n,
-        train_stream_n,
+        train_iid_stream_n,
         train_iters,
         init_reuse_test_n,
         test_n: int,
-        seed: int = 0,
-        train_batch_incr_factor: int = 1,
+        train_side_stream_n: int = 0,
     ):
-        test_dat = self.make_data(test_n, self.init_beta)
-        reuse_test_dat = self.make_data(init_reuse_test_n, self.init_beta)
+        test_dat = self.make_data(test_n, self.beta)
+        reuse_test_dat = self.make_data(init_reuse_test_n, self.beta)
 
-        np.random.seed(seed)
-        init_train_dat = self.make_data(init_train_n, self.init_beta)
-        train_dats = [
+        init_train_dat = self.make_data(init_train_n, self.beta)
+        iid_train_dats = [
             self.make_data(
-                int(train_stream_n * np.power(train_batch_incr_factor, i)),
-                self.init_beta,
+                train_iid_stream_n,
+                self.beta,
             )
             for i in range(train_iters)
         ]
+        if self.perturb_beta is not None:
+            print("PERTURB", self.perturb_beta)
+            side_train_dats = [
+                self.make_data(
+                    train_side_stream_n,
+                    self.perturb_beta,
+                )
+                for i in range(train_iters)
+            ]
+        else:
+            side_train_dats = None
 
-        full_dat = FullDataset(init_train_dat, train_dats, reuse_test_dat, test_dat)
+        full_dat = FullDataset(init_train_dat, iid_train_dats, reuse_test_dat, test_dat, side_train_dat_stream=side_train_dats)
 
-        return full_dat, [self.init_beta]
+        return full_dat, [self.beta, self.perturb_beta]
 
     def make_data(self, n, beta):
         p = beta.size

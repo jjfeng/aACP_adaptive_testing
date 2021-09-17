@@ -12,8 +12,9 @@ localenv = env.Clone()
 nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 RUN_STATUS = localenv['clusters']
+# I've run 50 seeds so far
 NUM_SEEDS = localenv['num_seeds']
-REUSE_ITERS = 6
+REUSE_ITERS = 40
 SPARSE_P = 1
 SPARSE_COEF_VAL = 1.5
 FWER = 0.1
@@ -155,8 +156,8 @@ def summarize(env, outdir, c):
 	'dataset,measure,dp',
 	'--pivot-cols',
 	'max_iter',
-	#'--id-filter',
-	#REUSE_ITERS,
+	'--id-filter',
+	REUSE_ITERS,
 	'--results',
         ",".join(["simulation_adversary/%s" % r for r in c['summary_res']]),
 	'--out-csv ${TARGETS[0]}',
