@@ -91,7 +91,8 @@ def create_dp(env, outdir, c):
 def generate_data(env, outdir, c):
     cmd = [
         'python generate_data_single_pop.py',
-        '--meta-seed',
+        '--meta-seed 0',
+        '--data-seed',
         c['seed'],
         '--sparse',
         SPARSE_P,

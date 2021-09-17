@@ -5,8 +5,6 @@ import scipy.stats
 import numpy as np
 import pandas as pd
 
-from constants import SIM_SETTINGS
-
 
 def make_safe_prob(p, eps=1e-10):
     return np.maximum(eps, np.minimum(1 - eps, p))
