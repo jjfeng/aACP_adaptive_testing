@@ -6,6 +6,7 @@ import numpy as np
 from scipy.stats import norm, multivariate_normal
 import scipy.optimize
 
+from constants import RSCRIPT_PATH
 
 def get_losses(test_y, pred_y):
     test_y = test_y.flatten()
@@ -290,7 +291,7 @@ class GraphicalFFSDP(GraphicalBonfDP):
             np.savetxt(self.scratch_file, est_cov, delimiter=",")
             cmd = [
                 "Rscript",
-                "R/pmvnorm.R",
+                RSCRIPT_PATH,
                 self.scratch_file,
                 str(alpha_level),
             ] + list(map(str, prior_thres))

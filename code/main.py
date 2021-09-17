@@ -40,7 +40,7 @@ def get_nll(test_y, pred_y):
     return -np.mean(test_y * np.log(pred_y) + (1 - test_y) * np.log(1 - pred_y))
 
 
-def get_all_scores(test_hist, test_dat, max_iter):
+def get_deployed_scores(test_hist, test_dat, max_iter):
     last_approve_time = 0
     scores = []
     for approve_idx, (mdl, time_idx) in enumerate(
@@ -60,6 +60,25 @@ def get_all_scores(test_hist, test_dat, max_iter):
     print(scores)
     return scores
 
+def get_good_modifications(test_hist, test_dat, max_iter):
+    last_approve_time = 0
+    scores = []
+    for approve_idx, (mdl, time_idx) in enumerate(
+        zip(test_hist.approved_mdls, test_hist.approval_times)
+    ):
+        pred_y = mdl.predict_proba(test_dat.x)[:, 1].reshape((-1, 1))
+        auc = roc_auc_score(test_dat.y, pred_y)
+        nll = get_nll(test_dat.y, pred_y)
+        next_approve_time = (
+            test_hist.approval_times[approve_idx + 1]
+            if test_hist.tot_approves > (approve_idx + 1)
+            else max_iter + 1
+        )
+        for idx in range(time_idx, next_approve_time):
+            scores.append({"auc": auc, "nll": nll, "time": idx})
+    scores = pd.DataFrame(scores)
+    print(scores)
+    return scores
 
 def main():
     args = parse_args()
@@ -94,8 +113,8 @@ def main():
     )
     print("APPROVAL", full_hist.approval_times)
 
-    reuse_res = get_all_scores(full_hist, data.reuse_test_dat, args.max_iter)
-    test_res = get_all_scores(full_hist, data.test_dat, args.max_iter)
+    reuse_res = get_deployed_scores(full_hist, data.reuse_test_dat, args.max_iter)
+    test_res = get_deployed_scores(full_hist, data.test_dat, args.max_iter)
     num_approvals = np.array(
         [
             np.sum(np.array(full_hist.approval_times) <= i) - 1
@@ -123,11 +142,8 @@ def main():
     test_auc_df = pd.DataFrame({"value": test_res.auc, "max_iter": max_iters})
     test_auc_df["dataset"] = "test"
     test_auc_df["measure"] = "auc"
-    #train_num_df = pd.DataFrame({"value": full_hist.num_trains, "max_iter": max_iters})
-    #train_num_df["dataset"] = "train"
-    #train_num_df["measure"] = "num_train"
     df = pd.concat(
-        [reuse_nll_df, reuse_auc_df, count_df, approve_df, test_auc_df, test_nll_df], #train_num_df]
+        [reuse_nll_df, reuse_auc_df, count_df, approve_df, test_auc_df, test_nll_df],
     )
     df["dp"] = dp_mech.name
     print("results")
