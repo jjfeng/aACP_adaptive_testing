@@ -38,11 +38,11 @@ def main():
     all_res = pd.concat(all_res)
 
     # Rename all the things for prettier figures
-    measure_dict = {'nll': 'NLL', 'auc': 'AUC', 'num_approvals': 'num_approvals'}
+    measure_dict = {'nll': 'NLL', 'auc': 'AUC', 'num_approvals': 'num_approvals'} #, 'did_approval': 'did_approval'}
     data_dict = {'test':'Test', 'reuse_test': 'Reusable Test'}
     mtp_dict = {
             'binary_thres': 'BinaryThres',
-            'graphical_bonf': 'bonfSRGP',
+            'graphical_bonf_thres': 'bonfSRGP',
             'graphical_ffs': 'fsSRGP',
             'graphical_par': "presSRGP"}
     all_res = all_res.rename({
@@ -63,12 +63,16 @@ def main():
         row="Dataset",
         col="Measure",
         kind="line",
+        style="Procedure",
         facet_kws={"sharey": False, "sharex": True},
     )
     rel_plt.set_titles('{row_name}' ' | ' '{col_name}')
     print(rel_plt.axes_dict.keys())
     plt.delaxes(rel_plt.axes_dict[('Reusable Test', 'num_approvals')])
-    rel_plt.axes_dict[('Test', 'num_approvals')].set_title("Number of approvals")
+    num_approve_ax = rel_plt.axes_dict[('Test', 'num_approvals')]
+    num_approve_ax.axhline(y=0.1, color='dimgray', linestyle='--')
+    num_approve_ax.set_title("Number of approvals")
+    num_approve_ax.set_yscale('log')
     plt.savefig(args.plot_file)
     print("Fig", args.plot_file)
 
