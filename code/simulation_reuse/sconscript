@@ -55,17 +55,18 @@ nest.add(
 nest.add(
     'model_type',
     [
-        "Logistic",
+        #"Logistic",
 	# NOTE: turns out there is too much stochasticity in the normal sklearn
         # tree model implementations that adding a single observation changes the models
         # drastically, which makes them unsuitable for graphical_par
+        "GBT",
     ])
 
 nest.add(
     'model_sim',
     [
         "online",
-        "online_bad",
+        #"online_bad",
     ])
 
 @nest.add_target_with_env(localenv)

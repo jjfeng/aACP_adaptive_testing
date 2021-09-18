@@ -5,6 +5,7 @@ import pandas as pd
 import scipy.optimize
 import sklearn.base
 from sklearn.linear_model import LinearRegression, LogisticRegression
+from sklearn.ensemble import GradientBoostingClassifier
 
 from dataset import Dataset
 
@@ -36,6 +37,8 @@ class LockedModeler:
     def __init__(self, model_type:str = "Logistic", seed:int = 0):
         if model_type == "Logistic":
             self.modeler = LogisticRegression(penalty="none")
+        elif model_type == "GBT":
+            self.modeler = GradientBoostingClassifier()
         else:
             raise NotImplementedError("model type missing")
 
