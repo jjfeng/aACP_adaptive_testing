@@ -289,6 +289,12 @@ class OnlineAdaptiveLearnerModeler(OnlineLearnerFixedModeler):
     If modification not approved, reads from the side data stream
     """
     predef_batches = 1
+    def __init__(self, model_type: str, start_side_batch: int = 0):
+        """
+        @param start_side_batch: whether to start with reading the side data stream
+        """
+        super(OnlineAdaptiveLearnerModeler,self).__init__(model_type)
+        self.start_side_batch = start_side_batch
 
     def do_minimize(self, dat, test_x, test_y, dp_engine, dat_stream, maxfev=10, side_dat_stream=None):
         """
@@ -301,7 +307,7 @@ class OnlineAdaptiveLearnerModeler(OnlineLearnerFixedModeler):
 
         adapt_dat = dat
         predef_dat = dat
-        read_side_batch = False
+        read_side_batch = self.start_side_batch
         curr_idx = 0
         test_hist = TestHistory(self.modeler)
         for i in range(maxfev):

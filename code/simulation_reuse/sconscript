@@ -34,6 +34,20 @@ nest.add(
     label_func=lambda c: "fwer_%.3f" % c)
 
 nest.add(
+    'init_train_n',
+    [
+         80,
+    ],
+    label_func=lambda c: "train_%d" % c)
+
+nest.add(
+    'train_batch_n',
+    [
+         20,
+    ],
+    label_func=lambda c: "batch_%d" % c)
+
+nest.add(
     'reuse_test_n',
     [200],
     label_func=lambda c: "test_%d" % c)
@@ -50,7 +64,8 @@ nest.add(
 nest.add(
     'model_sim',
     [
-        "online",
+        #"online",
+        "online_bad",
         #"online_fixed",
     ])
 
@@ -98,8 +113,10 @@ def generate_data(env, outdir, c):
         c['num_p'],
         '--p',
         c['num_p'],
-        '--init-train-n 80',
-        '--train-batch-n 20',
+        '--init-train-n',
+        c['init_train_n'],
+        '--train-batch-n',
+        c['train_batch_n'],
         '--train-iters',
         REUSE_ITERS,
         '--init-reuse-test-n',
@@ -122,10 +139,7 @@ def generate_data(env, outdir, c):
 nest.add(
     'dp_mech',
     [
-        #"no_dp",
-        #"binary_thres_dp",
         "bonferroni",
-        #"bonferroni_nonadapt",
         "graphical_bonf",
         "graphical_ffs",
         "graphical_parallel",

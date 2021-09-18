@@ -38,7 +38,9 @@ def main():
             min_var_idx=args.min_var_idx, preset_coef=args.preset_coef
         )
     elif args.simulation == "online":
-        clf = OnlineAdaptiveLearnerModeler(args.model_type)
+        clf = OnlineAdaptiveLearnerModeler(args.model_type, start_side_batch=False)
+    elif args.simulation == "online_bad":
+        clf = OnlineAdaptiveLearnerModeler(args.model_type, start_side_batch=True)
     elif args.simulation == "online_fixed":
         clf = OnlineLearnerFixedModeler(args.model_type)
     else:
