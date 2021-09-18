@@ -140,35 +140,35 @@ def main():
     )
 
     # Compile results
-    max_iters = np.arange(args.max_iter + 1)
-    reuse_nll_df = pd.DataFrame({"value": reuse_res.nll, "max_iter": max_iters})
+    iterations = np.arange(args.max_iter + 1)
+    reuse_nll_df = pd.DataFrame({"value": reuse_res.nll, "iteration": iterations})
     reuse_nll_df["dataset"] = "reuse_test"
     reuse_nll_df["measure"] = "nll"
-    reuse_auc_df = pd.DataFrame({"value": reuse_res.auc, "max_iter": max_iters})
+    reuse_auc_df = pd.DataFrame({"value": reuse_res.auc, "iteration": iterations})
     reuse_auc_df["dataset"] = "reuse_test"
     reuse_auc_df["measure"] = "auc"
-    bad_prop_df = pd.DataFrame({"value": bad_prop_approvals, "max_iter": max_iters})
+    bad_prop_df = pd.DataFrame({"value": bad_prop_approvals, "iteration": iterations})
     bad_prop_df["dataset"] = "test"
     bad_prop_df["measure"] = "bad_prop"
-    good_prop_df = pd.DataFrame({"value": good_prop_approvals, "max_iter": max_iters})
+    good_prop_df = pd.DataFrame({"value": good_prop_approvals, "iteration": iterations})
     good_prop_df["dataset"] = "test"
     good_prop_df["measure"] = "good_prop"
-    count_df = pd.DataFrame({"value": num_approvals, "max_iter": max_iters})
+    count_df = pd.DataFrame({"value": num_approvals, "iteration": iterations})
     count_df["dataset"] = "test"
     count_df["measure"] = "num_approvals"
-    approve_df = pd.DataFrame({"value": num_approvals > 0, "max_iter": max_iters})
+    approve_df = pd.DataFrame({"value": num_approvals > 0, "iteration": iterations})
     approve_df["dataset"] = "test"
     approve_df["measure"] = "did_approval"
-    test_nll_df = pd.DataFrame({"value": test_res.nll, "max_iter": max_iters})
+    test_nll_df = pd.DataFrame({"value": test_res.nll, "iteration": iterations})
     test_nll_df["dataset"] = "test"
     test_nll_df["measure"] = "nll"
-    test_auc_df = pd.DataFrame({"value": test_res.auc, "max_iter": max_iters})
+    test_auc_df = pd.DataFrame({"value": test_res.auc, "iteration": iterations})
     test_auc_df["dataset"] = "test"
     test_auc_df["measure"] = "auc"
     df = pd.concat(
         [reuse_nll_df, reuse_auc_df, count_df, approve_df, test_auc_df, test_nll_df, good_prop_df, bad_prop_df, count_df],
     )
-    df["dp"] = dp_mech.name
+    df["procedure"] = dp_mech.name
     print("results")
     print(df)
 
@@ -178,7 +178,7 @@ def main():
         sns.set_context("paper", font_scale=2)
         rel_plt = sns.relplot(
             data=df,
-            x="max_iter",
+            x="iteration",
             y="value",
             hue="dataset",
             col="measure",
