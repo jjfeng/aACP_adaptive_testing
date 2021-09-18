@@ -63,7 +63,7 @@ def get_deployed_scores(test_hist, test_dat, max_iter):
     print(scores)
     return scores
 
-def get_good_bad_proportion_approved(test_hist, test_dat, max_iter):
+def get_good_bad_approved(test_hist, test_dat, max_iter):
     """
     @return tuple with good and bad proportions approved
     """
@@ -73,8 +73,8 @@ def get_good_bad_proportion_approved(test_hist, test_dat, max_iter):
     approval_idxs = np.array(test_hist.approval_times[1:])
 
     is_good_list = np.array([], dtype=bool)
-    good_proportion_approved = [0]
-    bad_proportion_approved = [0]
+    good_approved = [0]
+    bad_approved = [0]
     for idx, mdl in enumerate(test_hist.proposed_mdls[1:]):
         time_idx = idx + 1
         pred_y = mdl.predict_proba(test_dat.x)[:, 1].reshape((-1, 1))
@@ -91,10 +91,10 @@ def get_good_bad_proportion_approved(test_hist, test_dat, max_iter):
             num_bad_approved = 0
         num_good = np.sum(is_good_list)
         num_bad = np.sum(is_bad_list)
-        good_proportion_approved.append(num_good_approved/num_good if num_good > 0 else 0)
-        bad_proportion_approved.append(num_bad_approved/num_bad if num_bad > 0 else 0)
+        good_approved.append(num_good_approved if num_good > 0 else 0)
+        bad_approved.append(num_bad_approved if num_bad > 0 else 0)
 
-    return np.array(good_proportion_approved), np.array(bad_proportion_approved)
+    return np.array(good_approved), np.array(bad_approved)
 
 def main():
     args = parse_args()
@@ -131,7 +131,7 @@ def main():
 
     reuse_res = get_deployed_scores(full_hist, data.reuse_test_dat, args.max_iter)
     test_res = get_deployed_scores(full_hist, data.test_dat, args.max_iter)
-    good_prop_approvals, bad_prop_approvals = get_good_bad_proportion_approved(full_hist, data.test_dat, args.max_iter)
+    good_approvals, bad_approvals = get_good_bad_approved(full_hist, data.test_dat, args.max_iter)
     num_approvals = np.array(
         [
             np.sum(np.array(full_hist.approval_times) <= i) - 1
@@ -147,12 +147,12 @@ def main():
     reuse_auc_df = pd.DataFrame({"value": reuse_res.auc, "iteration": iterations})
     reuse_auc_df["dataset"] = "reuse_test"
     reuse_auc_df["measure"] = "auc"
-    bad_prop_df = pd.DataFrame({"value": bad_prop_approvals, "iteration": iterations})
-    bad_prop_df["dataset"] = "test"
-    bad_prop_df["measure"] = "bad_prop"
-    good_prop_df = pd.DataFrame({"value": good_prop_approvals, "iteration": iterations})
-    good_prop_df["dataset"] = "test"
-    good_prop_df["measure"] = "good_prop"
+    bad_df = pd.DataFrame({"value": bad_approvals, "iteration": iterations})
+    bad_df["dataset"] = "test"
+    bad_df["measure"] = "bad_approvals"
+    good_df = pd.DataFrame({"value": good_approvals, "iteration": iterations})
+    good_df["dataset"] = "test"
+    good_df["measure"] = "good_approvals"
     count_df = pd.DataFrame({"value": num_approvals, "iteration": iterations})
     count_df["dataset"] = "test"
     count_df["measure"] = "num_approvals"
@@ -166,7 +166,7 @@ def main():
     test_auc_df["dataset"] = "test"
     test_auc_df["measure"] = "auc"
     df = pd.concat(
-        [reuse_nll_df, reuse_auc_df, count_df, approve_df, test_auc_df, test_nll_df, good_prop_df, bad_prop_df, count_df],
+        [reuse_nll_df, reuse_auc_df, count_df, approve_df, test_auc_df, test_nll_df, good_df, bad_df, count_df],
     )
     df["procedure"] = dp_mech.name
     print("results")

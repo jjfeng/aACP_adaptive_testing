@@ -64,9 +64,8 @@ nest.add(
 nest.add(
     'model_sim',
     [
-        #"online",
+        "online",
         "online_bad",
-        #"online_fixed",
     ])
 
 @nest.add_target_with_env(localenv)

@@ -38,7 +38,7 @@ def main():
     all_res = pd.concat(all_res)
 
     # Rename all the things for prettier figures
-    measure_dict = {'nll': 'NLL', 'auc': 'AUC', 'num_approvals': 'num_approvals'} #, 'did_approval': 'did_approval'}
+    measure_dict = {'nll': 'NLL', 'auc': 'AUC', 'num_approvals': 'num_approvals'}
     data_dict = {'test':'Test', 'reuse_test': 'Reusable Test'}
     mtp_dict = {
             'binary_thres': 'BinaryThres',
@@ -54,7 +54,7 @@ def main():
     all_res["Dataset"] = all_res.dataset.map(data_dict)
     print(all_res)
 
-    sns.set_context("paper", font_scale=1.5)
+    sns.set_context("paper", font_scale=2)
     rel_plt = sns.relplot(
         data=all_res[all_res.measure.isin(list(measure_dict.keys()))],
         x="Iteration",
