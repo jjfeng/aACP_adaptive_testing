@@ -31,6 +31,7 @@ def parse_args():
         "--success-weight", type=float, default=0.8, help="recycling factor"
     )
     parser.add_argument("--alpha", type=float, default=0.1, help="ci alpha")
+    parser.add_argument("--first-pres-weight", type=float, default=0.1, help="weight for first prespecified node versus other prespecified nodes")
     parser.add_argument("--scratch-file", type=str, default="_output/scratch.txt")
     parser.add_argument("--out-file", type=str, default="_output/dp_mech.pkl")
     args = parser.parse_args()
@@ -58,6 +59,7 @@ def main():
             args.threshold,
             args.alpha,
             success_weight=args.success_weight,
+            first_pres_weight=args.first_pres_weight,
             parallel_ratio=args.parallel_ratio,
             scratch_file=args.scratch_file,
         )

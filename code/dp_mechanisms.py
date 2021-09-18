@@ -356,6 +356,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
         alpha,
         success_weight,
         parallel_ratio: float = 0.9,
+        first_pres_weight: float = 0.5,
         alpha_alloc_max_depth: int = 0,
         scratch_file: str = None,
     ):
@@ -363,6 +364,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
         self.alpha = alpha
         self.success_weight = success_weight
         self.parallel_ratio = parallel_ratio
+        self.first_pres_weight = first_pres_weight
         self.alpha_alloc_max_depth = alpha_alloc_max_depth
         self.scratch_file = scratch_file
 
@@ -407,7 +409,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
 
         # Create parallel sequence
         self.parallel_tree = Node(
-            0.25 * self.parallel_ratio,
+            self.first_pres_weight * self.parallel_ratio,
             success_edge=1,
             history=[],
             subfam_root=None,
@@ -417,7 +419,7 @@ class GraphicalParallelDP(GraphicalFFSDP):
         curr_par_node = self.parallel_tree
         for i in range(1, num_adapt_queries + 1):
             weight = (
-                0.75/num_adapt_queries * self.parallel_ratio
+                (1 - self.first_pres_weight)/num_adapt_queries * self.parallel_ratio
                 if i < num_adapt_queries
                 else 0
             )

@@ -35,7 +35,7 @@ nest.add(
 
 nest.add(
     'reuse_test_n',
-    [400],
+    [200],
     label_func=lambda c: "test_%d" % c)
 
 nest.add(
@@ -134,11 +134,12 @@ nest.add(
 def create_dp(env, outdir, c):
     targets = [join(outdir, 'dp_mech.pkl')]
     scratch_file = join("simulation_reuse", outdir, "scratch.txt")
-    success_ratio = 0.8 if "parallel" in c['dp_mech'] else 0.8
+    success_ratio = 0.6 if "parallel" in c['dp_mech'] else 0.8
 
     cmd = [
         'python create_dp_mechanism.py',
-        '--parallel-ratio 0.9' if "parallel" in c['dp_mech'] else '',
+        '--parallel-ratio 0.7' if "parallel" in c['dp_mech'] else '',
+        '--first-pres-weight 0.5' if "parallel" in c['dp_mech'] else '',
         '--success-weight %f' % success_ratio if "graphical" in c['dp_mech'] else '',
         '--alpha',
         c['fwer'],
