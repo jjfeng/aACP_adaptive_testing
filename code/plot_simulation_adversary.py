@@ -4,7 +4,6 @@
 import sys, os
 import argparse
 import pickle
-import logging
 
 import numpy as np
 import pandas as pd
@@ -24,8 +23,6 @@ def parse_args():
 
 def main():
     args = parse_args()
-    logging.info(args)
-    logging.info("Number of replicates: %d", len(args.results))
 
     all_res = []
     for idx, res_file in enumerate(args.results):
@@ -35,16 +32,18 @@ def main():
         else:
             print("file missing", res_file)
     num_replicates = len(all_res)
+    print("Number of replicates:", num_replicates)
     all_res = pd.concat(all_res)
 
     # Rename all the things for prettier figures
-    measure_dict = {'nll': 'NLL', 'auc': 'AUC', 'num_approvals': 'num_approvals'}
+    measure_dict = {'nll': 'NLL', 'auc': 'AUC', 'did_approval': 'did_approval'}
     data_dict = {'test':'Test', 'reuse_test': 'Reusable Test'}
     mtp_dict = {
             'binary_thres': 'BinaryThres',
             'graphical_bonf_thres': 'bonfSRGP',
             'graphical_ffs': 'fsSRGP',
-            'graphical_par': "presSRGP"}
+            'graphical_par': "presSRGP"
+            }
     all_res = all_res.rename({
         "value": "Value",
         "max_iter": "Iteration",
@@ -52,9 +51,9 @@ def main():
     all_res["Measure"] = all_res.measure.map(measure_dict)
     all_res["Procedure"] = all_res.dp.map(mtp_dict)
     all_res["Dataset"] = all_res.dataset.map(data_dict)
-    print(all_res)
+    print("ALL RES", all_res.shape)
 
-    sns.set_context("paper", font_scale=2)
+    sns.set_context("paper", font_scale=2.5)
     rel_plt = sns.relplot(
         data=all_res[all_res.measure.isin(list(measure_dict.keys()))],
         x="Iteration",
@@ -68,11 +67,11 @@ def main():
     )
     rel_plt.set_titles('{row_name}' ' | ' '{col_name}')
     print(rel_plt.axes_dict.keys())
-    plt.delaxes(rel_plt.axes_dict[('Reusable Test', 'num_approvals')])
-    num_approve_ax = rel_plt.axes_dict[('Test', 'num_approvals')]
+    plt.delaxes(rel_plt.axes_dict[('Reusable Test', 'did_approval')])
+    num_approve_ax = rel_plt.axes_dict[('Test', 'did_approval')]
     num_approve_ax.axhline(y=0.1, color='dimgray', linestyle='--')
-    num_approve_ax.set_title("Number of approvals")
-    num_approve_ax.set_yscale('log')
+    num_approve_ax.set_title("Error rate")
+    num_approve_ax.set_ylim(-0.05,1)
     plt.savefig(args.plot_file)
     print("Fig", args.plot_file)
 

@@ -55,7 +55,7 @@ nest.add(
 nest.add(
     'model_type',
     [
-        #"Logistic",
+        "Logistic",
 	# NOTE: turns out there is too much stochasticity in the normal sklearn
         # tree model implementations that adding a single observation changes the models
         # drastically, which makes them unsuitable for graphical_par
