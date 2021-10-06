@@ -38,7 +38,9 @@ def main():
     all_res = pd.concat(all_res)
 
     # Rename all the things for prettier figures
-    measure_dict = {'nll': 'NLL', 'auc': 'AUC', 'good_approvals': 'Number of good approvals',
+    measure_dict = {'nll': 'NLL', 'auc': 'AUC',
+            'good_approvals': 'Number of good approvals',
+            #'prop_good_approvals': 'Fraction of good models approved',
             # This is actually an upper bound for bad approval rate.
             'bad_approvals': 'Error rate'}
     data_dict = {'test':'Test'}
@@ -71,7 +73,7 @@ def main():
         kind="line",
         style="Procedure",
         facet_kws={"sharey": False, "sharex": True},
-        col_order=["NLL", "AUC", "Error rate", "Number of good approvals"],
+        col_order=["NLL", "AUC", "Error rate", "Number of good approvals"], #"Fraction of good models approved"],
         linewidth=5,
     )
     rel_plt.set_titles('{col_name}')

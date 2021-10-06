@@ -65,15 +65,17 @@ def get_deployed_scores(test_hist, test_dat, max_iter):
 
 def get_good_bad_approved(test_hist, test_dat, max_iter):
     """
-    @return tuple with good and bad proportions approved
+    @return tuple with total number of good approvals, total number of bad approvals, proportion of good models approved
     """
     orig_mdl = test_hist.approved_mdls[0]
     orig_pred_y = orig_mdl.predict_proba(test_dat.x)[:, 1].reshape((-1, 1))
     orig_nll = get_nll(test_dat.y, orig_pred_y)
     approval_idxs = np.array(test_hist.approval_times[1:])
 
+    # Tracks whether or not proposed model at each time is good
     is_good_list = np.array([], dtype=bool)
     good_approved = [0]
+    prop_good_approved = [0]
     bad_approved = [0]
     for idx, mdl in enumerate(test_hist.proposed_mdls[1:]):
         time_idx = idx + 1
@@ -91,10 +93,11 @@ def get_good_bad_approved(test_hist, test_dat, max_iter):
             num_bad_approved = 0
         num_good = np.sum(is_good_list)
         num_bad = np.sum(is_bad_list)
-        good_approved.append(num_good_approved if num_good > 0 else 0)
-        bad_approved.append(num_bad_approved if num_bad > 0 else 0)
+        good_approved.append(num_good_approved)
+        prop_good_approved.append(num_good_approved/num_good if num_good > 0 else 0)
+        bad_approved.append(num_bad_approved)
 
-    return np.array(good_approved), np.array(bad_approved)
+    return np.array(good_approved), np.array(bad_approved), np.array(prop_good_approved)
 
 def main():
     args = parse_args()
@@ -131,7 +134,7 @@ def main():
 
     reuse_res = get_deployed_scores(full_hist, data.reuse_test_dat, args.max_iter)
     test_res = get_deployed_scores(full_hist, data.test_dat, args.max_iter)
-    good_approvals, bad_approvals = get_good_bad_approved(full_hist, data.test_dat, args.max_iter)
+    good_approvals, bad_approvals, prop_good_approvals = get_good_bad_approved(full_hist, data.test_dat, args.max_iter)
     num_approvals = np.array(
         [
             np.sum(np.array(full_hist.approval_times) <= i) - 1
@@ -150,6 +153,9 @@ def main():
     bad_df = pd.DataFrame({"value": bad_approvals, "iteration": iterations})
     bad_df["dataset"] = "test"
     bad_df["measure"] = "bad_approvals"
+    #prop_good_df = pd.DataFrame({"value": prop_good_approvals, "iteration": iterations})
+    #prop_good_df["dataset"] = "test"
+    #prop_good_df["measure"] = "prop_good_approvals"
     good_df = pd.DataFrame({"value": good_approvals, "iteration": iterations})
     good_df["dataset"] = "test"
     good_df["measure"] = "good_approvals"
