@@ -116,9 +116,9 @@ def generate_data(env, outdir, c):
         c['init_train_n'] * (2 if c['model_type'] == "GBT" else 1),
         '--train-batch-n',
         c['train_batch_n'],
-        '--train-iters',
+        '--num-batches',
         REUSE_ITERS,
-        '--init-reuse-test-n',
+        '--reuse-test-n',
         c['reuse_test_n'],
         '--init-sparse-beta',
         c['init_beta'],
@@ -136,7 +136,7 @@ def generate_data(env, outdir, c):
         ' '.join(map(str, cmd)))
 
 nest.add(
-    'dp_mech',
+    'mtp_mech',
     [
         "bonferroni",
         "graphical_bonf",
@@ -144,26 +144,26 @@ nest.add(
         "graphical_parallel",
     ])
 @nest.add_target_with_env(localenv)
-def create_dp(env, outdir, c):
-    targets = [join(outdir, 'dp_mech.pkl')]
+def create_mtp(env, outdir, c):
+    targets = [join(outdir, 'mtp_mech.pkl')]
     scratch_file = join("simulation_reuse", outdir, "scratch.txt")
-    success_ratio = 0.6 if "parallel" in c['dp_mech'] else 0.8
+    success_ratio = 0.6 if "parallel" in c['mtp_mech'] else 0.8
 
     cmd = [
-        'python create_dp_mechanism.py',
-        '--parallel-ratio 0.7' if "parallel" in c['dp_mech'] else '',
-        '--first-pres-weight 0.5' if "parallel" in c['dp_mech'] else '',
-        '--success-weight %f' % success_ratio if "graphical" in c['dp_mech'] else '',
+        'python create_mtp_mechanism.py',
+        '--parallel-ratio 0.7' if "parallel" in c['mtp_mech'] else '',
+        '--first-pres-weight 0.5' if "parallel" in c['mtp_mech'] else '',
+        '--success-weight %f' % success_ratio if "graphical" in c['mtp_mech'] else '',
         '--alpha',
         c['fwer'],
-        '--dp-mech',
-        c['dp_mech'],
-	'--scratch %s' % scratch_file if "parallel" in c['dp_mech'] else '',
+        '--mtp-mech',
+        c['mtp_mech'],
+	'--scratch %s' % scratch_file if "parallel" in c['mtp_mech'] else '',
 	'--out ${TARGETS[0]}'
     ]
     return env.Command(
         [
-            join(outdir, 'dp_mech.pkl')],
+            join(outdir, 'mtp_mech.pkl')],
         [],
         ' '.join(map(str, cmd)))
 
@@ -177,7 +177,7 @@ def run_experiment(env, outdir, c):
         REUSE_ITERS,
 	'--data ${SOURCES[0]}',
 	'--model ${SOURCES[1]}',
-	'--dp-mech ${SOURCES[2]}',
+	'--mtp-mech ${SOURCES[2]}',
 	'--log ${TARGETS[0]}',
 	'--out-csv ${TARGETS[1]}',
 	#'--plot ${TARGETS[1]}'
@@ -192,7 +192,7 @@ def run_experiment(env, outdir, c):
         [
             c["generate_data"][0],
             c["create_modeler"][0],
-            c["create_dp"][0],
+            c["create_mtp"][0],
         ],
         ' '.join(map(str, cmd)))
 

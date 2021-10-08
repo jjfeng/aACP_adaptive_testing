@@ -97,7 +97,7 @@ class DataGenerator:
         self,
         init_train_n,
         train_iid_stream_n,
-        train_iters,
+        num_batches,
         init_reuse_test_n,
         test_n: int,
         train_side_stream_n: int = 0,
@@ -111,7 +111,7 @@ class DataGenerator:
                 train_iid_stream_n,
                 self.beta,
             )
-            for i in range(train_iters)
+            for i in range(num_batches)
         ]
         if self.perturb_beta is not None:
             print("PERTURB", self.perturb_beta)
@@ -120,7 +120,7 @@ class DataGenerator:
                     train_side_stream_n,
                     self.perturb_beta,
                 )
-                for i in range(train_iters)
+                for i in range(num_batches)
             ]
         else:
             side_train_dats = None

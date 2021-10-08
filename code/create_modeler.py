@@ -19,8 +19,8 @@ def parse_args():
     parser.add_argument("--seed", type=int, default=0, help="seed")
     parser.add_argument("--simulation", type=str, default="online", choices=["adversary", "online"])
     parser.add_argument("--model-type", type=str, default="Logistic", help="only used by the online modeler")
-    parser.add_argument("--min-var-idx", type=int, default=0)
-    parser.add_argument("--preset-coef", type=float, default=0)
+    parser.add_argument("--min-var-idx", type=int, default=0, help="What index to start perturbing coefficients in the adversarial model developer")
+    parser.add_argument("--preset-coef", type=float, default=0, help="What is the true value of the nonzero coefficients, used for adversarial model developer")
     parser.add_argument("--out-file", type=str, default="_output/model.pkl")
     args = parser.parse_args()
     return args
