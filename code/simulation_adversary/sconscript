@@ -51,10 +51,10 @@ nest.add_aggregate("summary_res", list)
 nest.add(
     'mtp_mech',
     [
-        "binary_thres_mtp",
+        #"binary_thres_mtp",
         "graphical_bonf",
         "graphical_ffs",
-        "graphical_parallel",
+        #"graphical_parallel",
     ])
 
 nest.add(
@@ -141,29 +141,6 @@ def run_experiment(env, outdir, c):
         ' '.join(map(str, cmd)))
 
 nest.pop("mtp_mech")
-
-@nest.add_target_with_env(localenv)
-def summarize(env, outdir, c):
-    cmd = [
-        'python summarize.py',
-	'--id-cols',
-	'dataset,measure,mtp,max_iter',
-	'--pivot-rows',
-	'dataset,measure,mtp',
-	'--pivot-cols',
-	'max_iter',
-	'--id-filter',
-	REUSE_ITERS,
-	'--results',
-        ",".join(["simulation_adversary/%s" % r for r in c['summary_res']]),
-	'--out-csv ${TARGETS[0]}',
-    ]
-    return env.Command(
-        [
-            join(outdir, 'res_summary.csv'),
-        ],
-        c["summary_res"],
-        ' '.join(map(str, cmd)))
 
 @nest.add_target_with_env(localenv)
 def plot_avg(env, outdir, c):

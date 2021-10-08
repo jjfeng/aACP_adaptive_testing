@@ -203,6 +203,7 @@ class GraphicalFFSMTP(GraphicalBonfMTP):
 
         self.num_adapt_queries = num_adapt_queries
         self.test_tree = Node(1, success_edge=self.success_weight, history=[])
+        self.test_tree.local_alpha = self.test_tree.weight * self.alpha
         self._create_children(self.test_tree)
 
     def _get_prior_losses(self, node, last_node):
@@ -238,8 +239,32 @@ class GraphicalFFSMTP(GraphicalBonfMTP):
         """
         @return test perf where 1 means approve and 0 means not approved
         """
-        raise NotImplementedError("HHHhhhhhhhhhhh")
+        loss_new = get_losses(test_y, pred_y)
+        loss_prev = get_losses(test_y, prev_pred_y)
+        loss_diffs = loss_new - loss_prev
+        std_err = np.sqrt(np.var(loss_diffs) / loss_prev.size)
+        self.test_tree.observe_losses(loss_diffs)
 
+        prior_test_diffs = self._get_prior_losses(self.test_tree.subfam_root, self.test_tree)
+        prior_thres = self._get_prior_thres(self.test_tree.subfam_root, self.test_tree)
+        est_corr = (
+            np.corrcoef(np.array(prior_test_diffs + [loss_diffs]))
+            if len(prior_test_diffs)
+            else np.array([[1]])
+        )
+        t_thres = self._solve_t_statistic_thres(
+            est_corr, prior_thres, self.test_tree.local_alpha
+        )
+        self.test_tree.set_test_thres(t_thres)
+
+        test_stat = (np.mean(loss_diffs)) / std_err
+        test_result = int(test_stat < t_thres)
+        print("FFS COMPARE", test_stat, t_thres)
+
+        # update tree
+        self._do_tree_update(test_result)
+
+        return test_result
 
 class GraphicalParallelMTP(GraphicalFFSMTP):
     """

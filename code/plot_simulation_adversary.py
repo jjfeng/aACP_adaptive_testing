@@ -46,10 +46,10 @@ def main():
             }
     all_res = all_res.rename({
         "value": "Value",
-        "max_iter": "Iteration",
+        "iteration": "Iteration",
         }, axis=1)
     all_res["Measure"] = all_res.measure.map(measure_dict)
-    all_res["Procedure"] = all_res.dp.map(mtp_dict)
+    all_res["Procedure"] = all_res.procedure.map(mtp_dict)
     all_res["Dataset"] = all_res.dataset.map(data_dict)
     print("ALL RES", all_res.shape)
 
