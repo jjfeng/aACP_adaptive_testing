@@ -34,6 +34,9 @@ class TestHistory:
 
 
 class LockedModeler:
+    """
+    This modeler does not suggest any new model
+    """
     def __init__(self, model_type:str = "Logistic", seed:int = 0):
         if model_type == "Logistic":
             self.modeler = LogisticRegression(penalty="none")
@@ -50,107 +53,26 @@ class LockedModeler:
     def predict_prob(self, x):
         return self.modeler.predict_proba(x)[:, 1].reshape((-1, 1))
 
-class CtsAdversaryModeler(LockedModeler):
-    def __init__(
-        self, preset_coef: float = 0, min_var_idx: int = 1, update_incr: float = 0.02
-    ):
-        """
-        @param min_var_idx: nelder mead only tunes coefficients with idx at least min_var_idx
-        """
-        self.modeler = LogisticRegression(penalty="none", solver="lbfgs")
-        self.update_incr = update_incr
-        self.min_var_idx = min_var_idx
-        self.preset_coef = preset_coef
-
-    def do_minimize(self, dat, test_x, test_y, dp_engine, iid_dat_stream=None, maxfev=10, side_dat_stream=None):
-        """
-        @param dat_stream: ignores this
-        """
-        # Train a good initial model
-        self.modeler.fit(dat.x, dat.y.flatten())
-        self.modeler.intercept_[:] = 0
-        self.modeler.coef_[0, : self.min_var_idx] = self.preset_coef
-        self.modeler.coef_[0, self.min_var_idx :] = 0
-
-        def get_test_perf(params):
-            lr = sklearn.base.clone(self.modeler)
-            self.set_model(lr, params)
-            pred_y = lr.predict_proba(test_x)[:, 1].reshape((-1, 1))
-            mtp_answer = dp_engine.get_test_eval(test_y, pred_y)
-            return mtp_answer, lr
-
-        # Now search in each direction and do a greedy search
-        test_hist = TestHistory(curr_mdl=self.modeler)
-        curr_coef = np.concatenate(
-            [self.modeler.intercept_, self.modeler.coef_.flatten()]
-        )
-        curr_perf, _ = get_test_perf(curr_coef)
-        while test_hist.curr_time < maxfev:
-            # Test each variable (that's known to be irrelevant)
-            for var_idx in range(1 + self.min_var_idx, 1 + test_x.shape[1]):
-                # Test each direction for the variable
-                is_success = False
-                for update_dir in [-1, 1]:
-                    if test_hist.curr_time >= maxfev:
-                        break
-                    curr_coef = np.concatenate(
-                        [self.modeler.intercept_, self.modeler.coef_.flatten()]
-                    )
-                    curr_coef[var_idx] += update_dir * self.update_incr
-                    test_res, proposed_mdl = get_test_perf(curr_coef)
-                    print("preturb?", var_idx, curr_perf, test_res)
-                    # print(test_res, curr_perf, var_idx, update_dir)
-                    test_hist.update(
-                        test_res=test_res < curr_perf, proposed_mdl=proposed_mdl, num_train=0
-                    )
-                    if test_res < curr_perf:
-                        is_success = True
-                        self.set_model(self.modeler, curr_coef)
-                        curr_perf = test_res
-                        break
-
-                # If we found a good direction, keep walking in that direction
-                ctr = 1
-                while is_success:
-                    print("success!!!")
-                    if test_hist.curr_time >= maxfev:
-                        break
-                    curr_coef = np.concatenate(
-                        [self.modeler.intercept_, self.modeler.coef_.flatten()]
-                    )
-                    curr_coef[var_idx] += update_dir * self.update_incr * ctr
-                    test_res, proposed_mdl = get_test_perf(curr_coef)
-                    print("preturb cont?", var_idx, curr_perf, test_res)
-                    test_hist.update(
-                        test_res=test_res, curr_mdl=proposed_mdl, num_train=0
-                    )
-                    if test_res < curr_perf:
-                        self.set_model(self.modeler, curr_coef)
-                        curr_perf = test_res
-                        is_success = True
-                        print("CTR", ctr)
-                        ctr *= 2
-                    else:
-                        is_success = False
-
-        return test_hist
-
-
 class BinaryAdversaryModeler(LockedModeler):
+    """
+    Given binary outputs, this adaptive modeler will try to propose modifications that are deleterious
+    """
     update_dirs = [1]
 
     def __init__(
         self, preset_coef: float = 0, min_var_idx: int = 1, update_incr: float = 0.02
     ):
         """
-        @param min_var_idx: nelder mead only tunes coefficients with idx at least min_var_idx
+        @param min_var_idx: only perturb coefficients with idx at least min_var_idx
+        @param preset_coef: set the coefficients for variables with index < min_var_idx to this value
+        @param update_incr: how much to perturb the coefficients with idx >= min_var_idx
         """
         self.modeler = LogisticRegression(penalty="none", solver="lbfgs")
         self.update_incr = update_incr
         self.min_var_idx = min_var_idx
         self.preset_coef = preset_coef
 
-    def do_minimize(self, dat, test_x, test_y, dp_engine, dat_stream=None, maxfev=10, side_dat_stream=None):
+    def simulate_approval_process(self, dat, test_x, test_y, dp_engine, dat_stream=None, maxfev=10, side_dat_stream=None):
         """
         @param dat_stream: ignores this
         """
@@ -229,37 +151,12 @@ class BinaryAdversaryModeler(LockedModeler):
         return test_hist
 
 
-class AdversarialModeler(LockedModeler):
-    def __init__(self, preset_coef: float = 0, min_var_idx: int = 1):
-        self.cts_modeler = CtsAdversaryModeler(preset_coef, min_var_idx)
-        self.binary_modeler = BinaryAdversaryModeler(preset_coef, min_var_idx)
-        self.modeler = self.cts_modeler.modeler
-
-    def do_minimize(self, dat, test_x, test_y, dp_engine, dat_stream=None, maxfev=10, side_dat_stream=None):
-        """
-        @param dat_stream: ignores this
-
-        @return perf_value
-        """
-        if dp_engine.name == "no_dp":
-            test_hist = self.cts_modeler.do_minimize(
-                dat, test_x, test_y, dp_engine, dat_stream, maxfev, side_dat_stream
-            )
-            self.modeler = self.cts_modeler.modeler
-        else:
-            test_hist = self.binary_modeler.do_minimize(
-                dat, test_x, test_y, dp_engine, dat_stream, maxfev, side_dat_stream
-            )
-            self.modeler = self.binary_modeler.modeler
-        return test_hist
-
-
 class OnlineLearnerFixedModeler(LockedModeler):
     """
     Just do online learning on a separate dataset
     """
 
-    def do_minimize(self, dat, test_x, test_y, dp_engine, dat_stream, maxfev=10, side_dat_stream=None):
+    def simulate_approval_process(self, dat, test_x, test_y, dp_engine, dat_stream, maxfev=10, side_dat_stream=None):
         """
         @param dat_stream: a list of datasets for further training the model
         @return perf_value
@@ -299,7 +196,7 @@ class OnlineAdaptiveLearnerModeler(OnlineLearnerFixedModeler):
         super(OnlineAdaptiveLearnerModeler,self).__init__(model_type)
         self.start_side_batch = start_side_batch
 
-    def do_minimize(self, dat, test_x, test_y, dp_engine, dat_stream, maxfev=10, side_dat_stream=None):
+    def simulate_approval_process(self, dat, test_x, test_y, dp_engine, dat_stream, maxfev=10, side_dat_stream=None):
         """
         @param dat_stream: a list of datasets for further training the model
         @param side_dat_stream: a list of side datasets for further training the model (these datasets are not IID)
