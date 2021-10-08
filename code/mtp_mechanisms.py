@@ -239,6 +239,44 @@ class GraphicalFFSMTP(GraphicalBonfMTP):
             print("THRES FROM R", thres)
             return thres
 
+    def _get_min_t_stat_thres_approx(self, est_cov, prior_thres, alpha_level, num_tries=0):
+        """
+        need to find the critical value at which alpha spending is no more than specified,
+        over all null hypothesis configurations
+
+        we can't do this since it's intractable. instead we do an approximation with
+        randomly drawn hypothesis configurations and take the minimum critical value
+
+        @param num_tries: number of random hypothesis configurations to test
+        @param est_cov: the estimated covariance structure of the test statistics
+        @param prior_thes: the previously selected critical values thresholds
+        @param alpha_level: how much alpha to spend
+        """
+        # Threshold if all hypos are true
+        thres = self._solve_t_statistic_thres(est_cov, prior_thres, alpha_level)
+
+        num_hypos = len(prior_thres)
+        if num_hypos <= 1 or num_tries == 0:
+            return thres
+
+        prior_thres = np.array(prior_thres)
+        all_thres = [thres]
+        for i in range(num_tries):
+            subset_true = np.ones(num_hypos + 1, dtype=bool)
+            rand_size = np.random.choice(num_hypos//2) + 1
+            rand_subset_idxs = np.random.choice(num_hypos, size=rand_size)
+            subset_true[rand_subset_idxs] = False
+            est_cov_sub = est_cov[subset_true, :][:,subset_true]
+            prior_thres_sub = prior_thres[subset_true[:-1]]
+            # TODO: Technically this is all the alpha that was allocated up to the current model
+            # accumulating over the last few non-null hypotheses... right now we just use alpha because
+            # easy to compute. but this is technically conservative
+            alpha_level_sub = alpha_level
+            thres_one_false = self._solve_t_statistic_thres(est_cov_sub, prior_thres_sub, alpha_level_sub)
+            all_thres.append(thres_one_false)
+        print("THRES", all_thres)
+        return np.min(all_thres)
+
     def get_test_compare(self, test_y, pred_y, prev_pred_y, predef_pred_y=None):
         loss_new = get_losses(test_y, pred_y)
         loss_prev = get_losses(test_y, prev_pred_y)
@@ -253,7 +291,7 @@ class GraphicalFFSMTP(GraphicalBonfMTP):
             if len(prior_test_diffs)
             else np.array([[1]])
         )
-        t_thres = self._solve_t_statistic_thres(
+        t_thres = self._get_min_t_stat_thres_approx(
             est_corr, prior_thres, self.test_tree.local_alpha
         )
         self.test_tree.set_test_thres(t_thres)
@@ -406,8 +444,6 @@ class GraphicalParallelMTP(GraphicalFFSMTP):
 
     def _get_test_compare_corr(self, test_y, pred_y, prev_pred_y):
         """
-        NOTICE that the std err used here is not the usual one!!!
-
         @return test perf where 1 means approve and 0 means not approved,
         """
         loss_new = get_losses(test_y, pred_y)
@@ -428,7 +464,6 @@ class GraphicalParallelMTP(GraphicalFFSMTP):
         )
 
         test_stat = (np.mean(loss_diffs)) / std_err
-        print("ORIG T THRES", norm.ppf(self.alpha / np.power(2, self.num_queries)))
         test_result = int(test_stat < t_thres)
         print("ADAPT COMPARE", test_stat, t_thres)
         return test_result

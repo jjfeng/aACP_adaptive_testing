@@ -12,7 +12,7 @@ localenv = env.Clone()
 nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 NUM_SEEDS = localenv['num_seeds']
-REUSE_ITERS = 40
+REUSE_ITERS = 10 #40
 SPARSE_P = 1
 SPARSE_COEF_VAL = 1.5
 FWER = 0.1
