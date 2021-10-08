@@ -15,7 +15,7 @@ from modelers import *
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="run simulation")
+    parser = argparse.ArgumentParser(description="create model developer for generating algorithmic modifications")
     parser.add_argument("--seed", type=int, default=0, help="seed")
     parser.add_argument("--simulation", type=str, default="online", choices=["adversary", "online"])
     parser.add_argument("--model-type", type=str, default="Logistic", help="only used by the online modeler")

@@ -19,7 +19,7 @@ from dataset import *
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="run simulation")
+    parser = argparse.ArgumentParser(description="run simulation for approving algorithmic modifications")
     parser.add_argument("--seed", type=int, default=0, help="seed")
     parser.add_argument("--obs-batch-size", type=int, default=1)
     parser.add_argument("--test-batch", type=int, default=1)
