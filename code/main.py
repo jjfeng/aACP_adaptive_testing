@@ -121,7 +121,7 @@ def main():
 
     # Run simulation
     dp_mech.set_num_queries(args.max_iter)
-    full_hist = modeler.do_minimize(
+    full_hist = modeler.simulate_approval_process(
         data.init_train_dat,
         data.reuse_test_dat.x,
         data.reuse_test_dat.y,
@@ -153,9 +153,6 @@ def main():
     bad_df = pd.DataFrame({"value": bad_approvals, "iteration": iterations})
     bad_df["dataset"] = "test"
     bad_df["measure"] = "bad_approvals"
-    #prop_good_df = pd.DataFrame({"value": prop_good_approvals, "iteration": iterations})
-    #prop_good_df["dataset"] = "test"
-    #prop_good_df["measure"] = "prop_good_approvals"
     good_df = pd.DataFrame({"value": good_approvals, "iteration": iterations})
     good_df["dataset"] = "test"
     good_df["measure"] = "good_approvals"

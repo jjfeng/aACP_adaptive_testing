@@ -62,7 +62,7 @@ class CtsAdversaryModeler(LockedModeler):
         self.min_var_idx = min_var_idx
         self.preset_coef = preset_coef
 
-    def do_minimize(self, dat, test_x, test_y, dp_engine, iid_dat_stream=None, maxfev=10, side_dat_stream=None):
+    def simulate_approval_process(self, dat, test_x, test_y, dp_engine, iid_dat_stream=None, maxfev=10, side_dat_stream=None):
         """
         @param dat_stream: ignores this
         """
@@ -150,7 +150,7 @@ class BinaryAdversaryModeler(LockedModeler):
         self.min_var_idx = min_var_idx
         self.preset_coef = preset_coef
 
-    def do_minimize(self, dat, test_x, test_y, dp_engine, dat_stream=None, maxfev=10, side_dat_stream=None):
+    def simulate_approval_process(self, dat, test_x, test_y, dp_engine, dat_stream=None, maxfev=10, side_dat_stream=None):
         """
         @param dat_stream: ignores this
         """
@@ -235,19 +235,19 @@ class AdversarialModeler(LockedModeler):
         self.binary_modeler = BinaryAdversaryModeler(preset_coef, min_var_idx)
         self.modeler = self.cts_modeler.modeler
 
-    def do_minimize(self, dat, test_x, test_y, dp_engine, dat_stream=None, maxfev=10, side_dat_stream=None):
+    def simulate_approval_process(self, dat, test_x, test_y, dp_engine, dat_stream=None, maxfev=10, side_dat_stream=None):
         """
         @param dat_stream: ignores this
 
         @return perf_value
         """
         if dp_engine.name == "no_dp":
-            test_hist = self.cts_modeler.do_minimize(
+            test_hist = self.cts_modeler.simulate_approval_process(
                 dat, test_x, test_y, dp_engine, dat_stream, maxfev, side_dat_stream
             )
             self.modeler = self.cts_modeler.modeler
         else:
-            test_hist = self.binary_modeler.do_minimize(
+            test_hist = self.binary_modeler.simulate_approval_process(
                 dat, test_x, test_y, dp_engine, dat_stream, maxfev, side_dat_stream
             )
             self.modeler = self.binary_modeler.modeler
@@ -259,7 +259,7 @@ class OnlineLearnerFixedModeler(LockedModeler):
     Just do online learning on a separate dataset
     """
 
-    def do_minimize(self, dat, test_x, test_y, dp_engine, dat_stream, maxfev=10, side_dat_stream=None):
+    def simulate_approval_process(self, dat, test_x, test_y, dp_engine, dat_stream, maxfev=10, side_dat_stream=None):
         """
         @param dat_stream: a list of datasets for further training the model
         @return perf_value
@@ -299,7 +299,7 @@ class OnlineAdaptiveLearnerModeler(OnlineLearnerFixedModeler):
         super(OnlineAdaptiveLearnerModeler,self).__init__(model_type)
         self.start_side_batch = start_side_batch
 
-    def do_minimize(self, dat, test_x, test_y, dp_engine, dat_stream, maxfev=10, side_dat_stream=None):
+    def simulate_approval_process(self, dat, test_x, test_y, dp_engine, dat_stream, maxfev=10, side_dat_stream=None):
         """
         @param dat_stream: a list of datasets for further training the model
         @param side_dat_stream: a list of side datasets for further training the model (these datasets are not IID)

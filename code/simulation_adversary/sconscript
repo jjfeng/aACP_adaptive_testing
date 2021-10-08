@@ -51,12 +51,9 @@ def create_modeler(env, outdir, c):
 
 nest.add_aggregate("summary_res", list)
 nest.add(
-    'dp_mech',
+    'mtp_mech',
     [
-        #"no_dp",
-        "binary_thres_dp",
-        #"bonferroni",
-        #"bonferroni_nonadapt",
+        "binary_thres_mtp",
         "graphical_bonf",
         "graphical_ffs",
         "graphical_parallel",
@@ -68,18 +65,18 @@ nest.add(
     label_func=lambda c: "seed_%d" % c)
 
 @nest.add_target_with_env(localenv)
-def create_dp(env, outdir, c):
-    targets = [join(outdir, 'dp_mech.pkl')]
+def create_mtp(env, outdir, c):
+    targets = [join(outdir, 'mtp_mech.pkl')]
     scratch_file = join("simulation_adversary", outdir, "scratch.txt")
     cmd = [
-        'python create_dp_mechanism.py',
-        '--parallel-ratio 0.6' if "graphical_parallel" == c['dp_mech'] else '',
-        '--success-weight 0.5' if "graphical" in c['dp_mech'] else '',
+        'python create_mtp_mechanism.py',
+        '--parallel-ratio 0.6' if "graphical_parallel" == c['mtp_mech'] else '',
+        '--success-weight 0.5' if "graphical" in c['mtp_mech'] else '',
         '--alpha',
         FWER,
-        '--dp-mech',
-        c['dp_mech'],
-	'--scratch %s' % scratch_file if "graphical_parallel" == c['dp_mech'] else '',
+        '--mtp-mech',
+        c['mtp_mech'],
+	'--scratch %s' % scratch_file if "graphical_parallel" == c['mtp_mech'] else '',
 	'--out ${TARGETS[0]}'
     ]
     return env.Command(
@@ -127,7 +124,7 @@ def run_experiment(env, outdir, c):
         REUSE_ITERS,
 	'--data ${SOURCES[0]}',
 	'--model ${SOURCES[1]}',
-	'--dp-mech ${SOURCES[2]}',
+	'--mtp-mech ${SOURCES[2]}',
 	'--log ${TARGETS[0]}',
 	'--out-csv ${TARGETS[1]}',
     ]
@@ -141,20 +138,20 @@ def run_experiment(env, outdir, c):
         [
             c["generate_data"][0],
             c["create_modeler"][0],
-            c["create_dp"][0],
+            c["create_mtp"][0],
         ],
         ' '.join(map(str, cmd)))
 
-nest.pop("dp_mech")
+nest.pop("mtp_mech")
 
 @nest.add_target_with_env(localenv)
 def summarize(env, outdir, c):
     cmd = [
         'python summarize.py',
 	'--id-cols',
-	'dataset,measure,dp,max_iter',
+	'dataset,measure,mtp,max_iter',
 	'--pivot-rows',
-	'dataset,measure,dp',
+	'dataset,measure,mtp',
 	'--pivot-cols',
 	'max_iter',
 	'--id-filter',

@@ -12,17 +12,17 @@ from typing import List, Dict
 import numpy as np
 import pandas as pd
 
-from dp_mechanisms import *
+from mtp_mechanisms import *
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="create dp mechanism")
-    parser.add_argument("--dp-mech", type=str, default="graphical_bonf")
+    parser = argparse.ArgumentParser(description="create mtp mechanism")
+    parser.add_argument("--mtp-mech", type=str, default="graphical_bonf", choices=["binary_thres_mtp", "bonferroni", "graphical_bonf", "graphical_parallel", "graphical_ffs"], help="Multiple testing mechanism")
     parser.add_argument(
         "--threshold",
         type=float,
         default=0.5,
-        help="threshold for testing modifications",
+        help="Threshold for defining the maximum acceptable loss by a modification",
     )
     parser.add_argument(
         "--parallel-ratio", type=float, default=1.0, help="parallel factor"
@@ -33,7 +33,7 @@ def parse_args():
     parser.add_argument("--alpha", type=float, default=0.1, help="ci alpha")
     parser.add_argument("--first-pres-weight", type=float, default=0.1, help="weight for first prespecified node versus other prespecified nodes")
     parser.add_argument("--scratch-file", type=str, default="_output/scratch.txt")
-    parser.add_argument("--out-file", type=str, default="_output/dp_mech.pkl")
+    parser.add_argument("--out-file", type=str, default="_output/mtp_mech.pkl")
     args = parser.parse_args()
     return args
 
@@ -41,21 +41,17 @@ def parse_args():
 def main():
     args = parse_args()
 
-    # Create DP mech
-    if args.dp_mech == "no_dp":
-        dp_mech = NoDP()
-    elif args.dp_mech == "binary_thres_dp":
-        dp_mech = BinaryThresholdDP(args.threshold, args.alpha)
-    elif args.dp_mech == "bonferroni":
-        dp_mech = BonferroniThresholdDP(args.threshold, args.alpha)
-    elif args.dp_mech == "bonferroni_nonadapt":
-        dp_mech = BonferroniNonAdaptDP(args.threshold, args.alpha)
-    elif args.dp_mech == "graphical_bonf":
-        dp_mech = GraphicalBonfDP(
+    # Create MTP mech
+    if args.mtp_mech == "binary_thres_mtp":
+        mtp_mech = BinaryThresholdMTP(args.threshold, args.alpha)
+    elif args.mtp_mech == "bonferroni":
+        mtp_mech = BonferroniThresholdMTP(args.threshold, args.alpha)
+    elif args.mtp_mech == "graphical_bonf":
+        mtp_mech = GraphicalBonfMTP(
             args.threshold, args.alpha, success_weight=args.success_weight
         )
-    elif args.dp_mech == "graphical_parallel":
-        dp_mech = GraphicalParallelDP(
+    elif args.mtp_mech == "graphical_parallel":
+        mtp_mech = GraphicalParallelMTP(
             args.threshold,
             args.alpha,
             success_weight=args.success_weight,
@@ -63,8 +59,8 @@ def main():
             parallel_ratio=args.parallel_ratio,
             scratch_file=args.scratch_file,
         )
-    elif args.dp_mech == "graphical_ffs":
-        dp_mech = GraphicalFFSDP(
+    elif args.mtp_mech == "graphical_ffs":
+        mtp_mech = GraphicalFFSMTP(
             args.threshold,
             args.alpha,
             success_weight=args.success_weight,
@@ -72,7 +68,7 @@ def main():
         )
 
     with open(args.out_file, "wb") as f:
-        pickle.dump(dp_mech, f)
+        pickle.dump(mtp_mech, f)
 
 
 if __name__ == "__main__":
