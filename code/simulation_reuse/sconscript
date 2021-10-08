@@ -103,7 +103,7 @@ nest.add(
 @nest.add_target_with_env(localenv)
 def generate_data(env, outdir, c):
     cmd = [
-        'python generate_data_single_pop.py',
+        'python generate_data.py',
         '--meta-seed',
         c['meta_seed'],
         '--data-seed',
