@@ -6,7 +6,12 @@ The R code for computing significance thresholds requires installation of the R 
 We use `nestly` + `SCons` to run simulations.
 
 # File descriptions
+
+`generate_data.py` -- Generate data.
+
 `create_modeler.py` -- Creates an adaptive model developer as specified by the `--simulation` argument (options are `adversary` and `online`).
+
+`create_mtp_mechanism.py` -- Create the multiple testing procedure for approving modifications.
 
 `main.py` -- Given simulated test and training data, the approval mechanism (i.e. the multiple hypothesis testing procedure), and the adaptive model developer, this will simulate the approval procedure.
 
