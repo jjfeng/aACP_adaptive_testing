@@ -13,14 +13,11 @@ import SCons.Script as sc
 
 # Command line options
 
-sc.AddOption('--clusters', type='string', help="Clusters", default='local')
-# For paper, just ran seeds=20
 sc.AddOption('--seeds', type='int', help="SEEDS", default=1)
 sc.AddOption('--output', type='string', help="output folder", default='_output')
 
 env = sc.Environment(
         ENV=os.environ,
-        clusters=sc.GetOption('clusters'),
         num_seeds=sc.GetOption('seeds'),
         output=sc.GetOption('output'))
 
@@ -32,7 +29,4 @@ flag = 'simulation_reuse'
 sc.SConscript(flag + '/sconscript', exports=['flag'])
 
 flag = 'simulation_adversary'
-sc.SConscript(flag + '/sconscript', exports=['flag'])
-
-flag = 'simulation_graph_parallel'
 sc.SConscript(flag + '/sconscript', exports=['flag'])
