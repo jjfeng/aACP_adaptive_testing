@@ -52,9 +52,9 @@ nest.add(
     'mtp_mech',
     [
         #"binary_thres_mtp",
-        "graphical_bonf",
+        #"graphical_bonf",
         "graphical_ffs",
-        #"graphical_parallel",
+        #"graphical_prespec",
     ])
 
 nest.add(
@@ -68,13 +68,13 @@ def create_mtp(env, outdir, c):
     scratch_file = join("simulation_adversary", outdir, "scratch.txt")
     cmd = [
         'python create_mtp_mechanism.py',
-        '--parallel-ratio 0.6' if "graphical_parallel" == c['mtp_mech'] else '',
+        '--prespec-ratio 0.6' if "graphical_prespec" == c['mtp_mech'] else '',
         '--success-weight 0.5' if "graphical" in c['mtp_mech'] else '',
         '--alpha',
         FWER,
         '--mtp-mech',
         c['mtp_mech'],
-	'--scratch %s' % scratch_file if "graphical_parallel" == c['mtp_mech'] else '',
+	'--scratch %s' % scratch_file if c['mtp_mech'] in ["grahical_prespec", "graphical_ffs"] else '',
 	'--out ${TARGETS[0]}'
     ]
     return env.Command(

@@ -139,24 +139,24 @@ nest.add(
         "bonferroni",
         "graphical_bonf",
         "graphical_ffs",
-        "graphical_parallel",
+        "graphical_prespec",
     ])
 @nest.add_target_with_env(localenv)
 def create_mtp(env, outdir, c):
     targets = [join(outdir, 'mtp_mech.pkl')]
     scratch_file = join("simulation_reuse", outdir, "scratch.txt")
-    success_ratio = 0.6 if "parallel" in c['mtp_mech'] else 0.8
+    success_ratio = 0.6 if "prespec" in c['mtp_mech'] else 0.8
 
     cmd = [
         'python create_mtp_mechanism.py',
-        '--parallel-ratio 0.7' if "parallel" in c['mtp_mech'] else '',
-        '--first-pres-weight 0.5' if "parallel" in c['mtp_mech'] else '',
+        '--prespec-ratio 0.7' if "prespec" in c['mtp_mech'] else '',
+        '--first-pres-weight 0.5' if "prespec" in c['mtp_mech'] else '',
         '--success-weight %f' % success_ratio if "graphical" in c['mtp_mech'] else '',
         '--alpha',
         c['fwer'],
         '--mtp-mech',
         c['mtp_mech'],
-	'--scratch %s' % scratch_file if "parallel" in c['mtp_mech'] else '',
+	'--scratch %s' % scratch_file if c['mtp_mech'] in ["graphical_ffs", "graphical_prespec"] else '',
 	'--out ${TARGETS[0]}'
     ]
     return env.Command(
