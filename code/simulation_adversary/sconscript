@@ -11,8 +11,6 @@ localenv = env.Clone()
 # Set up state
 nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
-RUN_STATUS = localenv['clusters']
-# I've run 50 seeds so far
 NUM_SEEDS = localenv['num_seeds']
 REUSE_ITERS = 40
 SPARSE_P = 1
@@ -91,7 +89,7 @@ def generate_data(env, outdir, c):
         '--meta-seed 0',
         '--data-seed',
         c['seed'],
-        '--sparse',
+        '--sparse-p',
         SPARSE_P,
         '--p',
         REUSE_ITERS + 1,

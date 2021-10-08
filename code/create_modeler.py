@@ -32,7 +32,7 @@ def main():
 
     # Create model
     if args.simulation == "adversary":
-        clf = AdversarialModeler(
+        clf = BinaryAdversaryModeler(
             min_var_idx=args.min_var_idx, preset_coef=args.preset_coef
         )
     elif args.simulation == "online":

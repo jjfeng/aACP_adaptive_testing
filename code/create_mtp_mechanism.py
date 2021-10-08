@@ -17,7 +17,7 @@ from mtp_mechanisms import *
 
 def parse_args():
     parser = argparse.ArgumentParser(description="create mtp mechanism")
-    parser.add_argument("--mtp-mech", type=str, default="graphical_bonf", choices=["binary_thres_mtp", "bonferroni", "graphical_bonf", "graphical_parallel", "graphical_ffs"], help="Multiple testing mechanism")
+    parser.add_argument("--mtp-mech", type=str, default="graphical_bonf", choices=["binary_thres_mtp", "bonferroni", "graphical_bonf", "graphical_prespec", "graphical_ffs"], help="Multiple testing mechanism")
     parser.add_argument(
         "--threshold",
         type=float,
@@ -50,7 +50,7 @@ def main():
         mtp_mech = GraphicalBonfMTP(
             args.threshold, args.alpha, success_weight=args.success_weight
         )
-    elif args.mtp_mech == "graphical_parallel":
+    elif args.mtp_mech == "graphical_prespec":
         mtp_mech = GraphicalParallelMTP(
             args.threshold,
             args.alpha,

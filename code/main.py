@@ -25,7 +25,7 @@ def parse_args():
     parser.add_argument("--test-batch", type=int, default=1)
     parser.add_argument("--max-iter", type=int, default=3)
     parser.add_argument("--data-file", type=str, default="_output/data.pkl")
-    parser.add_argument("--dp-mech-file", type=str, default="_output/dp_mech.pkl")
+    parser.add_argument("--mtp-mech-file", type=str, default="_output/mtp_mech.pkl")
     parser.add_argument("--model-file", type=str, default="_output/model.pkl")
     parser.add_argument("--out-csv", type=str, default="_output/res.csv")
     parser.add_argument("--log-file", type=str, default="_output/log.txt")
@@ -111,8 +111,8 @@ def main():
         data = pickle.load(f)["full_dat"]
     print("data done")
 
-    with open(args.dp_mech_file, "rb") as f:
-        dp_mech = pickle.load(f)
+    with open(args.mtp_mech_file, "rb") as f:
+        mtp_mech = pickle.load(f)
 
     with open(args.model_file, "rb") as f:
         modeler = pickle.load(f)
@@ -120,12 +120,12 @@ def main():
     np.random.seed(args.seed)
 
     # Run simulation
-    dp_mech.set_num_queries(args.max_iter)
+    mtp_mech.set_num_queries(args.max_iter)
     full_hist = modeler.simulate_approval_process(
         data.init_train_dat,
         data.reuse_test_dat.x,
         data.reuse_test_dat.y,
-        dp_mech,
+        mtp_mech,
         dat_stream=data.iid_train_dat_stream,
         maxfev=args.max_iter,
         side_dat_stream=data.side_train_dat_stream,
@@ -171,7 +171,7 @@ def main():
     df = pd.concat(
         [reuse_nll_df, reuse_auc_df, count_df, approve_df, test_auc_df, test_nll_df, good_df, bad_df, count_df],
     )
-    df["procedure"] = dp_mech.name
+    df["procedure"] = mtp_mech.name
     print("results")
     print(df)
 
@@ -188,7 +188,7 @@ def main():
             kind="line",
             facet_kws={"sharey": False, "sharex": True},
         )
-        rel_plt.fig.suptitle(dp_mech.name)
+        rel_plt.fig.suptitle(mtp_mech.name)
         plt.savefig(args.plot_file)
         print("Fig", args.plot_file)
 

@@ -16,6 +16,9 @@ def get_losses(test_y, pred_y):
 
 
 class BinaryThresholdMTP:
+    """
+    Repeatedly test at level alpha
+    """
     name = "binary_thres"
 
     def __init__(self, base_threshold, alpha):
@@ -24,16 +27,6 @@ class BinaryThresholdMTP:
 
     def set_num_queries(self, num_adapt_queries):
         self.num_adapt_queries = num_adapt_queries
-
-    def get_test_eval(self, test_y, pred_y, predef_pred_y=None):
-        """
-        @return test perf where 1 means approve and 0 means not approved
-        """
-        test_nlls = get_losses(test_y, pred_y)
-        t_stat_se = np.sqrt(np.var(test_nlls) / test_nlls.size)
-        upper_ci = np.mean(test_nlls) + t_stat_se * norm.ppf(1 - self.alpha)
-        print("upper ci", upper_ci, test_nlls.mean())
-        return int(upper_ci < self.base_threshold)
 
     def get_test_compare(self, test_y, pred_y, prev_pred_y, predef_pred_y=None):
         """
@@ -59,23 +52,6 @@ class BonferroniThresholdMTP(BinaryThresholdMTP):
         self.num_adapt_queries = num_adapt_queries
         self.correction_factor = np.power(2, num_adapt_queries)
         print(num_adapt_queries, self.correction_factor)
-
-    def get_test_eval(self, test_y, pred_y, predef_pred_y=None):
-        """
-        @return test perf where 1 means approve and 0 means not approved
-        """
-        test_y = test_y.flatten()
-        pred_y = pred_y.flatten()
-        test_nlls = -(np.log(pred_y) * test_y + np.log(1 - pred_y) * (1 - test_y))
-        t_stat_se = np.sqrt(np.var(test_nlls) / test_nlls.size)
-        t_statistic = (np.mean(test_nlls) - self.base_threshold) / t_stat_se
-        t_thres = norm.ppf(self.alpha / self.correction_factor)
-        print("BONF t statistic", t_statistic, t_thres)
-        upper_ci = np.mean(test_nlls) + t_stat_se * norm.ppf(
-            1 - self.alpha / self.correction_factor
-        )
-        print("BONF upper ci", upper_ci)
-        return int(t_statistic < t_thres)
 
     def get_test_compare(self, test_y, pred_y, prev_pred_y, predef_pred_y=None):
         """
@@ -197,26 +173,6 @@ class GraphicalBonfMTP(BinaryThresholdMTP):
         self.test_tree.local_alpha = self.alpha * self.test_tree.weight
         self._create_children(self.test_tree)
 
-    def get_test_eval(self, test_y, pred_y, predef_pred_y=None):
-        """
-        @return test perf where 1 means approve and 0 means not approved
-        """
-        test_nlls = get_losses(test_y, pred_y)
-        t_stat_se = np.sqrt(np.var(test_nlls) / test_nlls.size)
-
-        self.test_tree.local_alpha = (
-            self.alpha * self.test_tree.weight * self.test_tree.success_edge
-        )
-        print("local alpha", self.test_tree.local_alpha)
-        upper_ci = np.mean(test_nlls) + t_stat_se * norm.ppf(
-            1 - self.test_tree.local_alpha
-        )
-        print("upper ci", np.mean(test_nlls), upper_ci)
-        test_result = int(upper_ci < self.base_threshold)
-
-        self._do_tree_update(test_result)
-        return test_result
-
     def get_test_compare(self, test_y, pred_y, prev_pred_y, predef_pred_y=None):
         """
         @return test perf where 1 means approve and 0 means not approved
@@ -278,42 +234,11 @@ class GraphicalFFSMTP(GraphicalBonfMTP):
             print("THRES FROM R", thres)
             return thres
 
-    def get_test_eval(self, test_y, pred_y, predef_pred_y=None):
-        test_y = test_y.flatten()
-        pred_y = pred_y.flatten()
-        test_nlls = -(np.log(pred_y) * test_y + np.log(1 - pred_y) * (1 - test_y))
-        self.test_tree.observe_losses(test_nlls)
-
-        # compute critical levels
-        self.test_tree.local_alpha = (
-            self.alpha * self.test_tree.weight * self.test_tree.success_edge
-        )
-        print("LOCAL ALPHA", self.test_tree.local_alpha)
-        # Need to traverse subfam parent nodes to decide local level
-        prior_test_nlls = self._get_prior_losses(
-            self.test_tree.subfam_root, self.test_tree
-        )
-        prior_thres = self._get_prior_thres(self.test_tree.subfam_root, self.test_tree)
-        est_cov = (
-            np.corrcoef(np.array(prior_test_nlls + [test_nlls]))
-            if len(prior_test_nlls)
-            else np.array([[1]])
-        )
-        t_thres = self._solve_t_statistic_thres(
-            est_cov, prior_thres, self.test_tree.local_alpha
-        )
-        self.test_tree.set_test_thres(t_thres)
-
-        # print("upper ci", np.mean(test_nlls), np.mean(test_nlls) + np.sqrt(np.var(test_nlls)/test_nlls.size) * norm.ppf(1 - alpha_level))
-        std_err = np.sqrt(np.var(test_nlls) / test_nlls.size)
-        t_statistic = (np.mean(test_nlls) - self.base_threshold) / std_err
-        test_result = int(t_statistic < t_thres)
-        print("test statistic", test_result, t_statistic, t_thres, self.base_threshold)
-
-        # update tree
-        self._do_tree_update(test_result)
-
-        return test_result
+    def get_test_compare(self, test_y, pred_y, prev_pred_y, predef_pred_y=None):
+        """
+        @return test perf where 1 means approve and 0 means not approved
+        """
+        raise NotImplementedError("HHHhhhhhhhhhhh")
 
 
 class GraphicalParallelMTP(GraphicalFFSMTP):
@@ -422,66 +347,6 @@ class GraphicalParallelMTP(GraphicalFFSMTP):
         self.test_tree.local_alpha = self.test_tree.weight * self.alpha
         self._create_children(self.test_tree)
 
-    def _get_test_eval_ffs(self, test_y, predef_pred_y):
-        """
-        NOTICE that the std err used here is not the usual one!!!
-
-        @return tuple(
-            test perf where 1 means approve and 0 means not approved,
-            test nlls)
-        """
-        test_nlls = get_losses(test_y, predef_pred_y)
-        std_err = np.sqrt(np.var(test_nlls) / test_nlls.size)
-        self.parallel_tree.observe_losses(test_nlls)
-
-        # Need to traverse subfam parent nodes to decide local level
-        prior_test_nlls = self._get_prior_losses(self.parallel_tree.parent)
-        prior_thres = self._get_prior_thres(self.parallel_tree.parent)
-        est_corr = (
-            np.corrcoef(np.array(prior_test_nlls + [test_nlls]))
-            if len(prior_test_nlls)
-            else np.array([[1]])
-        )
-        print("LOCAL FFS par ALPHA", self.parallel_tree.local_alpha)
-        t_thres = self._solve_t_statistic_thres(
-            est_corr, prior_thres, self.parallel_tree.local_alpha
-        )
-        self.parallel_tree.set_test_thres(t_thres)
-        t_statistic = (np.mean(test_nlls) - self.base_threshold) / std_err
-        # print("95 CI", np.mean(test_nlls) + std_err * 1.96)
-        test_result = int(t_statistic < t_thres)
-        print("t_statistics", t_statistic, t_thres)
-        return test_result
-
-    def _get_test_eval_corr(self, test_y, pred_y):
-        """
-        NOTICE that the std err used here is not the usual one!!!
-
-        @return tuple(
-            test perf where 1 means approve and 0 means not approved,
-            test nlls)
-        """
-        test_nlls = get_losses(test_y, pred_y)
-        std_err = np.sqrt(np.var(test_nlls) / test_nlls.size)
-        self.test_tree.observe_losses(test_nlls)
-
-        prior_test_nlls = self._get_prior_losses(self.parallel_tree)
-        prior_thres = self._get_prior_thres(self.parallel_tree)
-        est_corr = (
-            np.corrcoef(np.array(prior_test_nlls + [test_nlls]))
-            if len(prior_test_nlls)
-            else np.array([[1]])
-        )
-        t_thres = self._solve_t_statistic_thres(
-            est_corr, prior_thres, self.test_tree.local_alpha
-        )
-
-        test_stat = (np.mean(test_nlls) - self.base_threshold) / std_err
-        print("T THRES adjust", norm.cdf(t_thres), t_thres)
-        test_result = int(test_stat < t_thres)
-        print("corr test resl", test_stat, t_thres)
-        return test_result
-
     def _get_test_compare_ffs(self, test_y, predef_pred_y, prev_pred_y):
         """
         NOTICE that the std err used here is not the usual one!!!
@@ -565,17 +430,6 @@ class GraphicalParallelMTP(GraphicalFFSMTP):
         # Increment the par tree node regardless of success
         self.parallel_tree = self.parallel_tree.success
         self.parallel_tree.local_alpha = self.parallel_tree.weight * self.alpha
-
-    def get_test_eval(self, test_y, pred_y, predef_pred_y):
-        parallel_test_result = self._get_test_eval_ffs(
-            test_y, predef_pred_y
-        )
-        test_result = self._get_test_eval_corr(test_y, pred_y)
-        self._do_tree_update(parallel_test_result, test_result)
-
-        print("PARALLL", self.parallel_test_hist)
-        print("TEST TREE", self.test_hist)
-        return test_result
 
     def get_test_compare(self, test_y, pred_y, prev_pred_y, predef_pred_y):
         parallel_test_result = self._get_test_compare_ffs(
