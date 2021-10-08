@@ -15,17 +15,17 @@ from dataset import *
 
 def parse_args():
     parser = argparse.ArgumentParser(description="run simulation")
-    parser.add_argument("--meta-seed", type=int, default=1235, help="seed")
-    parser.add_argument("--data-seed", type=int, default=1235, help="seed")
-    parser.add_argument("--sparse-p", type=int, default=4)
-    parser.add_argument("--p", type=int, default=10)
-    parser.add_argument("--init-sparse-beta", type=float, default=0.5)
-    parser.add_argument("--perturb-beta", type=float, default=None)
-    parser.add_argument("--init-reuse-test-n", type=int, default=300)
-    parser.add_argument("--init-train-n", type=int, default=10)
-    parser.add_argument("--train-batch-n", type=int, default=100)
-    parser.add_argument("--train-iters", type=int, default=10)
-    parser.add_argument("--test-n", type=int, default=2000)
+    parser.add_argument("--meta-seed", type=int, default=1235, help="seed for determining meta-properties of the data")
+    parser.add_argument("--data-seed", type=int, default=1235, help="seed for determining the training data stream")
+    parser.add_argument("--sparse-p", type=int, default=4, help="number of nonzero coefficients in the true logistic regression model")
+    parser.add_argument("--p", type=int, default=10, help="number of covariates")
+    parser.add_argument("--sparse-beta", type=float, default=0.5, help="values for the nonzero coefficients in the true model")
+    parser.add_argument("--perturb-beta", type=float, default=None, help="how much to perturb the coefficients in the true model to simulate a side population")
+    parser.add_argument("--reuse-test-n", type=int, default=300, help="how much data is in the reusable test data")
+    parser.add_argument("--init-train-n", type=int, default=10, help="how much data was used to train the initial model")
+    parser.add_argument("--train-batch-n", type=int, default=100, help="how much data is observed between each iteration, in the simulated data stream")
+    parser.add_argument("--train-iters", type=int, default=10, help="total number of batches to create for the data stream")
+    parser.add_argument("--test-n", type=int, default=2000, help="number of samples in the completely held out test dataset")
     parser.add_argument("--out-file", type=str, default="_output/data.pkl")
     parser.add_argument("--log-file", type=str, default="_output/log.txt")
     args = parser.parse_args()
@@ -41,21 +41,21 @@ def main():
     np.random.seed(args.meta_seed)
 
     # Prep data
-    init_beta = np.zeros((args.p, 1))
-    init_beta[: args.sparse_p] = args.init_sparse_beta
+    true_beta = np.zeros((args.p, 1))
+    true_beta[: args.sparse_p] = args.sparse_beta
     perturb_delta = np.random.rand(args.p, 1)
     if args.perturb_beta is not None:
-        perturbed_beta = init_beta - perturb_delta * args.perturb_beta
+        perturbed_beta = true_beta - perturb_delta * args.perturb_beta
     else:
         perturbed_beta = None
 
     np.random.seed(args.data_seed)
-    data_generator = DataGenerator(init_beta, mean_x=0, perturb_beta=perturbed_beta)
+    data_generator = DataGenerator(true_beta, mean_x=0, perturb_beta=perturbed_beta)
     full_dat, betas = data_generator.generate_data(
         args.init_train_n,
         args.train_batch_n,
         args.train_iters,
-        args.init_reuse_test_n,
+        args.reuse_test_n,
         args.test_n,
         train_side_stream_n=args.train_batch_n,
     )
