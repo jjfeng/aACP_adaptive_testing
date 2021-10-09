@@ -25,7 +25,7 @@ def parse_args():
         help="Threshold for defining the maximum acceptable loss by a modification",
     )
     parser.add_argument(
-        "--parallel-ratio", type=float, default=1.0, help="parallel factor"
+        "--prespec-ratio", type=float, default=1.0, help="parallel factor"
     )
     parser.add_argument(
         "--success-weight", type=float, default=0.8, help="recycling factor"
@@ -56,7 +56,7 @@ def main():
             args.alpha,
             success_weight=args.success_weight,
             first_pres_weight=args.first_pres_weight,
-            parallel_ratio=args.parallel_ratio,
+            parallel_ratio=args.prespec_ratio,
             scratch_file=args.scratch_file,
         )
     elif args.mtp_mech == "graphical_ffs":
