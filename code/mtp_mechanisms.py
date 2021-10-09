@@ -82,29 +82,22 @@ class Node:
     """
     Node in the graph for sequentially rejective graphical procedure (SRGP)
     """
-    def __init__(self, weight, success_edge, history, subfam_root=None, parent=None):
+    def __init__(self, weight, history, parent=None):
         """
         @param subfam_root: which node is the subfamily's root node. if none, this is the root
         """
         self.success = None
-        self.success_edge = success_edge
-        self.failure_edge = 1 - success_edge
-        self.failure = None
         self.weight = weight
         self.history = history
-        self.subfam_root = subfam_root if subfam_root is not None else self
         self.parent = parent
+        self.children = []
+        self.children_weights = []
 
     def observe_losses(self, test_losses):
         self.test_losses = test_losses
 
     def set_test_thres(self, thres):
         self.test_thres = thres
-
-    def earn(self, weight_earn):
-        self.weight += weight_earn
-        self.local_alpha = None
-
 
 class GraphicalBonfMTP(BinaryThresholdMTP):
     name = "graphical_bonf_thres"
@@ -120,74 +113,71 @@ class GraphicalBonfMTP(BinaryThresholdMTP):
         self.base_threshold = base_threshold
         self.alpha = alpha
         self.success_weight = success_weight
+        assert alpha_alloc_max_depth == 0
         self.alpha_alloc_max_depth = alpha_alloc_max_depth
         self.parallel_ratio = 0
         self.scratch_file = scratch_file
 
-    def _create_children(self, node):
-        child_weight = (
-            (1 - self.parallel_ratio) / np.power(2, self.alpha_alloc_max_depth)
-            if self.num_queries < self.alpha_alloc_max_depth
-            else 0
-        )
-        node.success = Node(
-            child_weight,
-            success_edge=self.success_weight,
-            history=node.history + [1],
-            subfam_root=None,
+    def _create_children(self, node, query_idx):
+        children = [Node(
+            weight=0,
+            history=node.history + ([1] if query_idx >= 0 else []) + [0] * i,
             parent=node,
-        )
-        node.failure = Node(
-            child_weight,
-            success_edge=self.success_weight,
-            history=node.history + [0],
-            subfam_root=node.subfam_root,
-            parent=node,
-        )
+            ) for i in range(self.num_adapt_queries - query_idx - 1)]
+        node.children = children
+        node.children_weights = [
+            self.success_weight *  np.power(1 - self.success_weight, i)
+            for i in range(query_idx + 1, self.num_adapt_queries)]
+        if children:
+            node.children_weights[-1] = 1 - np.sum(node.children_weights[:-1])
 
     def set_num_queries(self, num_adapt_queries):
-        # reset num queries
-        self.num_queries = 0
+        # reset num queries, -1 indicates start node
+        self.num_queries = -1
+        self.num_adapt_queries = num_adapt_queries
         self.test_hist = []
 
-        self.num_adapt_queries = num_adapt_queries
-        self.test_tree = Node(
-            1 / np.power(2, self.alpha_alloc_max_depth),
-            success_edge=self.success_weight,
+        self.start_node = Node(
+            1,
             history=[],
-            subfam_root=None,
+            parent=None,
         )
-        self._create_children(self.test_tree)
+        self._create_children(self.start_node, self.num_queries)
+        self.test_tree = self.start_node
+
+        # propagate weights from start node
+        self._do_tree_update(1)
+
+        self.parent_child_idx = 0
 
     def _do_tree_update(self, test_result):
         # update tree
         self.num_queries += 1
+
+        print("NUM QUERIES", self.num_queries)
+        if self.num_queries >= self.num_adapt_queries:
+            # We are done
+            return
+
         self.test_hist.append(test_result)
         if test_result == 1:
-            print("DO EARN")
-            # remove node and propagate weights
-            self.test_tree.success.earn(
-                self.test_tree.weight * self.test_tree.success_edge
-            )
-            self.test_tree = self.test_tree.success
+            print("EARN weights")
+            for child, cweight in zip(self.test_tree.children, self.test_tree.children_weights):
+                child.weight += cweight * self.test_tree.weight
+            self.parent_child_idx = 0
+            self.test_tree = self.test_tree.children[self.parent_child_idx]
         else:
-            print("failre", self.test_tree.failure.weight)
-            self.test_tree.failure.earn(
-                self.test_tree.weight * self.test_tree.failure_edge
-            )
-            print("failre new", self.test_tree.failure.weight)
-            self.test_tree = self.test_tree.failure
+            print("num childs", len(self.test_tree.parent.children))
+            self.parent_child_idx += 1
+            self.test_tree = self.test_tree.parent.children[self.parent_child_idx]
+        self._create_children(self.test_tree, self.num_queries)
         self.test_tree.local_alpha = self.alpha * self.test_tree.weight
-        self._create_children(self.test_tree)
 
     def get_test_compare(self, test_y, pred_y, prev_pred_y, predef_pred_y=None):
         test_nlls_new = get_losses(test_y, pred_y)
         test_nlls_prev = get_losses(test_y, prev_pred_y)
         loss_diffs = test_nlls_new - test_nlls_prev
         t_stat_se = np.sqrt(np.var(loss_diffs) / loss_diffs.size)
-        self.test_tree.local_alpha = (
-            self.test_tree.weight * self.alpha * self.test_tree.success_edge
-        )
         upper_ci = np.mean(loss_diffs) + t_stat_se * norm.ppf(
             1 - self.test_tree.local_alpha
         )
@@ -200,25 +190,11 @@ class GraphicalBonfMTP(BinaryThresholdMTP):
 class GraphicalFFSMTP(GraphicalBonfMTP):
     name = "graphical_ffs"
 
-    def set_num_queries(self, num_adapt_queries):
-        # reset num queries
-        self.num_queries = 0
-        self.test_hist = []
+    def _get_prior_losses(self, node):
+        return [c.test_losses for c in node.parent.children[:self.parent_child_idx]]
 
-        self.num_adapt_queries = num_adapt_queries
-        self.test_tree = Node(1, success_edge=self.success_weight, history=[])
-        self.test_tree.local_alpha = self.test_tree.weight * self.alpha
-        self._create_children(self.test_tree)
-
-    def _get_prior_losses(self, node, last_node):
-        if node == last_node:
-            return []
-        return [node.test_losses] + self._get_prior_losses(node.failure, last_node)
-
-    def _get_prior_thres(self, node, last_node):
-        if node == last_node:
-            return []
-        return [node.test_thres] + self._get_prior_thres(node.failure, last_node)
+    def _get_prior_thres(self, node):
+        return [c.test_thres for c in node.parent.children[:self.parent_child_idx]]
 
     def _solve_t_statistic_thres(self, est_cov, prior_thres, alpha_level):
         if len(prior_thres) == 0:
@@ -284,8 +260,8 @@ class GraphicalFFSMTP(GraphicalBonfMTP):
         std_err = np.sqrt(np.var(loss_diffs) / loss_prev.size)
         self.test_tree.observe_losses(loss_diffs)
 
-        prior_test_diffs = self._get_prior_losses(self.test_tree.subfam_root, self.test_tree)
-        prior_thres = self._get_prior_thres(self.test_tree.subfam_root, self.test_tree)
+        prior_test_diffs = self._get_prior_losses(self.test_tree)
+        prior_thres = self._get_prior_thres(self.test_tree)
         est_corr = (
             np.corrcoef(np.array(prior_test_diffs + [loss_diffs]))
             if len(prior_test_diffs)
@@ -334,27 +310,6 @@ class GraphicalParallelMTP(GraphicalFFSMTP):
         self.alpha_alloc_max_depth = alpha_alloc_max_depth
         self.scratch_file = scratch_file
 
-    def _create_children(self, node):
-        child_weight = (
-            (1 - self.parallel_ratio) / np.power(2, self.alpha_alloc_max_depth)
-            if self.num_queries < self.alpha_alloc_max_depth
-            else 0
-        )
-        node.success = Node(
-            child_weight,
-            success_edge=self.success_weight,
-            history=node.history + [1],
-            subfam_root=None,
-            parent=node,
-        )
-        node.failure = Node(
-            child_weight,
-            success_edge=self.success_weight,
-            history=node.history + [0],
-            subfam_root=node.subfam_root,
-            parent=node,
-        )
-
     def _get_prior_losses(self, node):
         if node is None:
             return []
@@ -367,21 +322,17 @@ class GraphicalParallelMTP(GraphicalFFSMTP):
 
     def set_num_queries(self, num_adapt_queries):
         # reset num queries
-        self.num_queries = 0
+        self.num_queries = -1
+        self.num_adapt_queries = num_adapt_queries
         self.test_hist = []
         self.parallel_test_hist = []
-
-        self.num_adapt_queries = num_adapt_queries
 
         # Create parallel sequence
         self.parallel_tree = Node(
             self.first_pres_weight * self.parallel_ratio,
-            success_edge=1,
             history=[],
-            subfam_root=None,
         )
         self.parallel_tree.local_alpha = self.parallel_tree.weight * self.alpha
-        self.last_ffs_root = self.parallel_tree
         curr_par_node = self.parallel_tree
         for i in range(1, num_adapt_queries + 1):
             weight = (
@@ -391,25 +342,26 @@ class GraphicalParallelMTP(GraphicalFFSMTP):
             )
             next_par_node = Node(
                 weight,
-                success_edge=1,
                 history=[None] * i,
-                subfam_root=self.parallel_tree,
                 parent=curr_par_node,
             )
-            curr_par_node.failure = next_par_node
-            curr_par_node.success = next_par_node
+            curr_par_node.children = [next_par_node]
+            curr_par_node.children_weight = [0]
             curr_par_node = next_par_node
-            curr_par_node.failure = None
 
         # Create adapt tree
-        self.test_tree = Node(
+        self.start_node = Node(
             1 - self.parallel_ratio,
-            success_edge=self.success_weight,
             history=[],
-            subfam_root=None,
+            parent=None,
         )
-        self.test_tree.local_alpha = self.test_tree.weight * self.alpha
-        self._create_children(self.test_tree)
+        self._create_children(self.start_node, self.num_queries)
+        self.test_tree = self.start_node
+
+        # propagate weights from start node (but dont do any updating in the parallel)
+        self._do_tree_update(None, 1)
+
+        self.parent_child_idx = 0
 
     def _get_test_compare_ffs(self, test_y, predef_pred_y, prev_pred_y):
         """
@@ -471,28 +423,34 @@ class GraphicalParallelMTP(GraphicalFFSMTP):
     def _do_tree_update(self, par_tree_res, adapt_tree_res):
         # update adaptive tree
         self.num_queries += 1
-        self.parallel_test_hist.append(par_tree_res)
         self.test_hist.append(adapt_tree_res)
+        print("NUM QUERIES", self.num_queries)
+        if self.num_queries >= self.num_adapt_queries:
+            # We are done
+            return
 
         if adapt_tree_res == 1:
-            # remove node and propagate weights
-            self.test_tree.success.earn(
-                self.test_tree.weight * self.test_tree.success_edge
-            )
-            self.test_tree = self.test_tree.success
+            print("EARN weights")
+            for child, cweight in zip(self.test_tree.children, self.test_tree.children_weights):
+                child.weight += cweight * self.test_tree.weight
+            self.parent_child_idx = 0
+            self.test_tree = self.test_tree.children[self.parent_child_idx]
         else:
-            self.test_tree.failure.earn(
-                self.test_tree.weight * self.test_tree.failure_edge
-            )
-            self.test_tree = self.test_tree.failure
-        self.test_tree.local_alpha = self.test_tree.weight * self.alpha
+            self.parent_child_idx += 1
+            print("num childs", len(self.test_tree.parent.children), self.parent_child_idx)
+            self.test_tree = self.test_tree.parent.children[self.parent_child_idx]
+        self._create_children(self.test_tree, self.num_queries)
+        self.test_tree.local_alpha = self.alpha * self.test_tree.weight
 
-        self._create_children(self.test_tree)
         # Increment the par tree node regardless of success
-        self.parallel_tree = self.parallel_tree.success
-        self.parallel_tree.local_alpha = self.parallel_tree.weight * self.alpha
+        if par_tree_res is not None:
+            self.parallel_test_hist.append(par_tree_res)
+            self.parallel_tree = self.parallel_tree.children[0]
+            self.parallel_tree.local_alpha = self.parallel_tree.weight * self.alpha
 
     def get_test_compare(self, test_y, pred_y, prev_pred_y, predef_pred_y):
+        # The parallel tree result doesn't really matter actually.
+        # We record for debugging purposes
         parallel_test_result = self._get_test_compare_ffs(
             test_y, predef_pred_y, prev_pred_y
         )
