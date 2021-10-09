@@ -201,25 +201,11 @@ class GraphicalBonfMTP(BinaryThresholdMTP):
 class GraphicalFFSMTP(GraphicalBonfMTP):
     name = "graphical_ffs"
 
-    def set_num_queries(self, num_adapt_queries):
-        # reset num queries
-        self.num_queries = 0
-        self.test_hist = []
+    def _get_prior_losses(self, node):
+        return [c.test_losses for c in node.parent.children[:self.parent_child_idx]]
 
-        self.num_adapt_queries = num_adapt_queries
-        self.test_tree = Node(1, success_edge=self.success_weight, history=[])
-        self.test_tree.local_alpha = self.test_tree.weight * self.alpha
-        self._create_children(self.test_tree)
-
-    def _get_prior_losses(self, node, last_node):
-        if node == last_node:
-            return []
-        return [node.test_losses] + self._get_prior_losses(node.failure, last_node)
-
-    def _get_prior_thres(self, node, last_node):
-        if node == last_node:
-            return []
-        return [node.test_thres] + self._get_prior_thres(node.failure, last_node)
+    def _get_prior_thres(self, node):
+        return [c.test_thres for c in node.parent.children[:self.parent_child_idx]]
 
     def _solve_t_statistic_thres(self, est_cov, prior_thres, alpha_level):
         if len(prior_thres) == 0:
@@ -285,8 +271,8 @@ class GraphicalFFSMTP(GraphicalBonfMTP):
         std_err = np.sqrt(np.var(loss_diffs) / loss_prev.size)
         self.test_tree.observe_losses(loss_diffs)
 
-        prior_test_diffs = self._get_prior_losses(self.test_tree.subfam_root, self.test_tree)
-        prior_thres = self._get_prior_thres(self.test_tree.subfam_root, self.test_tree)
+        prior_test_diffs = self._get_prior_losses(self.test_tree)
+        prior_thres = self._get_prior_thres(self.test_tree)
         est_corr = (
             np.corrcoef(np.array(prior_test_diffs + [loss_diffs]))
             if len(prior_test_diffs)

@@ -53,7 +53,7 @@ nest.add(
     [
         #"binary_thres_mtp",
         "graphical_bonf",
-        #"graphical_ffs",
+        "graphical_ffs",
         #"graphical_prespec",
     ])
 
