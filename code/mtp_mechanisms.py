@@ -82,28 +82,22 @@ class Node:
     """
     Node in the graph for sequentially rejective graphical procedure (SRGP)
     """
-    def __init__(self, weight, success_edge, history, parent=None):
+    def __init__(self, weight, history, parent=None):
         """
         @param subfam_root: which node is the subfamily's root node. if none, this is the root
         """
         self.success = None
-        self.success_edge = success_edge
-        self.failure_edge = 1 - success_edge
-        self.failure = None
         self.weight = weight
         self.history = history
         self.parent = parent
+        self.children = []
+        self.children_weights = []
 
     def observe_losses(self, test_losses):
         self.test_losses = test_losses
 
     def set_test_thres(self, thres):
         self.test_thres = thres
-
-    def earn(self, weight_earn):
-        self.weight += weight_earn
-        self.local_alpha = None
-
 
 class GraphicalBonfMTP(BinaryThresholdMTP):
     name = "graphical_bonf_thres"
@@ -127,7 +121,6 @@ class GraphicalBonfMTP(BinaryThresholdMTP):
     def _create_children(self, node, query_idx):
         children = [Node(
             weight=0,
-            success_edge=self.success_weight,
             history=node.history + ([1] if query_idx >= 0 else []) + [0] * i,
             parent=node,
             ) for i in range(self.num_adapt_queries - query_idx - 1)]
@@ -146,7 +139,6 @@ class GraphicalBonfMTP(BinaryThresholdMTP):
 
         self.start_node = Node(
             1,
-            success_edge=self.success_weight,
             history=[],
             parent=None,
         )
@@ -169,9 +161,9 @@ class GraphicalBonfMTP(BinaryThresholdMTP):
 
         self.test_hist.append(test_result)
         if test_result == 1:
-            print("DO EARN")
+            print("EARN weights")
             for child, cweight in zip(self.test_tree.children, self.test_tree.children_weights):
-                child.weight = cweight * self.test_tree.weight
+                child.weight += cweight * self.test_tree.weight
             self.parent_child_idx = 0
             self.test_tree = self.test_tree.children[self.parent_child_idx]
         else:
@@ -338,7 +330,6 @@ class GraphicalParallelMTP(GraphicalFFSMTP):
         # Create parallel sequence
         self.parallel_tree = Node(
             self.first_pres_weight * self.parallel_ratio,
-            success_edge=1,
             history=[],
         )
         self.parallel_tree.local_alpha = self.parallel_tree.weight * self.alpha
@@ -351,7 +342,6 @@ class GraphicalParallelMTP(GraphicalFFSMTP):
             )
             next_par_node = Node(
                 weight,
-                success_edge=1,
                 history=[None] * i,
                 parent=curr_par_node,
             )
@@ -362,7 +352,6 @@ class GraphicalParallelMTP(GraphicalFFSMTP):
         # Create adapt tree
         self.start_node = Node(
             1 - self.parallel_ratio,
-            success_edge=self.success_weight,
             history=[],
             parent=None,
         )
@@ -441,9 +430,9 @@ class GraphicalParallelMTP(GraphicalFFSMTP):
             return
 
         if adapt_tree_res == 1:
-            print("DO EARN")
+            print("EARN weights")
             for child, cweight in zip(self.test_tree.children, self.test_tree.children_weights):
-                child.weight = cweight * self.test_tree.weight
+                child.weight += cweight * self.test_tree.weight
             self.parent_child_idx = 0
             self.test_tree = self.test_tree.children[self.parent_child_idx]
         else:
