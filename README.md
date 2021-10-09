@@ -17,4 +17,4 @@ We use `nestly` + `SCons` to run simulations.
 
 # Reproducing simulation results
 
-The `simulation_adversary` folder contains the first set of simulations with an ``adversarial'' model developer who proposes deleterious modifications. The `simulation_reuse` folder contains the second set of simulations where the model developer generally proposes beneficial modifications. To run the simulations, run `scons <simulation_folder_name>`.
+The `simulation_adversary` folder contains the first set of simulations with an "adversarial" model developer who proposes deleterious modifications. The `simulation_reuse` folder contains the second set of simulations where the model developer generally proposes beneficial modifications. To run the simulations, run `scons <simulation_folder_name>`.
