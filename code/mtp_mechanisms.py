@@ -82,7 +82,7 @@ class Node:
     """
     Node in the graph for sequentially rejective graphical procedure (SRGP)
     """
-    def __init__(self, weight, success_edge, history, subfam_root=None, parent=None):
+    def __init__(self, weight, success_edge, history, parent=None):
         """
         @param subfam_root: which node is the subfamily's root node. if none, this is the root
         """
@@ -92,7 +92,6 @@ class Node:
         self.failure = None
         self.weight = weight
         self.history = history
-        self.subfam_root = subfam_root if subfam_root is not None else self
         self.parent = parent
 
     def observe_losses(self, test_losses):
@@ -120,74 +119,76 @@ class GraphicalBonfMTP(BinaryThresholdMTP):
         self.base_threshold = base_threshold
         self.alpha = alpha
         self.success_weight = success_weight
+        assert alpha_alloc_max_depth == 0
         self.alpha_alloc_max_depth = alpha_alloc_max_depth
         self.parallel_ratio = 0
         self.scratch_file = scratch_file
 
-    def _create_children(self, node):
-        child_weight = (
-            (1 - self.parallel_ratio) / np.power(2, self.alpha_alloc_max_depth)
-            if self.num_queries < self.alpha_alloc_max_depth
-            else 0
-        )
-        node.success = Node(
-            child_weight,
+    def _create_children(self, node, query_idx):
+        children = [Node(
+            weight=0,
             success_edge=self.success_weight,
-            history=node.history + [1],
-            subfam_root=None,
+            history=node.history + ([1] if query_idx >= 0 else []) + [0] * i,
             parent=node,
-        )
-        node.failure = Node(
-            child_weight,
-            success_edge=self.success_weight,
-            history=node.history + [0],
-            subfam_root=node.subfam_root,
-            parent=node,
-        )
+            ) for i in range(self.num_adapt_queries - query_idx - 1)]
+        print("make num childs", len(children), query_idx)
+        for c in children:
+            print(c.history)
+        node.children = children
+        node.children_weights = [
+            self.success_weight *  np.power(1 - self.success_weight, i)
+            for i in range(query_idx + 1, self.num_adapt_queries)]
+        if children:
+            node.children_weights[-1] = 1 - np.sum(node.children_weights[:-1])
 
     def set_num_queries(self, num_adapt_queries):
-        # reset num queries
-        self.num_queries = 0
+        # reset num queries, -1 indicates start node
+        self.num_queries = -1
+        self.num_adapt_queries = num_adapt_queries
         self.test_hist = []
 
-        self.num_adapt_queries = num_adapt_queries
-        self.test_tree = Node(
-            1 / np.power(2, self.alpha_alloc_max_depth),
+        self.start_node = Node(
+            1,
             success_edge=self.success_weight,
             history=[],
-            subfam_root=None,
+            parent=None,
         )
-        self._create_children(self.test_tree)
+        self._create_children(self.start_node, self.num_queries)
+        self.test_tree = self.start_node
+
+        # propagate weights from start node
+        self._do_tree_update(1)
+
+        self.parent_child_idx = 0
 
     def _do_tree_update(self, test_result):
         # update tree
         self.num_queries += 1
+
+        print("NUM QUERIES", self.num_queries)
+        if self.num_queries >= self.num_adapt_queries:
+            # We are done
+            return
+
         self.test_hist.append(test_result)
         if test_result == 1:
             print("DO EARN")
-            # remove node and propagate weights
-            self.test_tree.success.earn(
-                self.test_tree.weight * self.test_tree.success_edge
-            )
-            self.test_tree = self.test_tree.success
+            for child, cweight in zip(self.test_tree.children, self.test_tree.children_weights):
+                child.weight = cweight * self.test_tree.weight
+            self.parent_child_idx = 0
+            self.test_tree = self.test_tree.children[self.parent_child_idx]
         else:
-            print("failre", self.test_tree.failure.weight)
-            self.test_tree.failure.earn(
-                self.test_tree.weight * self.test_tree.failure_edge
-            )
-            print("failre new", self.test_tree.failure.weight)
-            self.test_tree = self.test_tree.failure
+            print("num childs", len(self.test_tree.parent.children))
+            self.parent_child_idx += 1
+            self.test_tree = self.test_tree.parent.children[self.parent_child_idx]
+        self._create_children(self.test_tree, self.num_queries)
         self.test_tree.local_alpha = self.alpha * self.test_tree.weight
-        self._create_children(self.test_tree)
 
     def get_test_compare(self, test_y, pred_y, prev_pred_y, predef_pred_y=None):
         test_nlls_new = get_losses(test_y, pred_y)
         test_nlls_prev = get_losses(test_y, prev_pred_y)
         loss_diffs = test_nlls_new - test_nlls_prev
         t_stat_se = np.sqrt(np.var(loss_diffs) / loss_diffs.size)
-        self.test_tree.local_alpha = (
-            self.test_tree.weight * self.alpha * self.test_tree.success_edge
-        )
         upper_ci = np.mean(loss_diffs) + t_stat_se * norm.ppf(
             1 - self.test_tree.local_alpha
         )
