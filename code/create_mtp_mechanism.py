@@ -46,10 +46,10 @@ def main():
     if args.mtp_mech == "binary_thres_mtp":
         mtp_mech = BinaryThresholdMTP(hypo_tester, args.alpha)
     elif args.mtp_mech == "bonferroni":
-        mtp_mech = BonferroniThresholdMTP(args.threshold, args.alpha)
+        mtp_mech = BonferroniThresholdMTP(hypo_tester, args.alpha)
     elif args.mtp_mech == "graphical_bonf":
         mtp_mech = GraphicalBonfMTP(
-            args.threshold, args.alpha, success_weight=args.success_weight
+            hypo_tester, args.alpha, success_weight=args.success_weight
         )
     elif args.mtp_mech == "graphical_prespec":
         mtp_mech = GraphicalParallelMTP(
