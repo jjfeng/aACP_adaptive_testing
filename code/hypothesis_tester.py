@@ -83,7 +83,8 @@ class SensSpecHypothesisTester(HypothesisTester):
             (null_constraint[1,0], null_constraint[1,1])])
 
         chi2_df2 = scipy.stats.chi2(df=2)
-        print(1 - chi2_df2.cdf(opt0_res.fun), 1 - chi2_df2.cdf(opt1_res.fun))
+        print("PVALS", 1 - chi2_df2.cdf(opt0_res.fun), 1 - chi2_df2.cdf(opt1_res.fun))
         pval = 1 - min(chi2_df2.cdf(opt0_res.fun), chi2_df2.cdf(opt1_res.fun))
-        print("p-value", pval)
+        print("estim", estimate)
+        print("p-value", pval, "pthres", node.weight * alpha)
         return pval < (node.weight * alpha)

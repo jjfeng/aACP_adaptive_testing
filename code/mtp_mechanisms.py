@@ -25,44 +25,10 @@ class BinaryThresholdMTP:
     def __init__(self, hypo_tester, alpha: float):
         self.hypo_tester = hypo_tester
         self.alpha = alpha
+        self.correction_factor = 1
 
     def _create_children(self, node, query_idx):
-        children = [Node(
-            weight=1,
-            history=node.history + ([1] if query_idx >= 0 else []) + [0] * i,
-            parent=node,
-            ) for i in range(self.num_adapt_queries - query_idx - 1)]
-        node.children = children
-        node.children_weights = [0 for i in range(query_idx + 1, self.num_adapt_queries)]
-        if children:
-            node.children_weights[-1] = 1 - np.sum(node.children_weights[:-1])
-
-    def init_test_dat(self, test_dat, num_adapt_queries):
-        self.hypo_tester.set_test_dat(test_dat)
-
-        self.num_queries = -1
-        self.num_adapt_queries = num_adapt_queries
-
-        self.start_node = Node(
-            weight=1,
-            history=[],
-            parent=None,
-        )
-        self._create_children(self.start_node, self.num_queries)
-        self.test_tree = self.start_node
-
-    def get_test_res(self, null_hypo: np.ndarray, mdl, predef_mdl=None):
-        """
-        @return test perf where 1 means approve and 0 means not approved
-        """
-        node_obs = self.hypo_tester.get_observations(mdl)
-        self.test_tree.store_observations(node_obs)
-        return self.hypo_tester.test_null(self.alpha, self.test_tree, null_hypo, prior_nodes=[])
-
-class BonferroniThresholdMTP(BinaryThresholdMTP):
-    name = "bonferroni"
-
-    def _create_children(self, node, query_idx):
+        print("CREATA ORIG", query_idx)
         children = [Node(
             weight=self.correction_factor,
             history=node.history + ([1] if query_idx >= 0 else []) + [0] * i,
@@ -72,6 +38,60 @@ class BonferroniThresholdMTP(BinaryThresholdMTP):
         node.children_weights = [0 for i in range(query_idx + 1, self.num_adapt_queries)]
         if children:
             node.children_weights[-1] = 1 - np.sum(node.children_weights[:-1])
+
+    def _do_tree_update(self, test_result):
+        # update tree
+        self.num_queries += 1
+
+        print("NUM QUERIES", self.num_queries)
+        if self.num_queries >= self.num_adapt_queries:
+            # We are done
+            return
+
+        if test_result == 1:
+            print("**EARN weights", self.test_tree.weight)
+            for child, cweight in zip(self.test_tree.children, self.test_tree.children_weights):
+                child.weight += cweight * self.test_tree.weight
+            self.parent_child_idx = 0
+            self.test_tree = self.test_tree.children[self.parent_child_idx]
+        else:
+            print("**num childs", len(self.test_tree.parent.children))
+            self.parent_child_idx += 1
+            self.test_tree = self.test_tree.parent.children[self.parent_child_idx]
+        self._create_children(self.test_tree, self.num_queries)
+        self.test_tree.local_alpha = self.alpha * self.test_tree.weight
+
+    def init_test_dat(self, test_dat, num_adapt_queries):
+        self.hypo_tester.set_test_dat(test_dat)
+
+        self.num_queries = -1
+        self.num_adapt_queries = num_adapt_queries
+
+        self.start_node = Node(
+            weight=self.correction_factor,
+            history=[],
+            parent=None,
+        )
+        self._create_children(self.start_node, self.num_queries)
+        self.test_tree = self.start_node
+        self._do_tree_update(1)
+
+    def get_test_res(self, null_hypo: np.ndarray, mdl, predef_mdl=None):
+        """
+        @return test perf where 1 means approve and 0 means not approved
+        """
+        print("HIST", self.test_tree.history)
+
+        node_obs = self.hypo_tester.get_observations(mdl)
+        self.test_tree.store_observations(node_obs)
+        test_res = self.hypo_tester.test_null(self.alpha, self.test_tree, null_hypo, prior_nodes=[])
+
+        self._do_tree_update(test_res)
+
+        return test_res
+
+class BonferroniThresholdMTP(BinaryThresholdMTP):
+    name = "bonferroni"
 
     def init_test_dat(self, test_dat, num_adapt_queries):
         self.hypo_tester.set_test_dat(test_dat)
@@ -87,27 +107,20 @@ class BonferroniThresholdMTP(BinaryThresholdMTP):
         )
         self._create_children(self.start_node, self.num_queries)
         self.test_tree = self.start_node
-
-    def get_test_res(self, null_hypo: np.ndarray, mdl, predef_mdl=None):
-        """
-        @return test perf where 1 means approve and 0 means not approved
-        """
-        node_obs = self.hypo_tester.get_observations(mdl)
-        self.test_tree.store_observations(node_obs)
-        return self.hypo_tester.test_null(self.alpha, self.test_tree, null_hypo, prior_nodes=[])
+        self._do_tree_update(1)
 
 class GraphicalBonfMTP(BinaryThresholdMTP):
     name = "graphical_bonf_thres"
 
     def __init__(
         self,
-        base_threshold,
+        hypo_tester,
         alpha,
         success_weight,
         alpha_alloc_max_depth: int = 0,
         scratch_file: str = None,
     ):
-        self.base_threshold = base_threshold
+        self.hypo_tester = hypo_tester
         self.alpha = alpha
         self.success_weight = success_weight
         assert alpha_alloc_max_depth == 0
@@ -124,15 +137,15 @@ class GraphicalBonfMTP(BinaryThresholdMTP):
         node.children = children
         node.children_weights = [
             self.success_weight *  np.power(1 - self.success_weight, i)
-            for i in range(query_idx + 1, self.num_adapt_queries)]
+            for i in range(0, self.num_adapt_queries - query_idx - 1)]
         if children:
             node.children_weights[-1] = 1 - np.sum(node.children_weights[:-1])
 
-    def set_num_queries(self, num_adapt_queries):
-        # reset num queries, -1 indicates start node
+    def init_test_dat(self, test_dat, num_adapt_queries):
+        self.hypo_tester.set_test_dat(test_dat)
+
         self.num_queries = -1
         self.num_adapt_queries = num_adapt_queries
-        self.test_hist = []
 
         self.start_node = Node(
             1,
@@ -147,41 +160,16 @@ class GraphicalBonfMTP(BinaryThresholdMTP):
 
         self.parent_child_idx = 0
 
-    def _do_tree_update(self, test_result):
-        # update tree
-        self.num_queries += 1
+    def get_test_res(self, null_hypo: np.ndarray, mdl, predef_mdl=None):
+        """
+        @return test perf where 1 means approve and 0 means not approved
+        """
+        node_obs = self.hypo_tester.get_observations(mdl)
+        self.test_tree.store_observations(node_obs)
+        test_res = self.hypo_tester.test_null(self.alpha, self.test_tree, null_hypo, prior_nodes=[])
+        self._do_tree_update(test_res)
+        return test_res
 
-        print("NUM QUERIES", self.num_queries)
-        if self.num_queries >= self.num_adapt_queries:
-            # We are done
-            return
-
-        self.test_hist.append(test_result)
-        if test_result == 1:
-            print("EARN weights")
-            for child, cweight in zip(self.test_tree.children, self.test_tree.children_weights):
-                child.weight += cweight * self.test_tree.weight
-            self.parent_child_idx = 0
-            self.test_tree = self.test_tree.children[self.parent_child_idx]
-        else:
-            print("num childs", len(self.test_tree.parent.children))
-            self.parent_child_idx += 1
-            self.test_tree = self.test_tree.parent.children[self.parent_child_idx]
-        self._create_children(self.test_tree, self.num_queries)
-        self.test_tree.local_alpha = self.alpha * self.test_tree.weight
-
-    def get_test_compare(self, test_y, pred_y, prev_pred_y, predef_pred_y=None):
-        test_nlls_new = get_losses(test_y, pred_y)
-        test_nlls_prev = get_losses(test_y, prev_pred_y)
-        loss_diffs = test_nlls_new - test_nlls_prev
-        t_stat_se = np.sqrt(np.var(loss_diffs) / loss_diffs.size)
-        upper_ci = np.mean(loss_diffs) + t_stat_se * norm.ppf(
-            1 - self.test_tree.local_alpha
-        )
-        test_result = int(upper_ci < 0)
-
-        self._do_tree_update(test_result)
-        return test_result
 
 
 class GraphicalFFSMTP(GraphicalBonfMTP):

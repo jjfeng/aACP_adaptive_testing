@@ -175,8 +175,8 @@ class OnlineLearnerFixedModeler(LockedModeler):
 
             # TODO: this should be defined adaptively
             null_constraints = np.array([
-                    [0,0.6],
-                    [0,0.65]])
+                    [0,0.56],
+                    [0,0.6]])
             test_res = dp_engine.get_test_res(
                 null_constraints, predef_lr, predef_mdl=predef_lr
             )
@@ -233,7 +233,7 @@ class OnlineAdaptiveLearnerModeler(OnlineLearnerFixedModeler):
 
             # TODO: this should be defined adaptively
             null_constraints = np.array([
-                    [0,0.6],
+                    [0,0.56],
                     [0,0.68]])
             test_res = dp_engine.get_test_res(
                 null_constraints, adapt_lr, predef_mdl=predef_lr
