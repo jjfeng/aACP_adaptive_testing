@@ -74,12 +74,16 @@ class SensSpecHypothesisTester(HypothesisTester):
             dist = (estimate - test_pt).reshape((-1,1))
             return (dist.T @ precision_mat @ dist)[0,0]
 
-        opt_res = scipy.optimize.minimize(get_norm, x0=null_constraint.mean(axis=1), bounds=[
+        # Need to check if it is within any of the specified bounds (but not necessarily both bounds)
+        opt0_res = scipy.optimize.minimize(get_norm, x0=null_constraint.mean(axis=1), bounds=[
             (null_constraint[0,0], null_constraint[0,1]),
+            (0,1)])
+        opt1_res = scipy.optimize.minimize(get_norm, x0=null_constraint.mean(axis=1), bounds=[
+            (0,1),
             (null_constraint[1,0], null_constraint[1,1])])
-        #print(opt_res.x, opt_res.success)
 
         chi2_df2 = scipy.stats.chi2(df=2)
-        pval = 1 - chi2_df2.cdf(opt_res.fun)
-        #print("p-value", pval)
+        print(1 - chi2_df2.cdf(opt0_res.fun), 1 - chi2_df2.cdf(opt1_res.fun))
+        pval = 1 - min(chi2_df2.cdf(opt0_res.fun), chi2_df2.cdf(opt1_res.fun))
+        print("p-value", pval)
         return pval < (node.weight * alpha)

@@ -53,31 +53,6 @@ class LockedModeler:
     def predict_prob(self, x):
         return self.modeler.predict_proba(x)[:, 1].reshape((-1, 1))
 
-class TestModeler(LockedModeler):
-    def simulate_approval_process(self, dat, test_x, test_y, dp_engine, dat_stream, maxfev=10, side_dat_stream=None):
-        """
-        @param dat_stream: a list of datasets for further training the model
-        @return perf_value
-        """
-        self.modeler.fit(dat.x, dat.y.flatten())
-        prev_pred_y = self.modeler.predict_proba(test_x)[:, 1].reshape((-1, 1))
-
-        predef_dat = dat
-        curr_idx = 0
-        test_hist = TestHistory(self.modeler)
-        for i in range(maxfev):
-
-            predef_dat = Dataset.merge([predef_dat] + dat_stream[i : i + 1])
-            predef_lr = sklearn.base.clone(self.modeler)
-            predef_lr.fit(predef_dat.x, predef_dat.y.flatten())
-            predef_pred_y = predef_lr.predict_proba(test_x)[:, 1].reshape((-1, 1))
-
-            test_res = dp_engine.get_test_compare(
-                test_y, predef_pred_y, prev_pred_y=prev_pred_y, predef_pred_y=predef_pred_y)
-
-            test_hist.update(test_res=test_res, proposed_mdl=predef_lr, num_train=predef_dat.size - dat.size)
-        return test_hist
-
 class BinaryAdversaryModeler(LockedModeler):
     """
     Given binary outputs, this adaptive modeler will try to propose modifications that are deleterious
@@ -120,15 +95,12 @@ class BinaryAdversaryModeler(LockedModeler):
         def get_test_perf(params, curr_time):
             lr = sklearn.base.clone(self.modeler)
             self.set_model(lr, params)
-            #pred_y = lr.predict_proba(test_x)[:, 1].reshape((-1, 1))
 
             self.predef_modeler.coef_[0, :] = orig_coefs
             self.predef_modeler.coef_[0, curr_time + self.min_var_idx] += (
                 self.update_dirs[0] * self.update_incr
             )
-            #predef_pred_y = self.predef_modeler.predict_proba(test_x)[:, 1].reshape(
-            #    (-1, 1)
-            #)
+            # TODO: this should be defined adaptively
             null_constraints = np.array([
                     [0,0.6],
                     [0,0.68]])
@@ -195,14 +167,19 @@ class OnlineLearnerFixedModeler(LockedModeler):
         curr_idx = 0
         test_hist = TestHistory(self.modeler)
         for i in range(maxfev):
+            print("ITERATION", i)
 
             predef_dat = Dataset.merge([predef_dat] + dat_stream[i : i + 1])
             predef_lr = sklearn.base.clone(self.modeler)
             predef_lr.fit(predef_dat.x, predef_dat.y.flatten())
-            predef_pred_y = predef_lr.predict_proba(test_x)[:, 1].reshape((-1, 1))
 
-            test_res = dp_engine.get_test_compare(
-                test_y, predef_pred_y, prev_pred_y=prev_pred_y, predef_pred_y=predef_pred_y)
+            # TODO: this should be defined adaptively
+            null_constraints = np.array([
+                    [0,0.6],
+                    [0,0.65]])
+            test_res = dp_engine.get_test_res(
+                null_constraints, predef_lr, predef_mdl=predef_lr
+            )
 
             test_hist.update(test_res=test_res, proposed_mdl=predef_lr, num_train=predef_dat.size - dat.size)
         return test_hist
@@ -238,6 +215,7 @@ class OnlineAdaptiveLearnerModeler(OnlineLearnerFixedModeler):
         curr_idx = 0
         test_hist = TestHistory(self.modeler)
         for i in range(maxfev):
+            print("ITERATION", i)
             if read_side_batch:
                 batches_read = side_dat_stream[i: i + 1]
             else:
@@ -246,15 +224,21 @@ class OnlineAdaptiveLearnerModeler(OnlineLearnerFixedModeler):
             adapt_dat = Dataset.merge([adapt_dat] + batches_read)
             adapt_lr = sklearn.base.clone(self.modeler)
             adapt_lr.fit(adapt_dat.x, adapt_dat.y.flatten())
-            adapt_pred_y = adapt_lr.predict_proba(test_x)[:, 1].reshape((-1, 1))
+            #adapt_pred_y = adapt_lr.predict_proba(test_x)[:, 1].reshape((-1, 1))
 
             predef_dat = Dataset.merge([predef_dat] + dat_stream[i : i + 1])
             predef_lr = sklearn.base.clone(self.modeler)
             predef_lr.fit(predef_dat.x, predef_dat.y.flatten())
-            predef_pred_y = predef_lr.predict_proba(test_x)[:, 1].reshape((-1, 1))
+            #predef_pred_y = predef_lr.predict_proba(test_x)[:, 1].reshape((-1, 1))
 
-            test_res = dp_engine.get_test_compare(
-                test_y, adapt_pred_y, prev_pred_y=prev_pred_y, predef_pred_y=predef_pred_y)
+            # TODO: this should be defined adaptively
+            null_constraints = np.array([
+                    [0,0.6],
+                    [0,0.68]])
+            test_res = dp_engine.get_test_res(
+                null_constraints, adapt_lr, predef_mdl=predef_lr
+            )
+
             # read side batch next iter if modification not approved
             read_side_batch = not read_side_batch if (test_res == 0) else read_side_batch
 
