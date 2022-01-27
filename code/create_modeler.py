@@ -17,7 +17,7 @@ from modelers import *
 def parse_args():
     parser = argparse.ArgumentParser(description="create model developer for generating algorithmic modifications")
     parser.add_argument("--seed", type=int, default=0, help="seed")
-    parser.add_argument("--simulation", type=str, default="online", choices=["adversary", "online"])
+    parser.add_argument("--simulation", type=str, default="online", choices=["adversary", "online", "online_fixed"])
     parser.add_argument("--model-type", type=str, default="Logistic", help="only used by the online modeler")
     parser.add_argument("--min-var-idx", type=int, default=0, help="What index to start perturbing coefficients in the adversarial model developer")
     parser.add_argument("--preset-coef", type=float, default=0, help="What is the true value of the nonzero coefficients, used for adversarial model developer")
@@ -35,6 +35,8 @@ def main():
         clf = BinaryAdversaryModeler(
             min_var_idx=args.min_var_idx, preset_coef=args.preset_coef
         )
+    elif args.simulation == "online_fixed":
+        clf = OnlineLearnerFixedModeler(args.model_type)
     elif args.simulation == "online":
         clf = OnlineAdaptiveLearnerModeler(args.model_type, start_side_batch=False)
     else:
