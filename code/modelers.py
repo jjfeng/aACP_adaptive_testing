@@ -130,8 +130,8 @@ class BinaryAdversaryModeler(LockedModeler):
             #    (-1, 1)
             #)
             null_constraints = np.array([
-                    [0,0.8],
-                    [0,0.8]])
+                    [0,0.6],
+                    [0,0.68]])
             mtp_answer = dp_engine.get_test_res(
                 null_constraints, lr, predef_mdl=self.predef_modeler
             )
