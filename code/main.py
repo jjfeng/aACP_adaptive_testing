@@ -120,7 +120,7 @@ def main():
     np.random.seed(args.seed)
 
     # Run simulation
-    mtp_mech.set_num_queries(args.max_iter)
+    mtp_mech.init_test_dat(data.reuse_test_dat, args.max_iter)
     full_hist = modeler.simulate_approval_process(
         data.init_train_dat,
         data.reuse_test_dat.x,

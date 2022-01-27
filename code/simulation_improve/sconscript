@@ -1,0 +1,144 @@
+import os
+
+from os.path import join
+from nestly.scons import SConsWrap
+from nestly import Nest
+from SCons.Script import Environment, Command, AddOption
+
+Import('env')
+localenv = env.Clone()
+
+# Set up state
+nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
+
+NUM_SEEDS = localenv['num_seeds']
+REUSE_ITERS = 40
+SPARSE_P = 1
+SPARSE_COEF_VAL = 1.5
+FWER = 0.1
+
+nest.add(
+    'reuse_test_n',
+    [100],
+    label_func=lambda c: "test_%d" % c)
+
+nest.add(
+    'model_sim',
+    [
+        "adversary",
+    ])
+
+@nest.add_target_with_env(localenv)
+def create_modeler(env, outdir, c):
+    cmd = [
+        'python create_modeler.py',
+        '--simulation',
+        c['model_sim'],
+        '--min-var-idx',
+        SPARSE_P,
+        '--preset-coef',
+        SPARSE_COEF_VAL,
+	'--out ${TARGETS[0]}'
+    ]
+    return env.Command(
+        [
+            join(outdir, 'model.pkl')],
+        [],
+        ' '.join(map(str, cmd)))
+
+
+nest.add_aggregate("summary_res", list)
+nest.add(
+    'mtp_mech',
+    [
+        "binary_thres_mtp",
+        #"graphical_bonf",
+        #"graphical_ffs",
+        #"graphical_prespec",
+    ])
+
+nest.add(
+    'seed',
+    range(NUM_SEEDS),
+    label_func=lambda c: "seed_%d" % c)
+
+@nest.add_target_with_env(localenv)
+def create_mtp(env, outdir, c):
+    targets = [join(outdir, 'mtp_mech.pkl')]
+    scratch_file = join("simulation_improve", outdir, "scratch.txt")
+    cmd = [
+        'python create_mtp_mechanism.py',
+        '--prespec-ratio 0.6' if "graphical_prespec" == c['mtp_mech'] else '',
+        '--success-weight 0.5' if "graphical" in c['mtp_mech'] else '',
+        '--alpha',
+        FWER,
+        '--mtp-mech',
+        c['mtp_mech'],
+	'--scratch %s' % scratch_file if c['mtp_mech'] in ["graphical_prespec", "graphical_ffs"] else '',
+	'--out ${TARGETS[0]}'
+    ]
+    return env.Command(
+        targets,
+        [],
+        ' '.join(map(str, cmd)))
+
+@nest.add_target_with_env(localenv)
+def generate_data(env, outdir, c):
+    cmd = [
+        'python generate_data.py',
+        '--meta-seed 0',
+        '--data-seed',
+        c['seed'],
+        '--sparse-p',
+        SPARSE_P,
+        '--p',
+        REUSE_ITERS + 1,
+        '--init-train-n 10',
+        '--train-batch-n 0',
+        '--num-batches',
+        REUSE_ITERS,
+        '--reuse-test-n',
+        c['reuse_test_n'],
+        '--sparse-beta',
+        SPARSE_COEF_VAL,
+        '--test-n 4000',
+	'--out ${TARGETS[0]}',
+	'--log-file ${TARGETS[1]}',
+    ]
+    return env.Command(
+        [
+            join(outdir, 'data.pkl'),
+            join(outdir, 'data_log.txt')],
+        [],
+        ' '.join(map(str, cmd)))
+
+@nest.add_target_with_env(localenv)
+def run_experiment(env, outdir, c):
+    cmd = [
+        'python main.py',
+        '--seed',
+	c['seed'],
+        '--max-iter',
+        REUSE_ITERS,
+	'--data ${SOURCES[0]}',
+	'--model ${SOURCES[1]}',
+	'--mtp-mech ${SOURCES[2]}',
+	'--log ${TARGETS[0]}',
+	'--out-csv ${TARGETS[1]}',
+    ]
+    targets = [
+            join(outdir, 'log.txt'),
+            join(outdir, 'res.csv'),
+        ]
+    c['summary_res'].append(targets[1])
+    return env.Command(
+        targets,
+        [
+            c["generate_data"][0],
+            c["create_modeler"][0],
+            c["create_mtp"][0],
+        ],
+        ' '.join(map(str, cmd)))
+
+nest.pop("mtp_mech")
+

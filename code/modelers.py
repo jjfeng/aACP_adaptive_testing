@@ -53,6 +53,31 @@ class LockedModeler:
     def predict_prob(self, x):
         return self.modeler.predict_proba(x)[:, 1].reshape((-1, 1))
 
+class TestModeler(LockedModeler):
+    def simulate_approval_process(self, dat, test_x, test_y, dp_engine, dat_stream, maxfev=10, side_dat_stream=None):
+        """
+        @param dat_stream: a list of datasets for further training the model
+        @return perf_value
+        """
+        self.modeler.fit(dat.x, dat.y.flatten())
+        prev_pred_y = self.modeler.predict_proba(test_x)[:, 1].reshape((-1, 1))
+
+        predef_dat = dat
+        curr_idx = 0
+        test_hist = TestHistory(self.modeler)
+        for i in range(maxfev):
+
+            predef_dat = Dataset.merge([predef_dat] + dat_stream[i : i + 1])
+            predef_lr = sklearn.base.clone(self.modeler)
+            predef_lr.fit(predef_dat.x, predef_dat.y.flatten())
+            predef_pred_y = predef_lr.predict_proba(test_x)[:, 1].reshape((-1, 1))
+
+            test_res = dp_engine.get_test_compare(
+                test_y, predef_pred_y, prev_pred_y=prev_pred_y, predef_pred_y=predef_pred_y)
+
+            test_hist.update(test_res=test_res, proposed_mdl=predef_lr, num_train=predef_dat.size - dat.size)
+        return test_hist
+
 class BinaryAdversaryModeler(LockedModeler):
     """
     Given binary outputs, this adaptive modeler will try to propose modifications that are deleterious
@@ -95,18 +120,18 @@ class BinaryAdversaryModeler(LockedModeler):
         def get_test_perf(params, curr_time):
             lr = sklearn.base.clone(self.modeler)
             self.set_model(lr, params)
-            pred_y = lr.predict_proba(test_x)[:, 1].reshape((-1, 1))
+            #pred_y = lr.predict_proba(test_x)[:, 1].reshape((-1, 1))
 
             self.predef_modeler.coef_[0, :] = orig_coefs
             self.predef_modeler.coef_[0, curr_time + self.min_var_idx] += (
                 self.update_dirs[0] * self.update_incr
             )
-            predef_pred_y = self.predef_modeler.predict_proba(test_x)[:, 1].reshape(
-                (-1, 1)
-            )
+            #predef_pred_y = self.predef_modeler.predict_proba(test_x)[:, 1].reshape(
+            #    (-1, 1)
+            #)
 
-            mtp_answer = dp_engine.get_test_compare(
-                test_y, pred_y, prev_pred_y, predef_pred_y=predef_pred_y
+            mtp_answer = dp_engine.get_test_res(
+                np.array([0.8,0.8]), lr, predef_mdl=self.predef_modeler
             )
             return mtp_answer, lr
 

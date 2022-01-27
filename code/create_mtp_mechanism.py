@@ -12,6 +12,7 @@ from typing import List, Dict
 import numpy as np
 import pandas as pd
 
+from hypothesis_tester import *
 from mtp_mechanisms import *
 
 
@@ -19,10 +20,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="create mtp mechanism")
     parser.add_argument("--mtp-mech", type=str, default="graphical_bonf", choices=["binary_thres_mtp", "bonferroni", "graphical_bonf", "graphical_prespec", "graphical_ffs"], help="Multiple testing mechanism")
     parser.add_argument(
-        "--threshold",
-        type=float,
-        default=0.5,
-        help="Threshold for defining the maximum acceptable loss by a modification",
+        "--hypo-tester", type=str, default="sens_spec"
     )
     parser.add_argument(
         "--prespec-ratio", type=float, default=1.0, help="parallel factor"
@@ -41,9 +39,12 @@ def parse_args():
 def main():
     args = parse_args()
 
+    if args.hypo_tester == "sens_spec":
+        hypo_tester = SensSpecHypothesisTester()
+
     # Create MTP mech
     if args.mtp_mech == "binary_thres_mtp":
-        mtp_mech = BinaryThresholdMTP(args.threshold, args.alpha)
+        mtp_mech = BinaryThresholdMTP(hypo_tester, args.alpha)
     elif args.mtp_mech == "bonferroni":
         mtp_mech = BonferroniThresholdMTP(args.threshold, args.alpha)
     elif args.mtp_mech == "graphical_bonf":
