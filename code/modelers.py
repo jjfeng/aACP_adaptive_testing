@@ -129,9 +129,11 @@ class BinaryAdversaryModeler(LockedModeler):
             #predef_pred_y = self.predef_modeler.predict_proba(test_x)[:, 1].reshape(
             #    (-1, 1)
             #)
-
+            null_constraints = np.array([
+                    [0,0.8],
+                    [0,0.8]])
             mtp_answer = dp_engine.get_test_res(
-                np.array([0.8,0.8]), lr, predef_mdl=self.predef_modeler
+                null_constraints, lr, predef_mdl=self.predef_modeler
             )
             return mtp_answer, lr
 

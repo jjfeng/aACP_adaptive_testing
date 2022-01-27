@@ -57,7 +57,7 @@ class BinaryThresholdMTP:
         """
         node_obs = self.hypo_tester.get_observations(mdl)
         self.test_tree.store_observations(node_obs)
-        return self.hypo_tester.test_null(self.test_tree, null_hypo, prior_nodes=[])
+        return self.hypo_tester.test_null(self.alpha, self.test_tree, null_hypo, prior_nodes=[])
 
 class BonferroniThresholdMTP(BinaryThresholdMTP):
     name = "bonferroni_thres"

@@ -60,7 +60,7 @@ def get_deployed_scores(test_hist, test_dat, max_iter):
         for idx in range(time_idx, next_approve_time):
             scores.append({"auc": auc, "nll": nll, "time": idx})
     scores = pd.DataFrame(scores)
-    print(scores)
+    #print(scores)
     return scores
 
 def get_good_bad_approved(test_hist, test_dat, max_iter):
@@ -172,12 +172,12 @@ def main():
         [reuse_nll_df, reuse_auc_df, count_df, approve_df, test_auc_df, test_nll_df, good_df, bad_df, count_df],
     )
     df["procedure"] = mtp_mech.name
-    print("results")
-    print(df)
+    #print("results")
+    #print(df)
 
     # Plot
     if args.plot_file:
-        print(df)
+        #print(df)
         sns.set_context("paper", font_scale=2)
         rel_plt = sns.relplot(
             data=df,

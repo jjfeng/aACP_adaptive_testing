@@ -2,6 +2,7 @@ from typing import List
 
 import pandas as pd
 import numpy as np
+import scipy
 
 from node import Node
 
@@ -26,7 +27,7 @@ class HypothesisTester:
 class SensSpecHypothesisTester(HypothesisTester):
     def set_test_dat(self, test_dat):
         self.test_dat = test_dat
-        self.orig_df = pd.DataFrame({
+        self.orig_obs = pd.DataFrame({
             "pos": self.test_dat.y.flatten(),
             "neg": (1 - self.test_dat.y).flatten(),
             })
@@ -39,15 +40,46 @@ class SensSpecHypothesisTester(HypothesisTester):
             })
         return df
 
-    def test_null(self, node: Node, null_hypo: np.ndarray, prior_nodes: List = []):
+    def test_null(self, alpha: float, node: Node, null_constraint: np.ndarray, prior_nodes: List = []):
         """
         @return the CI code this node, accounting for the previous nodes in the true
                and spending only the alpha allocated at this node
         """
         assert len(prior_nodes) == 0
-        est = np.array([
-            node.obs.equal_pos.mean()/self.orig_df.pos.mean(),
-            node.obs.equal_neg.mean()/self.orig_df.neg.mean()
+        raw_estimates = np.array([
+            self.orig_obs.pos.mean(),
+            self.orig_obs.neg.mean(),
+            node.obs.equal_pos.mean(),
+            node.obs.equal_neg.mean()
             ])
-        print("EST sens, spec", est)
-        1/0
+        estimate = np.array([
+            raw_estimates[2]/raw_estimates[0],
+            raw_estimates[3]/raw_estimates[1]
+            ])
+
+        full_df = pd.concat([self.orig_obs, node.obs], axis=1).to_numpy().T
+        raw_covariance = np.cov(full_df)/self.test_dat.size
+
+        delta_grad = np.array([
+            [-raw_estimates[2]/(raw_estimates[0]**2), 0],
+            [0, -raw_estimates[3]/(raw_estimates[1]**2)],
+            [1/raw_estimates[0], 0],
+            [0, 1/raw_estimates[1]],
+            ])
+        cov_est = delta_grad.T @ raw_covariance @ delta_grad
+
+        # check if null holds given the estimate
+        precision_mat = np.linalg.inv(cov_est)
+        def get_norm(test_pt):
+            dist = (estimate - test_pt).reshape((-1,1))
+            return (dist.T @ precision_mat @ dist)[0,0]
+
+        opt_res = scipy.optimize.minimize(get_norm, x0=null_constraint[:,1], bounds=[
+            (null_constraint[0,0], null_constraint[0,1]),
+            (null_constraint[1,0], null_constraint[1,1])])
+        print(opt_res.x, opt_res.success)
+
+        chi2_df2 = scipy.stats.chi2(df=2)
+        pval = 1 - chi2_df2.cdf(opt_res.fun)
+        print("p-value", pval)
+        return pval < (node.weight * alpha)
