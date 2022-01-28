@@ -91,42 +91,30 @@ class SensSpecHypothesisTester(HypothesisTester):
         print("cov est", cov_est)
 
         node_weights = np.array([prior_node.weight for prior_node in prior_nodes] + [node.weight])
-        boundaries = generate_chi2_spending_boundaries(
+        boundaries = generate_spending_boundaries(
            cov_est,
            self.stat_dim,
            alpha * node_weights,
            num_particles=max(self.test_dat.size * 4, 5000)
            )
 
-        #def get_norm(test_pt):
-        #    diff = (estimate - test_pt) * (estimate > test_pt)
-        #    return np.sum(np.power(diff, 2))
-
         # Need to check if it is within any of the specified bounds (but not necessarily both bounds)
-        min_norm2 = solve_min_norm2(estimate, null_constraint)
-        test_res = min_norm2 > boundaries[-1]
+        min_norm = solve_min_norm(estimate, null_constraint)
+        test_res = min_norm > boundaries[-1]
         print("ESTIMATE", estimate)
-        print("TEST RES", test_res, min_norm2, boundaries[-1])
+        print("TEST RES", test_res, min_norm, boundaries[-1])
 
         return test_res
 
-def solve_min_norm2(estimate, null_constraint):
-    #opt0_res = scipy.optimize.minimize(get_norm, x0=null_constraint.mean(axis=1), bounds=[
-    #    (null_constraint[0,0], null_constraint[0,1]),
-    #    (0,1)])
-    #opt1_res = scipy.optimize.minimize(get_norm, x0=null_constraint.mean(axis=1), bounds=[
-    #    (0,1),
-    #    (null_constraint[1,0], null_constraint[1,1])])
-    ##print(opt0_res)
-    ##print(opt1_res)
-    #assert opt0_res.success and opt1_res.success
-    #return min(opt0_res.fun, opt1_res.fun)
+def solve_min_norm(estimate, null_constraint):
+    """
+    @return closest distance from point to the constraints (just project onto this space)
+    """
     if np.all(estimate > null_constraint[:,1]):
-        return np.sum(np.power(estimate - null_constraint[:,1], 2))
-    else:
-        return 0
+        return np.min(np.abs(estimate - null_constraint[:,1]))
+    return 0
 
-def generate_chi2_spending_boundaries(
+def generate_spending_boundaries(
         cov: np.ndarray,
         stat_dim: int,
         alpha_spend: np.ndarray,
@@ -144,15 +132,9 @@ def generate_chi2_spending_boundaries(
 
         step_particles = good_particles[:, start_idx:start_idx + stat_dim]
         particle_mask = np.all(step_particles > 0, axis=1)
-        #constrained_step_particles = particle_mask * step_particles
-        #print(constrained_step_particles)
-        step_norms = particle_mask * np.sum(np.power(step_particles, 2), axis=1)
+        step_norms = particle_mask * np.min(np.abs(step_particles), axis=1)
         step_bound = np.quantile(step_norms, 1 - keep_alpha)
         print("step bound", step_bound, keep_alpha)
-        #_step_norms = np.sum(np.power(step_particles, 2), axis=1)
-        #_step_bound = np.quantile(_step_norms, 1 - keep_alpha)
-        #print("step bound", _step_bound, keep_alpha)
-        #1/0
         boundaries.append(step_bound)
         good_particles = good_particles[step_norms < step_bound]
     print("BOUND", boundaries)
