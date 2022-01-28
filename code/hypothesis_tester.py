@@ -6,10 +6,6 @@ import scipy
 
 from node import Node
 
-def _get_predictions(mdl, x):
-    return mdl.predict(x).reshape((-1, 1))
-
-
 class HypothesisTester:
     def set_test_dat(self, test_dat):
         self.test_dat = test_dat
@@ -34,7 +30,7 @@ class SensSpecHypothesisTester(HypothesisTester):
             })
 
     def get_observations(self, mdl):
-        pred_y = _get_predictions(mdl, self.test_dat.x)
+        pred_y = mdl.predict(self.test_dat.x).reshape((-1, 1))
         df = pd.DataFrame({
             "equal_pos": ((self.test_dat.y == pred_y) * self.test_dat.y).flatten(),
             "equal_neg": ((self.test_dat.y == pred_y) * (1 - self.test_dat.y)).flatten()
@@ -134,10 +130,8 @@ class SensSpecHypothesisTester(HypothesisTester):
             particle_mask = np.all(step_particles > 0, axis=1)
             step_norms = particle_mask * np.min(np.abs(step_particles), axis=1)
             step_bound = np.quantile(step_norms, 1 - keep_alpha)
-            print("step bound", step_bound, keep_alpha)
             boundaries.append(step_bound)
             good_particles = good_particles[step_norms < step_bound]
-        print("BOUND", boundaries)
         return np.array(boundaries)
 
 class AcceptAccurHypothesisTester(SensSpecHypothesisTester):

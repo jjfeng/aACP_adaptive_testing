@@ -11,7 +11,7 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 
 from dataset import Dataset
-from modelers import *
+from model_developers import *
 
 
 def parse_args():

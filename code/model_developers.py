@@ -20,7 +20,12 @@ class TestHistory:
         self.num_trains = [0]
         self.res_details = []
 
-    def update(self, test_res, res_detail, proposed_mdl, num_train):
+    def update(self, test_res: int, res_detail: pd.DataFrame, proposed_mdl):
+        """
+        @param test_res: 1 if we rejected the null, 0 if we failed to reject null
+        @param res_detail: pd.DataFrame with one column for each performance measure that is being tracked
+        @param proposed_mdl: the model that was proposed (but maybe not approved)
+        """
         self.curr_time += 1
         proposed_mdl = deepcopy(proposed_mdl)
         if test_res == 1:
@@ -28,7 +33,6 @@ class TestHistory:
             self.approved_mdls.append(proposed_mdl)
 
         self.proposed_mdls.append(proposed_mdl)
-        self.num_trains.append(num_train)
         self.res_details.append(res_detail)
 
     @property
@@ -136,7 +140,7 @@ class BinaryAdversaryModeler(LockedModeler):
                     test_res, proposed_mdl = get_test_perf(curr_coef, test_hist.curr_time)
                     print("perturb?", test_hist.curr_time, var_idx, test_res)
                     test_hist.update(
-                        test_res=test_res, proposed_mdl=proposed_mdl, num_train=0
+                        test_res=test_res, proposed_mdl=proposed_mdl
                     )
                     if test_res == 1:
                         self.set_model(self.modeler, curr_coef)
@@ -152,7 +156,7 @@ class BinaryAdversaryModeler(LockedModeler):
                     curr_coef[var_idx] += update_dir * self.update_incr * ctr
                     test_res, proposed_mdl = get_test_perf(curr_coef, test_hist.curr_time)
                     test_hist.update(
-                        test_res=test_res, proposed_mdl=proposed_mdl, num_train=0
+                        test_res=test_res, proposed_mdl=proposed_mdl
                     )
                     if test_res == 1:
                         self.set_model(self.modeler, curr_coef)
@@ -212,15 +216,14 @@ class OnlineFixedSensSpecModeler(LockedModeler):
                     res_detail = pd.DataFrame({
                         "sensitivity_curr": [self.curr_sensitivity],
                         "specificity_curr": [self.curr_specificity]}),
-                    proposed_mdl=predef_lr,
-                    num_train=predef_dat.size - dat.size)
+                    proposed_mdl=predef_lr)
         return test_hist
 
 class OnlineFixedSelectiveModeler(LockedModeler):
     """
     Just do online learning on a separate dataset
     """
-    def __init__(self, model_type:str = "Logistic", seed:int = 0, incr_accept: float = 0.02, init_accept= 0.6, target_acc: float = 0.85):
+    def __init__(self, model_type:str = "SelectiveLogistic", seed:int = 0, incr_accept: float = 0.02, init_accept= 0.6, target_acc: float = 0.85):
         assert model_type == "SelectiveLogistic"
         self.modeler = SelectiveLogisticRegression(penalty="none", target_acc=target_acc)
         self.incr_accept = incr_accept
@@ -246,7 +249,6 @@ class OnlineFixedSelectiveModeler(LockedModeler):
             predef_lr = sklearn.base.clone(self.modeler)
             predef_lr.fit(predef_dat.x, predef_dat.y.flatten())
 
-            # TODO: this should be defined adaptively
             null_constraints = np.array([
                     [0,self.accept_test],
                     [0,self.accuracy_test]])
@@ -261,67 +263,5 @@ class OnlineFixedSelectiveModeler(LockedModeler):
                     test_res=test_res,
                     res_detail = pd.DataFrame({
                         "accept_curr": [self.curr_accept]}),
-                    proposed_mdl=predef_lr,
-                    num_train=predef_dat.size - dat.size)
-        return test_hist
-
-
-class OnlineAdaptiveLearnerModeler(OnlineFixedSensSpecModeler):
-    """
-    Just do online learning on a separate dataset
-
-    This learner adapts by deciding whether or not to read from a side data stream
-    If modification not approved, reads from the side data stream
-    """
-    predef_batches = 1
-    def __init__(self, model_type: str, start_side_batch: int = 0):
-        """
-        @param start_side_batch: whether to start with reading the side data stream
-        """
-        super(OnlineAdaptiveLearnerModeler,self).__init__(model_type)
-        self.start_side_batch = start_side_batch
-
-    def simulate_approval_process(self, dat, test_x, test_y, dp_engine, dat_stream, maxfev=10, side_dat_stream=None):
-        """
-        @param dat_stream: a list of datasets for further training the model
-        @param side_dat_stream: a list of side datasets for further training the model (these datasets are not IID)
-        @return perf_value
-        """
-        self.modeler.fit(dat.x, dat.y.flatten())
-        prev_pred_y = self.modeler.predict_proba(test_x)[:, 1].reshape((-1, 1))
-
-        adapt_dat = dat
-        predef_dat = dat
-        read_side_batch = self.start_side_batch
-        curr_idx = 0
-        test_hist = TestHistory(self.modeler)
-        for i in range(maxfev):
-            print("ITERATION", i)
-            if read_side_batch:
-                batches_read = side_dat_stream[i: i + 1]
-            else:
-                batches_read = dat_stream[i : i + 1]
-
-            adapt_dat = Dataset.merge([adapt_dat] + batches_read)
-            adapt_lr = sklearn.base.clone(self.modeler)
-            adapt_lr.fit(adapt_dat.x, adapt_dat.y.flatten())
-            #adapt_pred_y = adapt_lr.predict_proba(test_x)[:, 1].reshape((-1, 1))
-
-            predef_dat = Dataset.merge([predef_dat] + dat_stream[i : i + 1])
-            predef_lr = sklearn.base.clone(self.modeler)
-            predef_lr.fit(predef_dat.x, predef_dat.y.flatten())
-            #predef_pred_y = predef_lr.predict_proba(test_x)[:, 1].reshape((-1, 1))
-
-            # TODO: this should be defined adaptively
-            null_constraints = np.array([
-                    [0,0.56],
-                    [0,0.68]])
-            test_res = dp_engine.get_test_res(
-                null_constraints, adapt_lr, predef_mdl=predef_lr
-            )
-
-            # read side batch next iter if modification not approved
-            read_side_batch = not read_side_batch if (test_res == 0) else read_side_batch
-
-            test_hist.update(test_res=test_res, proposed_mdl=adapt_lr, num_train=adapt_dat.size - dat.size)
+                    proposed_mdl=predef_lr)
         return test_hist
