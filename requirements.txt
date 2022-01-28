@@ -5,7 +5,6 @@ matplotlib==3.3.4
 nestly==0.6.1
 numpy
 pandas
-Pillow==8.1.0
 progressbar==2.5
 pyparsing==2.4.7
 scikit-learn
