@@ -51,6 +51,12 @@ def main():
     all_res["Measure"] = all_res.measure.map(measure_dict)
     all_res["Procedure"] = all_res.procedure.map(mtp_dict)
     all_res["Dataset"] = all_res.dataset.map(data_dict)
+    max_iter = all_res.Iteration.max()
+    print(np.mean(all_res.Value[
+        (all_res.measure == "did_approval")
+        & (all_res.Iteration == max_iter)
+        ]))
+    1/0
     print("ALL RES", all_res.shape)
 
     sns.set_context("paper", font_scale=2.5)

@@ -19,14 +19,14 @@ FWER = 0.1
 
 nest.add(
     'reuse_test_n',
-    [100],
+    [10000],
     label_func=lambda c: "test_%d" % c)
 
 nest.add(
     'model_sim',
     [
-        "online_fixed",
-        #"adversary",
+        #"online_fixed",
+        "adversary",
     ])
 
 @nest.add_target_with_env(localenv)
@@ -144,3 +144,17 @@ def run_experiment(env, outdir, c):
 
 nest.pop("mtp_mech")
 
+@nest.add_target_with_env(localenv)
+def plot_avg(env, outdir, c):
+    cmd = [
+        'python plot_simulation_adversary.py',
+	'--results',
+        ",".join(["simulation_improve/%s" % r for r in c['summary_res']]),
+	'--plot-file ${TARGETS[0]}',
+    ]
+    return env.Command(
+        [
+            join(outdir, 'res_summary.png'),
+        ],
+        c["summary_res"],
+        ' '.join(map(str, cmd)))

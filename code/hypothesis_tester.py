@@ -57,22 +57,22 @@ class SensSpecHypothesisTester(HypothesisTester):
             raw_estimates[3]/raw_estimates[1]
             ])
 
-        full_df = pd.concat([self.orig_obs, node.obs], axis=1).to_numpy().T
-        raw_covariance = np.cov(full_df)/self.test_dat.size
+        #full_df = pd.concat([self.orig_obs, node.obs], axis=1).to_numpy().T
+        #raw_covariance = np.cov(full_df)/self.test_dat.size
 
-        delta_grad = np.array([
-            [-raw_estimates[2]/(raw_estimates[0]**2), 0],
-            [0, -raw_estimates[3]/(raw_estimates[1]**2)],
-            [1/raw_estimates[0], 0],
-            [0, 1/raw_estimates[1]],
-            ])
-        cov_est = delta_grad.T @ raw_covariance @ delta_grad
-        print("cov est", cov_est)
+        #delta_grad = np.array([
+        #    [-raw_estimates[2]/(raw_estimates[0]**2), 0],
+        #    [0, -raw_estimates[3]/(raw_estimates[1]**2)],
+        #    [1/raw_estimates[0], 0],
+        #    [0, 1/raw_estimates[1]],
+        #    ])
+        #cov_est = delta_grad.T @ raw_covariance @ delta_grad
+        #print("cov est", cov_est)
 
         ###
         # NEW SECTION
         ###
-        print("PRIOR NODES", prior_nodes)
+        #print("PRIOR NODES", prior_nodes)
         raw_estimates = np.array([
                 self.orig_obs.pos.mean(),
                 self.orig_obs.neg.mean()]
@@ -94,12 +94,11 @@ class SensSpecHypothesisTester(HypothesisTester):
             for dg_d1 in [0, -raw_estimates[(i + 1) * self.stat_dim + 1]/(raw_estimates[1]**2)]]).reshape((1,-1))
         delta_dother = scipy.linalg.block_diag(
                 *[np.array([[1/raw_estimates[0],0],[0,1/raw_estimates[1]]])] * num_nodes)
-        print("GRDAD SHAPE", delta_d0.shape, delta_d1.shape, delta_dother.shape)
         delta_grad = np.vstack([
             delta_d0, delta_d1, delta_dother
             ])
         cov_est = delta_grad.T @ raw_covariance @ delta_grad
-        print("cov est 1", cov_est)
+        #print("cov est 1", cov_est)
 
         node_weights = np.array([prior_node.weight for prior_node in prior_nodes] + [node.weight])
         boundaries = generate_chi2_spending_boundaries(
@@ -124,7 +123,7 @@ class SensSpecHypothesisTester(HypothesisTester):
         assert opt0_res.success and opt1_res.success
         test_res = min(opt0_res.fun, opt1_res.fun) > boundaries[-1]
         print("ESTIMATE", estimate)
-        print("TEST RES", test_res, min(opt0_res.fun, opt1_res.fun), boundaries[-1])
+        print("TEST RES", test_res, opt0_res.fun, opt1_res.fun, boundaries[-1])
 
         ####
         # END OF NEW
