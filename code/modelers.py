@@ -7,6 +7,7 @@ import sklearn.base
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.ensemble import GradientBoostingClassifier
 
+from models import SelectiveLogisticRegression
 from dataset import Dataset
 
 
@@ -36,9 +37,10 @@ class TestHistory:
 
     def get_perf_hist(self):
         perf_hist = pd.concat(self.res_details).reset_index()
+        col_names = list(perf_hist.columns)
+        value_vars = col_names[1:]
         perf_hist["time"] = np.arange(len(self.res_details))
-        # TODO: pull column names automatically
-        return pd.melt(perf_hist, id_vars=['time'], value_vars=['sensitivity_curr', 'specificity_curr'])
+        return pd.melt(perf_hist, id_vars=['time'], value_vars=value_vars)
 
 
 class LockedModeler:
@@ -48,6 +50,8 @@ class LockedModeler:
     def __init__(self, model_type:str = "Logistic", seed:int = 0):
         if model_type == "Logistic":
             self.modeler = LogisticRegression(penalty="none")
+        elif model_type == "SelectiveLogistic":
+            self.modeler = SelectiveLogisticRegression(penalty="none", target_acc=0.7)
         elif model_type == "GBT":
             self.modeler = GradientBoostingClassifier()
         else:
@@ -157,14 +161,15 @@ class BinaryAdversaryModeler(LockedModeler):
                         ctr *= 2
         return test_hist
 
-
-class OnlineLearnerFixedModeler(LockedModeler):
+class OnlineFixedSensSpecModeler(LockedModeler):
     """
     Just do online learning on a separate dataset
     """
     def __init__(self, model_type:str = "Logistic", seed:int = 0, incr_sens_spec: float = 0.02, init_sensitivity = 0.6, init_specificity = 0.6):
         if model_type == "Logistic":
             self.modeler = LogisticRegression(penalty="none")
+        elif model_type == "SelectiveLogistic":
+            self.modeler = SelectiveLogisticRegression(penalty="none", target_acc=0.85)
         elif model_type == "GBT":
             self.modeler = GradientBoostingClassifier()
         else:
@@ -215,8 +220,57 @@ class OnlineLearnerFixedModeler(LockedModeler):
                     num_train=predef_dat.size - dat.size)
         return test_hist
 
+class OnlineFixedSelectiveModeler(LockedModeler):
+    """
+    Just do online learning on a separate dataset
+    """
+    def __init__(self, model_type:str = "Logistic", seed:int = 0, incr_accept: float = 0.02, init_accept= 0.6, target_acc: float = 0.85):
+        assert model_type == "SelectiveLogistic"
+        self.modeler = SelectiveLogisticRegression(penalty="none", target_acc=target_acc)
+        self.incr_accept = incr_accept
+        self.curr_accept = init_accept
+        self.accept_test = init_accept + incr_accept
+        self.accuracy_test = target_acc
 
-class OnlineAdaptiveLearnerModeler(OnlineLearnerFixedModeler):
+    def simulate_approval_process(self, dat, test_x, test_y, dp_engine, dat_stream, maxfev=10, side_dat_stream=None):
+        """
+        @param dat_stream: a list of datasets for further training the model
+        @return perf_value
+        """
+        self.modeler.fit(dat.x, dat.y.flatten())
+        prev_pred_y = self.modeler.predict_proba(test_x)[:, 1].reshape((-1, 1))
+
+        predef_dat = dat
+        curr_idx = 0
+        test_hist = TestHistory(self.modeler)
+        for i in range(maxfev):
+            print("ITERATION", i)
+
+            predef_dat = Dataset.merge([predef_dat] + dat_stream[i : i + 1])
+            predef_lr = sklearn.base.clone(self.modeler)
+            predef_lr.fit(predef_dat.x, predef_dat.y.flatten())
+
+            # TODO: this should be defined adaptively
+            null_constraints = np.array([
+                    [0,self.accept_test],
+                    [0,self.accuracy_test]])
+            test_res = dp_engine.get_test_res(
+                null_constraints, predef_lr, predef_mdl=predef_lr
+            )
+            if test_res:
+                self.curr_accept = self.accept_test
+                self.accept_test += self.incr_accept
+
+            test_hist.update(
+                    test_res=test_res,
+                    res_detail = pd.DataFrame({
+                        "accept_curr": [self.curr_accept]}),
+                    proposed_mdl=predef_lr,
+                    num_train=predef_dat.size - dat.size)
+        return test_hist
+
+
+class OnlineAdaptiveLearnerModeler(OnlineFixedSensSpecModeler):
     """
     Just do online learning on a separate dataset
 

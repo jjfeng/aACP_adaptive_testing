@@ -40,8 +40,11 @@ def main():
     measure_dict = {
             'specificity_curr': 'specificity_curr',
             'sensitivity_curr': 'sensitivity_curr',
-            'specificity': 'specificity',
-            'sensitivity': 'sensitivity',
+            'accept': 'accept',
+            'accept_curr': 'accept_curr',
+            'accuracy': 'accuracy',
+            #'specificity': 'specificity',
+            #'sensitivity': 'sensitivity',
             'did_approval': 'did_approval'
             }
     data_dict = {'test':'Test', 'reuse_test': 'Reusable Test'}
@@ -82,7 +85,7 @@ def main():
     )
     rel_plt.set_titles('{row_name}' ' | ' '{col_name}')
     print(rel_plt.axes_dict.keys())
-    plt.delaxes(rel_plt.axes_dict[('Reusable Test', 'did_approval')])
+    #plt.delaxes(rel_plt.axes_dict[('Reusable Test', 'did_approval')])
     num_approve_ax = rel_plt.axes_dict[('Test', 'did_approval')]
     num_approve_ax.axhline(y=0.1, color='dimgray', linestyle='--')
     num_approve_ax.set_title("Error rate")

@@ -53,9 +53,14 @@ def get_deployed_scores(test_hist, test_dat, max_iter):
         pred_prob = mdl.predict_proba(test_dat.x)[:, 1].reshape((-1, 1))
         auc = roc_auc_score(test_dat.y, pred_prob)
         nll = get_nll(test_dat.y, pred_prob)
+
         pred_y = mdl.predict(test_dat.x)
         sensitivity = np.sum((pred_y == test_y) * (test_y))/np.sum(test_y)
         specificity = np.sum((pred_y == test_y) * (1 - test_y))/np.sum(1 - test_y)
+
+        decisions = mdl.get_decision(test_dat.x)
+        accept = np.mean(decisions)
+        accuracy = np.sum(pred_y == test_y)/np.sum(decisions)
         next_approve_time = (
             test_hist.approval_times[approve_idx + 1]
             if test_hist.tot_approves > (approve_idx + 1)
@@ -67,10 +72,12 @@ def get_deployed_scores(test_hist, test_dat, max_iter):
                 "nll": nll,
                 "sensitivity": sensitivity,
                 "specificity": specificity,
+                "accuracy": accuracy,
+                "accept": accept,
                 "time": idx
                 })
     scores = pd.DataFrame(scores)
-    return pd.melt(scores, id_vars=['time'], value_vars=['nll', 'auc', 'sensitivity', 'specificity'])
+    return pd.melt(scores, id_vars=['time'], value_vars=[c for c in list(scores.columns) if c != "time"])
 
 def get_good_bad_approved(test_hist, test_dat, max_iter):
     """

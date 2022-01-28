@@ -12,7 +12,8 @@ localenv = env.Clone()
 nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 NUM_SEEDS = localenv['num_seeds']
-REUSE_ITERS = 60
+REUSE_ITERS = 20
+NUM_P = 10
 SPARSE_P = 1
 SPARSE_COEF_VAL = 2
 FWER = 0.1
@@ -26,13 +27,14 @@ nest.add(
     'model_sim',
     [
         "online_fixed",
-        #"adversary",
     ])
 
 @nest.add_target_with_env(localenv)
 def create_modeler(env, outdir, c):
     cmd = [
         'python create_modeler.py',
+        '--model-type',
+        "SelectiveLogistic",
         '--simulation',
         c['model_sim'],
         '--min-var-idx',
@@ -67,13 +69,15 @@ nest.add(
 @nest.add_target_with_env(localenv)
 def create_mtp(env, outdir, c):
     targets = [join(outdir, 'mtp_mech.pkl')]
-    scratch_file = join("simulation_improve", outdir, "scratch.txt")
+    scratch_file = join("simulation_expand", outdir, "scratch.txt")
     cmd = [
         'python create_mtp_mechanism.py',
         '--prespec-ratio 0.6' if "graphical_prespec" == c['mtp_mech'] else '',
         '--success-weight 0.7' if "graphical" in c['mtp_mech'] else '',
         '--alpha',
         FWER,
+        '--hypo-tester',
+        'accept_accur',
         '--mtp-mech',
         c['mtp_mech'],
 	'--scratch %s' % scratch_file if c['mtp_mech'] in ["graphical_prespec", "graphical_ffs"] else '',
@@ -94,9 +98,9 @@ def generate_data(env, outdir, c):
         '--sparse-p',
         SPARSE_P,
         '--p',
-        REUSE_ITERS + 1,
-        '--init-train-n 40',
-        '--train-batch-n 6',
+        NUM_P,
+        '--init-train-n 80',
+        '--train-batch-n 40',
         '--num-batches',
         REUSE_ITERS,
         '--reuse-test-n',
@@ -149,7 +153,7 @@ def plot_avg(env, outdir, c):
     cmd = [
         'python plot_simulation_adversary.py',
 	'--results',
-        ",".join(["simulation_improve/%s" % r for r in c['summary_res']]),
+        ",".join(["simulation_expand/%s" % r for r in c['summary_res']]),
 	'--plot-file ${TARGETS[0]}',
     ]
     return env.Command(

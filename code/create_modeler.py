@@ -18,7 +18,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="create model developer for generating algorithmic modifications")
     parser.add_argument("--seed", type=int, default=0, help="seed")
     parser.add_argument("--simulation", type=str, default="online", choices=["adversary", "online", "online_fixed"])
-    parser.add_argument("--model-type", type=str, default="Logistic", help="only used by the online modeler")
+    parser.add_argument("--model-type", type=str, default="Logistic", choices=["Logistic", "GBT", "SelectiveLogistic"])
     parser.add_argument("--min-var-idx", type=int, default=0, help="What index to start perturbing coefficients in the adversarial model developer")
     parser.add_argument("--preset-coef", type=float, default=0, help="What is the true value of the nonzero coefficients, used for adversarial model developer")
     parser.add_argument("--out-file", type=str, default="_output/model.pkl")
@@ -36,7 +36,10 @@ def main():
             min_var_idx=args.min_var_idx, preset_coef=args.preset_coef
         )
     elif args.simulation == "online_fixed":
-        clf = OnlineLearnerFixedModeler(args.model_type)
+        if args.model_type != "SelectiveLogistic":
+            clf = OnlineFixedSensSpecModeler(args.model_type, init_sensitivity=0.6, init_specificity=0.6)
+        else:
+            clf = OnlineFixedSelectiveModeler(args.model_type, target_acc=0.8, init_accept=0.4, incr_accept=0.05)
     elif args.simulation == "online":
         clf = OnlineAdaptiveLearnerModeler(args.model_type, start_side_batch=False)
     else:

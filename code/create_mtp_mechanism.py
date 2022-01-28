@@ -20,7 +20,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="create mtp mechanism")
     parser.add_argument("--mtp-mech", type=str, default="graphical_bonf", choices=["binary_thres_mtp", "bonferroni", "graphical_bonf", "graphical_prespec", "graphical_ffs"], help="Multiple testing mechanism")
     parser.add_argument(
-        "--hypo-tester", type=str, default="sens_spec"
+        "--hypo-tester", type=str, default="sens_spec", choices=["sens_spec", "accept_accur"]
     )
     parser.add_argument(
         "--prespec-ratio", type=float, default=1.0, help="parallel factor"
@@ -41,6 +41,10 @@ def main():
 
     if args.hypo_tester == "sens_spec":
         hypo_tester = SensSpecHypothesisTester()
+    elif args.hypo_tester == "accept_accur":
+        hypo_tester = AcceptAccurHypothesisTester()
+    else:
+        raise NotImplementedError("dont know this hypothesis")
 
     # Create MTP mech
     if args.mtp_mech == "binary_thres_mtp":
