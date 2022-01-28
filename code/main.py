@@ -141,6 +141,8 @@ def main():
     )
     print("APPROVAL", full_hist.approval_times)
 
+    conclusions_hist = full_hist.get_perf_hist()
+    conclusions_hist["dataset"] = "reuse_test"
     reuse_res = get_deployed_scores(full_hist, data.reuse_test_dat, args.max_iter)
     test_res = get_deployed_scores(full_hist, data.test_dat, args.max_iter)
     reuse_res["dataset"] = "reuse_test"
@@ -167,7 +169,7 @@ def main():
     approve_df = pd.DataFrame({"value": num_approvals > 0, "time": times})
     approve_df["dataset"] = "test"
     approve_df["variable"] = "did_approval"
-    df = pd.concat([reuse_res, test_res, approve_df, count_df])
+    df = pd.concat([reuse_res, test_res, approve_df, count_df, conclusions_hist])
     df["procedure"] = mtp_mech.name
 
     # Plot

@@ -12,7 +12,7 @@ localenv = env.Clone()
 nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 NUM_SEEDS = localenv['num_seeds']
-REUSE_ITERS = 30
+REUSE_ITERS = 40
 SPARSE_P = 1
 SPARSE_COEF_VAL = 2
 FWER = 0.1
@@ -25,8 +25,8 @@ nest.add(
 nest.add(
     'model_sim',
     [
-        #"online_fixed",
-        "adversary",
+        "online_fixed",
+        #"adversary",
     ])
 
 @nest.add_target_with_env(localenv)
@@ -52,8 +52,8 @@ nest.add_aggregate("summary_res", list)
 nest.add(
     'mtp_mech',
     [
-        "binary_thres_mtp",
-        #"bonferroni",
+        #"binary_thres_mtp",
+        "bonferroni",
         "graphical_bonf",
         "graphical_ffs",
         "graphical_prespec",
@@ -71,7 +71,7 @@ def create_mtp(env, outdir, c):
     cmd = [
         'python create_mtp_mechanism.py',
         '--prespec-ratio 0.6' if "graphical_prespec" == c['mtp_mech'] else '',
-        '--success-weight 0.5' if "graphical" in c['mtp_mech'] else '',
+        '--success-weight 0.7' if "graphical" in c['mtp_mech'] else '',
         '--alpha',
         FWER,
         '--mtp-mech',
@@ -95,8 +95,8 @@ def generate_data(env, outdir, c):
         SPARSE_P,
         '--p',
         REUSE_ITERS + 1,
-        '--init-train-n 50',
-        '--train-batch-n 50',
+        '--init-train-n 40',
+        '--train-batch-n 6',
         '--num-batches',
         REUSE_ITERS,
         '--reuse-test-n',

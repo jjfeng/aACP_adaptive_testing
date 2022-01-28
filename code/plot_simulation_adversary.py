@@ -37,10 +37,17 @@ def main():
     print(all_res)
 
     # Rename all the things for prettier figures
-    measure_dict = {'specificity': 'specificity', 'sensitivity': 'sensitivity', 'did_approval': 'did_approval'}
+    measure_dict = {
+            'specificity_curr': 'specificity_curr',
+            'sensitivity_curr': 'sensitivity_curr',
+            'specificity': 'specificity',
+            'sensitivity': 'sensitivity',
+            'did_approval': 'did_approval'
+            }
     data_dict = {'test':'Test', 'reuse_test': 'Reusable Test'}
     mtp_dict = {
             'binary_thres': 'BinaryThres',
+            'bonferroni': 'bonf_std',
             'graphical_bonf_thres': 'bonfSRGP',
             'graphical_ffs': 'fsSRGP',
             'graphical_par': "presSRGP"

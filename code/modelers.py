@@ -17,8 +17,9 @@ class TestHistory:
         self.proposed_mdls = [deepcopy(curr_mdl)]
         self.curr_time = 0
         self.num_trains = [0]
+        self.res_details = []
 
-    def update(self, test_res, proposed_mdl, num_train):
+    def update(self, test_res, res_detail, proposed_mdl, num_train):
         self.curr_time += 1
         proposed_mdl = deepcopy(proposed_mdl)
         if test_res == 1:
@@ -27,10 +28,17 @@ class TestHistory:
 
         self.proposed_mdls.append(proposed_mdl)
         self.num_trains.append(num_train)
+        self.res_details.append(res_detail)
 
     @property
     def tot_approves(self):
         return len(self.approval_times)
+
+    def get_perf_hist(self):
+        perf_hist = pd.concat(self.res_details).reset_index()
+        perf_hist["time"] = np.arange(len(self.res_details))
+        # TODO: pull column names automatically
+        return pd.melt(perf_hist, id_vars=['time'], value_vars=['sensitivity_curr', 'specificity_curr'])
 
 
 class LockedModeler:
@@ -154,6 +162,18 @@ class OnlineLearnerFixedModeler(LockedModeler):
     """
     Just do online learning on a separate dataset
     """
+    def __init__(self, model_type:str = "Logistic", seed:int = 0, incr_sens_spec: float = 0.02, init_sensitivity = 0.6, init_specificity = 0.6):
+        if model_type == "Logistic":
+            self.modeler = LogisticRegression(penalty="none")
+        elif model_type == "GBT":
+            self.modeler = GradientBoostingClassifier()
+        else:
+            raise NotImplementedError("model type missing")
+        self.incr_sens_spec = incr_sens_spec
+        self.curr_sensitivity = init_sensitivity
+        self.curr_specificity = init_specificity
+        self.sensitivity_test = init_sensitivity + incr_sens_spec
+        self.specificity_test = init_specificity + incr_sens_spec
 
     def simulate_approval_process(self, dat, test_x, test_y, dp_engine, dat_stream, maxfev=10, side_dat_stream=None):
         """
@@ -175,13 +195,24 @@ class OnlineLearnerFixedModeler(LockedModeler):
 
             # TODO: this should be defined adaptively
             null_constraints = np.array([
-                    [0,0.6],
-                    [0,0.5]])
+                    [0,self.sensitivity_test],
+                    [0,self.specificity_test]])
             test_res = dp_engine.get_test_res(
                 null_constraints, predef_lr, predef_mdl=predef_lr
             )
+            if test_res:
+                self.curr_sensitivity = self.sensitivity_test
+                self.curr_specificity = self.specificity_test
+                self.sensitivity_test += self.incr_sens_spec
+                self.specificity_test += self.incr_sens_spec
 
-            test_hist.update(test_res=test_res, proposed_mdl=predef_lr, num_train=predef_dat.size - dat.size)
+            test_hist.update(
+                    test_res=test_res,
+                    res_detail = pd.DataFrame({
+                        "sensitivity_curr": [self.curr_sensitivity],
+                        "specificity_curr": [self.curr_specificity]}),
+                    proposed_mdl=predef_lr,
+                    num_train=predef_dat.size - dat.size)
         return test_hist
 
 
