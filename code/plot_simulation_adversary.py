@@ -46,22 +46,22 @@ def main():
             }
     all_res = all_res.rename({
         "value": "Value",
-        "iteration": "Iteration",
+        "time": "Iteration",
         }, axis=1)
-    all_res["Measure"] = all_res.measure.map(measure_dict)
+    all_res["Measure"] = all_res.variable.map(measure_dict)
     all_res["Procedure"] = all_res.procedure.map(mtp_dict)
     all_res["Dataset"] = all_res.dataset.map(data_dict)
+    all_res = all_res.reset_index()
     max_iter = all_res.Iteration.max()
-    print(np.mean(all_res.Value[
-        (all_res.measure == "did_approval")
-        & (all_res.Iteration == max_iter)
-        ]))
-    1/0
+    #print(np.mean(all_res.Value[
+    #    (all_res.measure == "did_approval")
+    #    & (all_res.Iteration == max_iter)
+    #    ]))
     print("ALL RES", all_res.shape)
 
     sns.set_context("paper", font_scale=2.5)
     rel_plt = sns.relplot(
-        data=all_res[all_res.measure.isin(list(measure_dict.keys()))],
+        data=all_res[all_res.variable.isin(list(measure_dict.keys()))],
         x="Iteration",
         y="Value",
         hue="Procedure",

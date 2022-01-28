@@ -49,19 +49,27 @@ def get_deployed_scores(test_hist, test_dat, max_iter):
     for approve_idx, (mdl, time_idx) in enumerate(
         zip(test_hist.approved_mdls, test_hist.approval_times)
     ):
-        pred_y = mdl.predict_proba(test_dat.x)[:, 1].reshape((-1, 1))
-        auc = roc_auc_score(test_dat.y, pred_y)
-        nll = get_nll(test_dat.y, pred_y)
+        pred_prob = mdl.predict_proba(test_dat.x)[:, 1].reshape((-1, 1))
+        auc = roc_auc_score(test_dat.y, pred_prob)
+        nll = get_nll(test_dat.y, pred_prob)
+        pred_y = mdl.predict(test_dat.x)
+        sensitivity = np.sum((pred_y == test_dat.y) * (test_dat.y))/np.sum(test_dat.y)
+        specificity = np.sum((pred_y == test_dat.y) * (1 - test_dat.y))/np.sum(1 - test_dat.y)
         next_approve_time = (
             test_hist.approval_times[approve_idx + 1]
             if test_hist.tot_approves > (approve_idx + 1)
             else max_iter + 1
         )
         for idx in range(time_idx, next_approve_time):
-            scores.append({"auc": auc, "nll": nll, "time": idx})
+            scores.append({
+                "auc": auc,
+                "nll": nll,
+                "sensitivity": sensitivity,
+                "specificity": specificity,
+                "time": idx
+                })
     scores = pd.DataFrame(scores)
-    #print(scores)
-    return scores
+    return pd.melt(scores, id_vars=['time'], value_vars=['nll', 'auc', 'sensitivity', 'specificity'])
 
 def get_good_bad_approved(test_hist, test_dat, max_iter):
     """
@@ -134,6 +142,8 @@ def main():
 
     reuse_res = get_deployed_scores(full_hist, data.reuse_test_dat, args.max_iter)
     test_res = get_deployed_scores(full_hist, data.test_dat, args.max_iter)
+    reuse_res["dataset"] = "reuse_test"
+    test_res["dataset"] = "test"
     good_approvals, bad_approvals, prop_good_approvals = get_good_bad_approved(full_hist, data.test_dat, args.max_iter)
     num_approvals = np.array(
         [
@@ -143,37 +153,21 @@ def main():
     )
 
     # Compile results
-    iterations = np.arange(args.max_iter + 1)
-    reuse_nll_df = pd.DataFrame({"value": reuse_res.nll, "iteration": iterations})
-    reuse_nll_df["dataset"] = "reuse_test"
-    reuse_nll_df["measure"] = "nll"
-    reuse_auc_df = pd.DataFrame({"value": reuse_res.auc, "iteration": iterations})
-    reuse_auc_df["dataset"] = "reuse_test"
-    reuse_auc_df["measure"] = "auc"
-    bad_df = pd.DataFrame({"value": bad_approvals, "iteration": iterations})
+    times = np.arange(args.max_iter + 1)
+    bad_df = pd.DataFrame({"value": bad_approvals, "time": times})
     bad_df["dataset"] = "test"
-    bad_df["measure"] = "bad_approvals"
-    good_df = pd.DataFrame({"value": good_approvals, "iteration": iterations})
+    bad_df["variable"] = "bad_approvals"
+    good_df = pd.DataFrame({"value": good_approvals, "time": times})
     good_df["dataset"] = "test"
-    good_df["measure"] = "good_approvals"
-    count_df = pd.DataFrame({"value": num_approvals, "iteration": iterations})
+    good_df["variable"] = "good_approvals"
+    count_df = pd.DataFrame({"value": num_approvals, "time": times})
     count_df["dataset"] = "test"
-    count_df["measure"] = "num_approvals"
-    approve_df = pd.DataFrame({"value": num_approvals > 0, "iteration": iterations})
+    count_df["variable"] = "num_approvals"
+    approve_df = pd.DataFrame({"value": num_approvals > 0, "time": times})
     approve_df["dataset"] = "test"
-    approve_df["measure"] = "did_approval"
-    test_nll_df = pd.DataFrame({"value": test_res.nll, "iteration": iterations})
-    test_nll_df["dataset"] = "test"
-    test_nll_df["measure"] = "nll"
-    test_auc_df = pd.DataFrame({"value": test_res.auc, "iteration": iterations})
-    test_auc_df["dataset"] = "test"
-    test_auc_df["measure"] = "auc"
-    df = pd.concat(
-        [reuse_nll_df, reuse_auc_df, count_df, approve_df, test_auc_df, test_nll_df, good_df, bad_df, count_df],
-    )
+    approve_df["variable"] = "did_approval"
+    df = pd.concat([reuse_res, test_res, approve_df, good_df, bad_df, count_df])
     df["procedure"] = mtp_mech.name
-    #print("results")
-    #print(df)
 
     # Plot
     if args.plot_file:
