@@ -53,7 +53,7 @@ def main():
         )
     elif args.mtp_mech == "graphical_prespec":
         mtp_mech = GraphicalParallelMTP(
-            args.threshold,
+            hypo_tester,
             args.alpha,
             success_weight=args.success_weight,
             first_pres_weight=args.first_pres_weight,
@@ -62,7 +62,7 @@ def main():
         )
     elif args.mtp_mech == "graphical_ffs":
         mtp_mech = GraphicalFFSMTP(
-            args.threshold,
+            hypo_tester,
             args.alpha,
             success_weight=args.success_weight,
             scratch_file=args.scratch_file,

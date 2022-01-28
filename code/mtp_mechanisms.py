@@ -59,7 +59,7 @@ class BinaryThresholdMTP:
             self.parent_child_idx = 0
             self.test_tree = self.test_tree.children[self.parent_child_idx]
         else:
-            print("**num childs", len(self.test_tree.parent.children))
+            print("**FAIL, parent", self.test_tree.parent)
             self.parent_child_idx += 1
             self.test_tree = self.test_tree.parent.children[self.parent_child_idx]
         self._create_children(self.test_tree, self.num_queries)
@@ -239,20 +239,15 @@ class GraphicalFFSMTP(GraphicalBonfMTP):
     #    return np.min(all_thres)
 
 
-    def _get_prior_nodes(self, node):
-        if node.parent is None:
-            return []
-        return self._get_prior_nodes(node.parent) + [node.parent]
-
     def get_test_res(self, null_hypo: np.ndarray, mdl, predef_mdl=None):
         """
         @return test perf where 1 means approve and 0 means not approved
         """
-        print("HIST", self.test_tree.history)
+        print("HIST FFS", self.test_tree.history)
 
         node_obs = self.hypo_tester.get_observations(mdl)
         self.test_tree.store_observations(node_obs)
-        prior_nodes = self._get_prior_nodes(self.test_tree)
+        prior_nodes = self.test_tree.parent.children[:(self.parent_child_idx)]
         test_res = self.hypo_tester.test_null(self.alpha, self.test_tree, null_hypo, prior_nodes=prior_nodes)
 
         self._do_tree_update(test_res)
