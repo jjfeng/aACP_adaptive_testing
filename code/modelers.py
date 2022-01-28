@@ -60,7 +60,7 @@ class BinaryAdversaryModeler(LockedModeler):
     update_dirs = [1]
 
     def __init__(
-        self, preset_coef: float = 0, min_var_idx: int = 1, update_incr: float = 0.02
+        self, preset_coef: float = 0, min_var_idx: int = 1, update_incr: float = 0.01
     ):
         """
         @param min_var_idx: only perturb coefficients with idx at least min_var_idx

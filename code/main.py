@@ -145,7 +145,7 @@ def main():
     test_res = get_deployed_scores(full_hist, data.test_dat, args.max_iter)
     reuse_res["dataset"] = "reuse_test"
     test_res["dataset"] = "test"
-    good_approvals, bad_approvals, prop_good_approvals = get_good_bad_approved(full_hist, data.test_dat, args.max_iter)
+    #good_approvals, bad_approvals, prop_good_approvals = get_good_bad_approved(full_hist, data.test_dat, args.max_iter)
     num_approvals = np.array(
         [
             np.sum(np.array(full_hist.approval_times) <= i) - 1
@@ -155,19 +155,19 @@ def main():
 
     # Compile results
     times = np.arange(args.max_iter + 1)
-    bad_df = pd.DataFrame({"value": bad_approvals, "time": times})
-    bad_df["dataset"] = "test"
-    bad_df["variable"] = "bad_approvals"
-    good_df = pd.DataFrame({"value": good_approvals, "time": times})
-    good_df["dataset"] = "test"
-    good_df["variable"] = "good_approvals"
+    #bad_df = pd.DataFrame({"value": bad_approvals, "time": times})
+    #bad_df["dataset"] = "test"
+    #bad_df["variable"] = "bad_approvals"
+    #good_df = pd.DataFrame({"value": good_approvals, "time": times})
+    #good_df["dataset"] = "test"
+    #good_df["variable"] = "good_approvals"
     count_df = pd.DataFrame({"value": num_approvals, "time": times})
     count_df["dataset"] = "test"
     count_df["variable"] = "num_approvals"
     approve_df = pd.DataFrame({"value": num_approvals > 0, "time": times})
     approve_df["dataset"] = "test"
     approve_df["variable"] = "did_approval"
-    df = pd.concat([reuse_res, test_res, approve_df, good_df, bad_df, count_df])
+    df = pd.concat([reuse_res, test_res, approve_df, count_df])
     df["procedure"] = mtp_mech.name
 
     # Plot

@@ -88,7 +88,6 @@ class SensSpecHypothesisTester(HypothesisTester):
             delta_d0, delta_d1, delta_dother
             ])
         cov_est = delta_grad.T @ raw_covariance @ delta_grad
-        print("cov est", cov_est)
 
         node_weights = np.array([prior_node.weight for prior_node in prior_nodes] + [node.weight])
         boundaries = generate_spending_boundaries(
