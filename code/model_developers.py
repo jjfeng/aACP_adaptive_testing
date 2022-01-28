@@ -4,21 +4,21 @@ import numpy as np
 import pandas as pd
 import scipy.optimize
 import sklearn.base
-from sklearn.linear_model import LinearRegression, LogisticRegression
-from sklearn.ensemble import GradientBoostingClassifier
 
 from models import *
-from dataset import Dataset
+from dataset import Dataset, DataGenerator
 
 
 class TestHistory:
-    def __init__(self, curr_mdl):
+    """
+    Tracks the history of test results
+    """
+    def __init__(self, curr_mdl, res_detail):
         self.approval_times = [0]
         self.approved_mdls = [deepcopy(curr_mdl)]
         self.proposed_mdls = [deepcopy(curr_mdl)]
         self.curr_time = 0
-        self.num_trains = [0]
-        self.res_details = []
+        self.res_details = [res_detail]
 
     def update(self, test_res: int, res_detail: pd.DataFrame, proposed_mdl):
         """
@@ -46,6 +46,10 @@ class TestHistory:
         perf_hist["time"] = np.arange(len(self.res_details))
         return pd.melt(perf_hist, id_vars=['time'], value_vars=value_vars)
 
+def set_model(mdl, params):
+    mdl.classes_ = np.array([0, 1])
+    mdl.coef_ = params[1:].reshape((1, -1))
+    mdl.intercept_ = np.array([params[0]])
 
 class LockedModeler:
     """
@@ -59,11 +63,6 @@ class LockedModeler:
         else:
             raise NotImplementedError("model type missing")
 
-    def set_model(self, mdl, params):
-        mdl.classes_ = np.array([0, 1])
-        mdl.coef_ = params[1:].reshape((1, -1))
-        mdl.intercept_ = np.array([params[0]])
-
     def predict_prob(self, x):
         return self.modeler.predict_proba(x)[:, 1].reshape((-1, 1))
 
@@ -74,93 +73,108 @@ class BinaryAdversaryModeler(LockedModeler):
     update_dirs = [1]
 
     def __init__(
-        self, preset_coef: float = 0, min_var_idx: int = 1, update_incr: float = 0.01
+            self, data_gen: DataGenerator, update_incr: float = 0.01, incr_sens_spec: float = 0.01
     ):
         """
-        @param min_var_idx: only perturb coefficients with idx at least min_var_idx
-        @param preset_coef: set the coefficients for variables with index < min_var_idx to this value
-        @param update_incr: how much to perturb the coefficients with idx >= min_var_idx
+        @param update_incr: how much to perturb the coefficients
         """
-        self.modeler = LogisticRegression(penalty="none", solver="lbfgs")
+        self.modeler = MyLogisticRegression(penalty="none")
+        self.data_gen = data_gen
         self.update_incr = update_incr
-        self.min_var_idx = min_var_idx
-        self.preset_coef = preset_coef
+        self.incr_sens_spec = incr_sens_spec
 
-    def simulate_approval_process(self, dat, test_x, test_y, dp_engine, dat_stream=None, maxfev=10, side_dat_stream=None):
+    def _get_sensitivity_specificity(self, mdl, test_size: int = 5000):
+        # TODO: run this
+        dataset, _ = self.data_gen.generate_data(0,0,0,0,test_size,0)
+        test_dat = dataset.test_dat
+        pred_class = mdl.predict(test_dat.x)
+        test_y = test_dat.y.flatten()
+        acc = pred_class == test_y
+        sensitivity = np.sum(acc * test_y)/np.sum(test_y)
+        specificity = np.sum(acc * (1 - test_y))/np.sum(1 - test_y)
+        #print("SENSE", sensitivity, "SPEC", specificity)
+        return sensitivity, specificity
+
+    def simulate_approval_process(self, dat, test_x, test_y, mtp_mechanism, dat_stream=None, maxfev=10, side_dat_stream=None):
         """
         @param dat_stream: ignores this
         """
         # Train a good initial model
         self.modeler.fit(dat.x, dat.y.flatten())
-        self.modeler.intercept_[:] = 0
-        self.modeler.coef_[0, : self.min_var_idx] = self.preset_coef
-        self.modeler.coef_[0, self.min_var_idx :] = 0
         orig_coefs = self.modeler.coef_[:]
         prev_pred_y = self.modeler.predict_proba(test_x)[:, 1].reshape((-1, 1))
+        sens_curr, spec_curr = self._get_sensitivity_specificity(self.modeler)
+        print("ORIG", sens_curr, spec_curr)
+        sens_test = sens_curr
+        spec_test = spec_curr
 
         # Also have some predefined perturber for reference
         # just so we can use the parallel procedure
         self.predef_modeler = sklearn.base.clone(self.modeler)
         self.predef_modeler.fit(dat.x, dat.y.flatten())
-        self.predef_modeler.intercept_[:] = 0
-        self.predef_modeler.coef_[0, : self.min_var_idx] = self.preset_coef
-        self.predef_modeler.coef_[0, self.min_var_idx :] = 0
-
-        def get_test_perf(params, curr_time):
-            lr = sklearn.base.clone(self.modeler)
-            self.set_model(lr, params)
-
-            self.predef_modeler.coef_[0, :] = orig_coefs
-            self.predef_modeler.coef_[0, curr_time + self.min_var_idx] += (
-                self.update_dirs[0] * self.update_incr
-            )
-            # TODO: this should be defined adaptively
-            null_constraints = np.array([
-                    [0,0.775],
-                    [0,0.775]])
-            mtp_answer = dp_engine.get_test_res(
-                null_constraints, lr, predef_mdl=self.predef_modeler
-            )
-            return mtp_answer, lr
 
         # Now search in each direction and do a greedy search
-        test_hist = TestHistory(self.modeler)
+        test_hist = TestHistory(self.modeler, res_detail=pd.DataFrame({
+                "sensitivity_curr": [sens_curr],
+                "specificity_curr": [spec_curr],
+                }))
         while test_hist.curr_time < maxfev:
-            # Test each variable (that's known to be irrelevant)
-            for var_idx in range(1 + self.min_var_idx, 1 + test_x.shape[1]):
+            # Test each coef (dont perturb intercept)
+            for var_idx in range(1, 1 + test_x.shape[1]):
                 # Test update for the variable
                 for update_dir in self.update_dirs:
-                    if test_hist.curr_time >= maxfev:
-                        break
-                    curr_coef = np.concatenate(
-                        [self.modeler.intercept_, self.modeler.coef_.flatten()]
-                    )
-                    curr_coef[var_idx] += update_dir * self.update_incr
-                    print("curr", curr_coef)
-                    test_res, proposed_mdl = get_test_perf(curr_coef, test_hist.curr_time)
-                    print("perturb?", test_hist.curr_time, var_idx, test_res)
-                    test_hist.update(
-                        test_res=test_res, proposed_mdl=proposed_mdl
-                    )
-                    if test_res == 1:
-                        self.set_model(self.modeler, curr_coef)
+                    test_res = 1
+                    scale_factor = 1
+                    while test_res == 1:
+                        if test_hist.curr_time >= maxfev:
+                            break
+                        # Generate adaptive modification
+                        curr_coef = np.concatenate(
+                            [self.modeler.intercept_, self.modeler.coef_.flatten()]
+                        )
+                        #print("prev", curr_coef)
+                        curr_coef[var_idx] *= (1 + update_dir * self.update_incr * scale_factor)
+                        proposed_mdl = sklearn.base.clone(self.modeler)
+                        set_model(proposed_mdl, curr_coef)
+                        actual_sens_test, actual_spec_test = self._get_sensitivity_specificity(proposed_mdl)
+                        print("ACTUAL TEST", actual_sens_test, actual_spec_test)
+                        #print("curr", var_idx, curr_coef)
 
-                # If we found a good direction, keep walking in that direction
-                ctr = 2
-                while test_res == 1:
-                    if test_hist.curr_time >= maxfev:
+                        # Generate predefined model
+                        self.predef_modeler.coef_[0, :] = orig_coefs
+                        self.predef_modeler.coef_[0, test_hist.curr_time] += (
+                            self.update_dirs[0] * self.update_incr
+                        )
+
+                        # Test the performance
+                        null_constraints = np.array([
+                                [0, sens_test],
+                                [0, spec_test]])
+                        test_res = mtp_mechanism.get_test_res(
+                            null_constraints, proposed_mdl, predef_mdl=self.predef_modeler
+                        )
+                        print("perturb?", test_hist.curr_time, var_idx, test_res)
+                        if test_res:
+                            sens_curr = sens_test
+                            spec_curr = spec_test
+                            sens_test += self.incr_sens_spec
+                            spec_test += self.incr_sens_spec
+                            set_model(self.modeler, curr_coef)
+                            # If we found a good direction, keep walking in that direction,
+                            # be twice as aggressive
+                            scale_factor *= 2
+
+                        test_hist.update(
+                            test_res=test_res,
+                            res_detail=pd.DataFrame({
+                                "sensitivity_curr": [sens_curr],
+                                "specificity_curr": [spec_curr],
+                                }),
+                            proposed_mdl=proposed_mdl
+                        )
+                    if test_res == 0 and scale_factor > 1:
                         break
-                    curr_coef = np.concatenate(
-                        [self.modeler.intercept_, self.modeler.coef_.flatten()]
-                    )
-                    curr_coef[var_idx] += update_dir * self.update_incr * ctr
-                    test_res, proposed_mdl = get_test_perf(curr_coef, test_hist.curr_time)
-                    test_hist.update(
-                        test_res=test_res, proposed_mdl=proposed_mdl
-                    )
-                    if test_res == 1:
-                        self.set_model(self.modeler, curr_coef)
-                        ctr *= 2
+
         return test_hist
 
 class OnlineFixedSensSpecModeler(LockedModeler):
@@ -180,7 +194,7 @@ class OnlineFixedSensSpecModeler(LockedModeler):
         self.sensitivity_test = init_sensitivity + incr_sens_spec
         self.specificity_test = init_specificity + incr_sens_spec
 
-    def simulate_approval_process(self, dat, test_x, test_y, dp_engine, dat_stream, maxfev=10, side_dat_stream=None):
+    def simulate_approval_process(self, dat, test_x, test_y, mtp_mechanism, dat_stream, maxfev=10, side_dat_stream=None):
         """
         @param dat_stream: a list of datasets for further training the model
         @return perf_value
@@ -202,7 +216,7 @@ class OnlineFixedSensSpecModeler(LockedModeler):
             null_constraints = np.array([
                     [0,self.sensitivity_test],
                     [0,self.specificity_test]])
-            test_res = dp_engine.get_test_res(
+            test_res = mtp_mechanism.get_test_res(
                 null_constraints, predef_lr, predef_mdl=predef_lr
             )
             if test_res:
@@ -231,7 +245,7 @@ class OnlineFixedSelectiveModeler(LockedModeler):
         self.accept_test = init_accept + incr_accept
         self.accuracy_test = target_acc
 
-    def simulate_approval_process(self, dat, test_x, test_y, dp_engine, dat_stream, maxfev=10, side_dat_stream=None):
+    def simulate_approval_process(self, dat, test_x, test_y, mtp_mechanism, dat_stream, maxfev=10, side_dat_stream=None):
         """
         @param dat_stream: a list of datasets for further training the model
         @return perf_value
@@ -252,7 +266,7 @@ class OnlineFixedSelectiveModeler(LockedModeler):
             null_constraints = np.array([
                     [0,self.accept_test],
                     [0,self.accuracy_test]])
-            test_res = dp_engine.get_test_res(
+            test_res = mtp_mechanism.get_test_res(
                 null_constraints, predef_lr, predef_mdl=predef_lr
             )
             if test_res:

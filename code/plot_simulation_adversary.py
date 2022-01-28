@@ -40,11 +40,8 @@ def main():
     measure_dict = {
             'specificity_curr': 'specificity_curr',
             'sensitivity_curr': 'sensitivity_curr',
-            'accept': 'accept',
-            'accept_curr': 'accept_curr',
-            'accuracy': 'accuracy',
-            #'specificity': 'specificity',
-            #'sensitivity': 'sensitivity',
+            'specificity': 'specificity',
+            'sensitivity': 'sensitivity',
             'did_approval': 'did_approval'
             }
     data_dict = {'test':'Test', 'reuse_test': 'Reusable Test'}
@@ -64,10 +61,10 @@ def main():
     all_res["Dataset"] = all_res.dataset.map(data_dict)
     all_res = all_res.reset_index()
     max_iter = all_res.Iteration.max()
-    #print(np.mean(all_res.Value[
-    #    (all_res.measure == "did_approval")
-    #    & (all_res.Iteration == max_iter)
-    #    ]))
+    print("DID APPROVAL", np.mean(all_res.Value[
+        (all_res.variable == "did_approval")
+        & (all_res.Iteration == max_iter)
+        ]))
     print("ALL RES", all_res.shape)
 
     sns.set_context("paper", font_scale=2.5)
