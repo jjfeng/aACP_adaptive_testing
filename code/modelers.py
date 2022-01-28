@@ -7,7 +7,7 @@ import sklearn.base
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.ensemble import GradientBoostingClassifier
 
-from models import SelectiveLogisticRegression
+from models import *
 from dataset import Dataset
 
 
@@ -49,11 +49,9 @@ class LockedModeler:
     """
     def __init__(self, model_type:str = "Logistic", seed:int = 0):
         if model_type == "Logistic":
-            self.modeler = LogisticRegression(penalty="none")
+            self.modeler = MyLogisticRegression(penalty="none")
         elif model_type == "SelectiveLogistic":
             self.modeler = SelectiveLogisticRegression(penalty="none", target_acc=0.7)
-        elif model_type == "GBT":
-            self.modeler = GradientBoostingClassifier()
         else:
             raise NotImplementedError("model type missing")
 
@@ -167,11 +165,9 @@ class OnlineFixedSensSpecModeler(LockedModeler):
     """
     def __init__(self, model_type:str = "Logistic", seed:int = 0, incr_sens_spec: float = 0.02, init_sensitivity = 0.6, init_specificity = 0.6):
         if model_type == "Logistic":
-            self.modeler = LogisticRegression(penalty="none")
+            self.modeler = MyLogisticRegression(penalty="none")
         elif model_type == "SelectiveLogistic":
             self.modeler = SelectiveLogisticRegression(penalty="none", target_acc=0.85)
-        elif model_type == "GBT":
-            self.modeler = GradientBoostingClassifier()
         else:
             raise NotImplementedError("model type missing")
         self.incr_sens_spec = incr_sens_spec

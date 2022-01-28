@@ -2,6 +2,10 @@ import numpy as np
 
 from sklearn.linear_model import LogisticRegression
 
+class MyLogisticRegression(LogisticRegression):
+    def get_decision(self, X):
+        return np.ones(X.shape[0])
+
 class SelectiveLogisticRegression(LogisticRegression):
     def __init__(self, penalty: str = "none", target_acc: float=1, subset_frac: float = 0.7):
         self.target_acc = target_acc
