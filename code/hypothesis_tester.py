@@ -25,6 +25,7 @@ class HypothesisTester:
         raise NotImplementedError()
 
 class SensSpecHypothesisTester(HypothesisTester):
+    stat_dim = 2
     def set_test_dat(self, test_dat):
         self.test_dat = test_dat
         self.orig_obs = pd.DataFrame({
@@ -45,46 +46,96 @@ class SensSpecHypothesisTester(HypothesisTester):
         @return the CI code this node, accounting for the previous nodes in the true
                and spending only the alpha allocated at this node
         """
-        assert len(prior_nodes) == 0
         raw_estimates = np.array([
-            self.orig_obs.pos.mean(),
-            self.orig_obs.neg.mean(),
-            node.obs.equal_pos.mean(),
-            node.obs.equal_neg.mean()
-            ])
+                self.orig_obs.pos.mean(),
+                self.orig_obs.neg.mean()]
+            + [
+                a for prior_node in prior_nodes
+                for a in [prior_node.obs.equal_pos.mean(), prior_node.obs.equal_neg.mean()]]
+            + [
+                node.obs.equal_pos.mean(),
+                node.obs.equal_neg.mean()]
+            )
         estimate = np.array([
-            raw_estimates[2]/raw_estimates[0],
-            raw_estimates[3]/raw_estimates[1]
+            raw_estimates[-2]/raw_estimates[0],
+            raw_estimates[-1]/raw_estimates[1]
             ])
 
-        full_df = pd.concat([self.orig_obs, node.obs], axis=1).to_numpy().T
-        raw_covariance = np.cov(full_df)/self.test_dat.size
+        full_df = pd.concat([self.orig_obs] + [prior_node.obs for prior_node in prior_nodes] + [node.obs], axis=1).to_numpy().T
+        if np.unique(full_df).size == 2:
+            # All observations are binary
+            # use a better estimate of variance in that case?
+            probs = full_df.mean(axis=1)
+            raw_covariance = np.diag(probs * (1 - probs))
+            for i in range(full_df.shape[0]):
+                for j in range(i + 1, full_df.shape[0]):
+                    raw_covariance[i,j] = np.mean(full_df[i] * full_df[j]) - probs[i] * probs[j]
+                    raw_covariance[j,i] = raw_covariance[i,j]
+            raw_covariance /= self.test_dat.size
+        else:
+            raw_covariance = np.cov(full_df)/self.test_dat.size
 
-        delta_grad = np.array([
-            [-raw_estimates[2]/(raw_estimates[0]**2), 0],
-            [0, -raw_estimates[3]/(raw_estimates[1]**2)],
-            [1/raw_estimates[0], 0],
-            [0, 1/raw_estimates[1]],
+        num_nodes = len(prior_nodes) + 1
+        delta_d0 = np.array([dg_d0
+            for i in range(num_nodes)
+            for dg_d0 in [-raw_estimates[(i + 1) * self.stat_dim]/(raw_estimates[0]**2), 0]]).reshape((1,-1))
+        delta_d1 = np.array([dg_d1
+            for i in range(num_nodes)
+            for dg_d1 in [0, -raw_estimates[(i + 1) * self.stat_dim + 1]/(raw_estimates[1]**2)]]).reshape((1,-1))
+        delta_dother = scipy.linalg.block_diag(
+                *[np.array([[1/raw_estimates[0],0],[0,1/raw_estimates[1]]])] * num_nodes)
+        delta_grad = np.vstack([
+            delta_d0, delta_d1, delta_dother
             ])
         cov_est = delta_grad.T @ raw_covariance @ delta_grad
+        print("cov est", cov_est)
 
-        # check if null holds given the estimate
-        precision_mat = np.linalg.inv(cov_est)
-        def get_norm(test_pt):
-            dist = (estimate - test_pt).reshape((-1,1))
-            return (dist.T @ precision_mat @ dist)[0,0]
+        node_weights = np.array([prior_node.weight for prior_node in prior_nodes] + [node.weight])
+        boundaries = generate_spending_boundaries(
+           cov_est,
+           self.stat_dim,
+           alpha * node_weights,
+           num_particles=max(self.test_dat.size * 4, 5000)
+           )
 
         # Need to check if it is within any of the specified bounds (but not necessarily both bounds)
-        opt0_res = scipy.optimize.minimize(get_norm, x0=null_constraint.mean(axis=1), bounds=[
-            (null_constraint[0,0], null_constraint[0,1]),
-            (0,1)])
-        opt1_res = scipy.optimize.minimize(get_norm, x0=null_constraint.mean(axis=1), bounds=[
-            (0,1),
-            (null_constraint[1,0], null_constraint[1,1])])
+        min_norm = solve_min_norm(estimate, null_constraint)
+        test_res = min_norm > boundaries[-1]
+        print("ESTIMATE", estimate)
+        print("TEST RES", test_res, min_norm, boundaries[-1])
 
-        chi2_df2 = scipy.stats.chi2(df=2)
-        print("PVALS", 1 - chi2_df2.cdf(opt0_res.fun), 1 - chi2_df2.cdf(opt1_res.fun))
-        pval = 1 - min(chi2_df2.cdf(opt0_res.fun), chi2_df2.cdf(opt1_res.fun))
-        print("estim", estimate)
-        print("p-value", pval, "pthres", node.weight * alpha)
-        return pval < (node.weight * alpha)
+        return test_res
+
+def solve_min_norm(estimate, null_constraint):
+    """
+    @return closest distance from point to the constraints (just project onto this space)
+    """
+    if np.all(estimate > null_constraint[:,1]):
+        return np.min(np.abs(estimate - null_constraint[:,1]))
+    return 0
+
+def generate_spending_boundaries(
+        cov: np.ndarray,
+        stat_dim: int,
+        alpha_spend: np.ndarray,
+        num_particles: int=5000,
+        ):
+    """
+    Simulates particle paths for alpha spending
+    Assumes the test at each iteration is H_0: theta_i < 0 for some i (for i in stat_dim)
+    """
+    good_particles = np.random.multivariate_normal(mean=np.zeros(cov.shape[0]), cov=cov, size=num_particles)
+    boundaries = []
+    for i, alpha in enumerate(alpha_spend):
+        start_idx = stat_dim * i
+        keep_alpha = alpha/(1 - alpha_spend[:i].sum())
+
+        step_particles = good_particles[:, start_idx:start_idx + stat_dim]
+        particle_mask = np.all(step_particles > 0, axis=1)
+        step_norms = particle_mask * np.min(np.abs(step_particles), axis=1)
+        step_bound = np.quantile(step_norms, 1 - keep_alpha)
+        print("step bound", step_bound, keep_alpha)
+        boundaries.append(step_bound)
+        good_particles = good_particles[step_norms < step_bound]
+    print("BOUND", boundaries)
+    return np.array(boundaries)

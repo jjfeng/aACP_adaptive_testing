@@ -12,21 +12,21 @@ localenv = env.Clone()
 nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 NUM_SEEDS = localenv['num_seeds']
-REUSE_ITERS = 4
+REUSE_ITERS = 1
 SPARSE_P = 1
-SPARSE_COEF_VAL = 3
+SPARSE_COEF_VAL = 2
 FWER = 0.1
 
 nest.add(
     'reuse_test_n',
-    [100],
+    [200],
     label_func=lambda c: "test_%d" % c)
 
 nest.add(
     'model_sim',
     [
-        "online_fixed",
-        #"adversary",
+        #"online_fixed",
+        "adversary",
     ])
 
 @nest.add_target_with_env(localenv)
@@ -52,9 +52,9 @@ nest.add_aggregate("summary_res", list)
 nest.add(
     'mtp_mech',
     [
-        #"binary_thres_mtp",
+        "binary_thres_mtp",
         #"bonferroni",
-        "graphical_bonf",
+        #"graphical_bonf",
         #"graphical_ffs",
         #"graphical_prespec",
     ])
@@ -71,7 +71,7 @@ def create_mtp(env, outdir, c):
     cmd = [
         'python create_mtp_mechanism.py',
         '--prespec-ratio 0.6' if "graphical_prespec" == c['mtp_mech'] else '',
-        '--success-weight 0.8' if "graphical" in c['mtp_mech'] else '',
+        '--success-weight 0.5' if "graphical" in c['mtp_mech'] else '',
         '--alpha',
         FWER,
         '--mtp-mech',
@@ -95,8 +95,8 @@ def generate_data(env, outdir, c):
         SPARSE_P,
         '--p',
         REUSE_ITERS + 1,
-        '--init-train-n 200',
-        '--train-batch-n 100',
+        '--init-train-n 50',
+        '--train-batch-n 50',
         '--num-batches',
         REUSE_ITERS,
         '--reuse-test-n',
@@ -144,3 +144,17 @@ def run_experiment(env, outdir, c):
 
 nest.pop("mtp_mech")
 
+@nest.add_target_with_env(localenv)
+def plot_avg(env, outdir, c):
+    cmd = [
+        'python plot_simulation_adversary.py',
+	'--results',
+        ",".join(["simulation_improve/%s" % r for r in c['summary_res']]),
+	'--plot-file ${TARGETS[0]}',
+    ]
+    return env.Command(
+        [
+            join(outdir, 'res_summary.png'),
+        ],
+        c["summary_res"],
+        ' '.join(map(str, cmd)))
