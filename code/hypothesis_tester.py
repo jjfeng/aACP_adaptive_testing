@@ -1,3 +1,7 @@
+"""
+Classes for testing specific hypotheses
+All hypotheses here evaluate candidate modifications using multiple performance metrics
+"""
 from typing import List
 
 import pandas as pd

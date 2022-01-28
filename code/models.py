@@ -1,3 +1,6 @@
+"""
+ML algorithms considered by the model developer
+"""
 import numpy as np
 
 from sklearn.linear_model import LogisticRegression

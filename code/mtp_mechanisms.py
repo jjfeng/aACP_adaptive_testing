@@ -1,3 +1,6 @@
+"""
+Classes that perform multiple hypothesis testing
+"""
 import logging
 from typing import List
 
