@@ -28,6 +28,10 @@ class BinaryThresholdMTP:
         self.correction_factor = 1
 
     def _create_children(self, node, query_idx):
+        """
+        @param node: create children for this node
+        @param query_idx: which adaptive query number we are on
+        """
         print("CREATA ORIG", query_idx)
         children = [Node(
             weight=self.correction_factor,
@@ -129,6 +133,10 @@ class GraphicalBonfMTP(BinaryThresholdMTP):
         self.scratch_file = scratch_file
 
     def _create_children(self, node, query_idx):
+        """
+        @param node: create children for this node
+        @param query_idx: which adaptive query number we are on
+        """
         children = [Node(
             weight=0,
             history=node.history + ([1] if query_idx >= 0 else []) + [0] * i,
@@ -170,101 +178,86 @@ class GraphicalBonfMTP(BinaryThresholdMTP):
         self._do_tree_update(test_res)
         return test_res
 
-
-
 class GraphicalFFSMTP(GraphicalBonfMTP):
     name = "graphical_ffs"
 
-    def _get_prior_losses(self, node):
-        return [c.test_losses for c in node.parent.children[:self.parent_child_idx]]
+    #def _solve_t_statistic_thres(self, est_cov, prior_thres, alpha_level):
+    #    if len(prior_thres) == 0:
+    #        thres = scipy.stats.norm.ppf(alpha_level)
+    #        print("THRES", thres, scipy.stats.norm.cdf(thres), alpha_level)
+    #        return thres
+    #    else:
+    #        np.savetxt(self.scratch_file, est_cov, delimiter=",")
+    #        cmd = [
+    #            "Rscript",
+    #            RSCRIPT_PATH,
+    #            self.scratch_file,
+    #            str(alpha_level),
+    #        ] + list(map(str, prior_thres))
+    #        print(" ".join(cmd))
+    #        res = subprocess.run(cmd, stdout=subprocess.PIPE)
+    #        thres = float(res.stdout.decode("utf-8")[4:])
+    #        print("THRES FROM R", thres)
+    #        return thres
 
-    def _get_prior_thres(self, node):
-        return [c.test_thres for c in node.parent.children[:self.parent_child_idx]]
+    #def _get_min_t_stat_thres_approx(self, est_cov, prior_thres, alpha_level, num_tries=0):
+    #    """
+    #    need to find the critical value at which alpha spending is no more than specified,
+    #    over all null hypothesis configurations
 
-    def _solve_t_statistic_thres(self, est_cov, prior_thres, alpha_level):
-        if len(prior_thres) == 0:
-            thres = scipy.stats.norm.ppf(alpha_level)
-            print("THRES", thres, scipy.stats.norm.cdf(thres), alpha_level)
-            return thres
-        else:
-            np.savetxt(self.scratch_file, est_cov, delimiter=",")
-            cmd = [
-                "Rscript",
-                RSCRIPT_PATH,
-                self.scratch_file,
-                str(alpha_level),
-            ] + list(map(str, prior_thres))
-            print(" ".join(cmd))
-            res = subprocess.run(cmd, stdout=subprocess.PIPE)
-            thres = float(res.stdout.decode("utf-8")[4:])
-            print("THRES FROM R", thres)
-            return thres
+    #    we can't do this since it's intractable. instead we do an approximation with
+    #    randomly drawn hypothesis configurations and take the minimum critical value
 
-    def _get_min_t_stat_thres_approx(self, est_cov, prior_thres, alpha_level, num_tries=0):
+    #    @param num_tries: number of random hypothesis configurations to test
+    #    @param est_cov: the estimated covariance structure of the test statistics
+    #    @param prior_thes: the previously selected critical values thresholds
+    #    @param alpha_level: how much alpha to spend
+    #    """
+    #    # Threshold if all hypos are true
+    #    thres = self._solve_t_statistic_thres(est_cov, prior_thres, alpha_level)
+
+    #    num_hypos = len(prior_thres)
+    #    if num_hypos <= 1 or num_tries == 0:
+    #        return thres
+
+    #    prior_thres = np.array(prior_thres)
+    #    all_thres = [thres]
+    #    for i in range(num_tries):
+    #        subset_true = np.ones(num_hypos + 1, dtype=bool)
+    #        rand_size = np.random.choice(num_hypos//2) + 1
+    #        rand_subset_idxs = np.random.choice(num_hypos, size=rand_size)
+    #        subset_true[rand_subset_idxs] = False
+    #        est_cov_sub = est_cov[subset_true, :][:,subset_true]
+    #        prior_thres_sub = prior_thres[subset_true[:-1]]
+    #        # TODO: Technically this is all the alpha that was allocated up to the current model
+    #        # accumulating over the last few non-null hypotheses... right now we just use alpha because
+    #        # easy to compute. but this is technically conservative
+    #        alpha_level_sub = alpha_level
+    #        thres_one_false = self._solve_t_statistic_thres(est_cov_sub, prior_thres_sub, alpha_level_sub)
+    #        all_thres.append(thres_one_false)
+    #    print("THRES", all_thres)
+    #    return np.min(all_thres)
+
+
+    def _get_prior_nodes(self, node):
+        if node.parent is None:
+            return []
+        return self._get_prior_nodes(node.parent) + [node.parent]
+
+    def get_test_res(self, null_hypo: np.ndarray, mdl, predef_mdl=None):
         """
-        need to find the critical value at which alpha spending is no more than specified,
-        over all null hypothesis configurations
-
-        we can't do this since it's intractable. instead we do an approximation with
-        randomly drawn hypothesis configurations and take the minimum critical value
-
-        @param num_tries: number of random hypothesis configurations to test
-        @param est_cov: the estimated covariance structure of the test statistics
-        @param prior_thes: the previously selected critical values thresholds
-        @param alpha_level: how much alpha to spend
+        @return test perf where 1 means approve and 0 means not approved
         """
-        # Threshold if all hypos are true
-        thres = self._solve_t_statistic_thres(est_cov, prior_thres, alpha_level)
+        print("HIST", self.test_tree.history)
 
-        num_hypos = len(prior_thres)
-        if num_hypos <= 1 or num_tries == 0:
-            return thres
+        node_obs = self.hypo_tester.get_observations(mdl)
+        self.test_tree.store_observations(node_obs)
+        prior_nodes = self._get_prior_nodes(self.test_tree)
+        test_res = self.hypo_tester.test_null(self.alpha, self.test_tree, null_hypo, prior_nodes=prior_nodes)
 
-        prior_thres = np.array(prior_thres)
-        all_thres = [thres]
-        for i in range(num_tries):
-            subset_true = np.ones(num_hypos + 1, dtype=bool)
-            rand_size = np.random.choice(num_hypos//2) + 1
-            rand_subset_idxs = np.random.choice(num_hypos, size=rand_size)
-            subset_true[rand_subset_idxs] = False
-            est_cov_sub = est_cov[subset_true, :][:,subset_true]
-            prior_thres_sub = prior_thres[subset_true[:-1]]
-            # TODO: Technically this is all the alpha that was allocated up to the current model
-            # accumulating over the last few non-null hypotheses... right now we just use alpha because
-            # easy to compute. but this is technically conservative
-            alpha_level_sub = alpha_level
-            thres_one_false = self._solve_t_statistic_thres(est_cov_sub, prior_thres_sub, alpha_level_sub)
-            all_thres.append(thres_one_false)
-        print("THRES", all_thres)
-        return np.min(all_thres)
+        self._do_tree_update(test_res)
 
-    def get_test_compare(self, test_y, pred_y, prev_pred_y, predef_pred_y=None):
-        loss_new = get_losses(test_y, pred_y)
-        loss_prev = get_losses(test_y, prev_pred_y)
-        loss_diffs = loss_new - loss_prev
-        std_err = np.sqrt(np.var(loss_diffs) / loss_prev.size)
-        self.test_tree.observe_losses(loss_diffs)
-
-        prior_test_diffs = self._get_prior_losses(self.test_tree)
-        prior_thres = self._get_prior_thres(self.test_tree)
-        est_corr = (
-            np.corrcoef(np.array(prior_test_diffs + [loss_diffs]))
-            if len(prior_test_diffs)
-            else np.array([[1]])
-        )
-        t_thres = self._get_min_t_stat_thres_approx(
-            est_corr, prior_thres, self.test_tree.local_alpha
-        )
-        self.test_tree.set_test_thres(t_thres)
-
-        test_stat = (np.mean(loss_diffs)) / std_err
-        test_result = int(test_stat < t_thres)
-        print("FFS COMPARE", test_stat, t_thres)
-
-        # update tree
-        self._do_tree_update(test_result)
-
-        return test_result
+        return test_res
 
 class GraphicalParallelMTP(GraphicalFFSMTP):
     """

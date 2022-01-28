@@ -88,3 +88,21 @@ class SensSpecHypothesisTester(HypothesisTester):
         print("estim", estimate)
         print("p-value", pval, "pthres", node.weight * alpha)
         return pval < (node.weight * alpha)
+
+def generate_chi2_spending_boundaries(
+        cov: np.ndarray,
+        stat_dim: int,
+        alpha_spend: np.ndarray,
+        num_particles: int=1000,
+        ):
+        good_particles = np.random.multivariate_normal(mean=0, cov=cov, size=num_particles)
+        boundaries = []
+        for i, alpha in enumerate(alpha_spend):
+            start_idx = stat_dim * i
+            step_particles = good_particles[:, start_idx:start_idx + stat_dim]
+            step_norms = np.sum(np.power(step_particles, 2), axis=1)
+            keep_alpha = alpha/(1 - alpha_spend[:i].sum())
+            step_bound = np.quantile(step_norms, 1 - keep_alpha)
+            boundaries.append(step_bound)
+            good_particles = good_particles[step_norms > step_bound]
+        return np.array(boundaries)
