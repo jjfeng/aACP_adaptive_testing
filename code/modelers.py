@@ -102,8 +102,8 @@ class BinaryAdversaryModeler(LockedModeler):
             )
             # TODO: this should be defined adaptively
             null_constraints = np.array([
-                    [0,0.77],
-                    [0,0.77]])
+                    [0,0.775],
+                    [0,0.775]])
             mtp_answer = dp_engine.get_test_res(
                 null_constraints, lr, predef_mdl=self.predef_modeler
             )
