@@ -34,9 +34,10 @@ def main():
     num_replicates = len(all_res)
     print("Number of replicates:", num_replicates)
     all_res = pd.concat(all_res)
+    print(all_res)
 
     # Rename all the things for prettier figures
-    measure_dict = {'nll': 'NLL', 'auc': 'AUC', 'did_approval': 'did_approval'}
+    measure_dict = {'specificity': 'specificity', 'sensitivity': 'sensitivity', 'did_approval': 'did_approval'}
     data_dict = {'test':'Test', 'reuse_test': 'Reusable Test'}
     mtp_dict = {
             'binary_thres': 'BinaryThres',

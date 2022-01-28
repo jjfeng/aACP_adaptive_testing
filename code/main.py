@@ -45,6 +45,7 @@ def get_deployed_scores(test_hist, test_dat, max_iter):
     @return Dataframe with auc and nll for the approved models for the given test data
     """
     last_approve_time = 0
+    test_y = test_dat.y.flatten()
     scores = []
     for approve_idx, (mdl, time_idx) in enumerate(
         zip(test_hist.approved_mdls, test_hist.approval_times)
@@ -53,8 +54,8 @@ def get_deployed_scores(test_hist, test_dat, max_iter):
         auc = roc_auc_score(test_dat.y, pred_prob)
         nll = get_nll(test_dat.y, pred_prob)
         pred_y = mdl.predict(test_dat.x)
-        sensitivity = np.sum((pred_y == test_dat.y) * (test_dat.y))/np.sum(test_dat.y)
-        specificity = np.sum((pred_y == test_dat.y) * (1 - test_dat.y))/np.sum(1 - test_dat.y)
+        sensitivity = np.sum((pred_y == test_y) * (test_y))/np.sum(test_y)
+        specificity = np.sum((pred_y == test_y) * (1 - test_y))/np.sum(1 - test_y)
         next_approve_time = (
             test_hist.approval_times[approve_idx + 1]
             if test_hist.tot_approves > (approve_idx + 1)
