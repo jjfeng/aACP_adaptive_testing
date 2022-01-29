@@ -212,7 +212,10 @@ class OnlineFixedSensSpecModeler(LockedModeler):
 
         predef_dat = dat
         curr_idx = 0
-        test_hist = TestHistory(self.modeler)
+        test_hist = TestHistory(self.modeler, res_detail=pd.DataFrame({
+                "sensitivity_curr": [self.curr_sensitivity],
+                "specificity_curr": [self.curr_specificity],
+                }))
         for i in range(maxfev):
             print("ITERATION", i)
 
