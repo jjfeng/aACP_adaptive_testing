@@ -143,7 +143,7 @@ nest.pop("seed")
 @nest.add_target_with_env(localenv)
 def plot_avg(env, outdir, c):
     cmd = [
-        'python plot_simulation_adversary.py',
+        'python plot_simulation_improve.py',
 	'--results',
         ",".join(["simulation_improve/%s" % r for r in c['summary_res']]),
 	'--plot-file ${TARGETS[0]}',
