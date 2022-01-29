@@ -34,7 +34,6 @@ def main():
     num_replicates = len(all_res)
     print("Number of replicates:", num_replicates)
     all_res = pd.concat(all_res)
-    print(all_res)
 
     # Rename all the things for prettier figures
     measure_dict = {

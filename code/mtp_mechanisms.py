@@ -25,8 +25,6 @@ class BinaryThresholdMTP:
         @param node: create children for this node
         @param query_idx: which adaptive query number we are on
         """
-        print("CREATA ORIG", query_idx)
-        print("self.correction", self.correction_factor)
         children = [Node(
             weight=self.correction_factor,
             history=node.history + ([1] if query_idx >= 0 else []) + [0] * i,
@@ -39,7 +37,6 @@ class BinaryThresholdMTP:
         # update tree
         self.num_queries += 1
 
-        print("NUM QUERIES", self.num_queries)
         if self.num_queries >= self.num_adapt_queries:
             # We are done
             return

@@ -1,3 +1,4 @@
+import logging
 from copy import deepcopy
 from typing import List
 import numpy as np
@@ -70,21 +71,20 @@ class BinaryAdversaryModeler(LockedModeler):
     """
     Given binary outputs, this adaptive modeler will try to propose modifications that are deleterious
     """
-    update_dirs = [1]
+    update_dirs = [1,-1]
 
     def __init__(
-            self, data_gen: DataGenerator, update_incr: float = 0.01, incr_sens_spec: float = 0.01
+            self, data_gen: DataGenerator, update_incr: float = 0.4, incr_sens_spec: float = 0.01
     ):
         """
         @param update_incr: how much to perturb the coefficients
         """
-        self.modeler = MyLogisticRegression(penalty="none")
+        self.modeler = MyLogisticRegression()
         self.data_gen = data_gen
         self.update_incr = update_incr
         self.incr_sens_spec = incr_sens_spec
 
     def _get_sensitivity_specificity(self, mdl, test_size: int = 5000):
-        # TODO: run this
         dataset, _ = self.data_gen.generate_data(0,0,0,0,test_size,0)
         test_dat = dataset.test_dat
         pred_class = mdl.predict(test_dat.x)
@@ -101,10 +101,12 @@ class BinaryAdversaryModeler(LockedModeler):
         """
         # Train a good initial model
         self.modeler.fit(dat.x, dat.y.flatten())
+        self.modeler.coef_[:] = self.data_gen.beta.flatten()
+        self.modeler.intercept_[:] = 0
         orig_coefs = self.modeler.coef_[:]
         prev_pred_y = self.modeler.predict_proba(test_x)[:, 1].reshape((-1, 1))
         sens_curr, spec_curr = self._get_sensitivity_specificity(self.modeler)
-        print("ORIG", sens_curr, spec_curr)
+        logging.info("orig %.3f %.3f", sens_curr, spec_curr)
         sens_test = sens_curr
         spec_test = spec_curr
 
@@ -112,6 +114,8 @@ class BinaryAdversaryModeler(LockedModeler):
         # just so we can use the parallel procedure
         self.predef_modeler = sklearn.base.clone(self.modeler)
         self.predef_modeler.fit(dat.x, dat.y.flatten())
+        self.predef_modeler.coef_[:] = self.data_gen.beta.flatten()
+        self.predef_modeler.intercept_[:] = 0
 
         # Now search in each direction and do a greedy search
         test_hist = TestHistory(self.modeler, res_detail=pd.DataFrame({
@@ -120,7 +124,7 @@ class BinaryAdversaryModeler(LockedModeler):
                 }))
         while test_hist.curr_time < maxfev:
             # Test each coef (dont perturb intercept)
-            for var_idx in range(1, 1 + test_x.shape[1]):
+            for var_idx in range(2, 1 + test_x.shape[1]):
                 # Test update for the variable
                 for update_dir in self.update_dirs:
                     test_res = 1
@@ -133,11 +137,13 @@ class BinaryAdversaryModeler(LockedModeler):
                             [self.modeler.intercept_, self.modeler.coef_.flatten()]
                         )
                         #print("prev", curr_coef)
-                        curr_coef[var_idx] *= (1 + update_dir * self.update_incr * scale_factor)
+                        curr_coef[var_idx] += update_dir * self.update_incr * scale_factor
                         proposed_mdl = sklearn.base.clone(self.modeler)
                         set_model(proposed_mdl, curr_coef)
                         actual_sens_test, actual_spec_test = self._get_sensitivity_specificity(proposed_mdl)
-                        print("ACTUAL TEST", actual_sens_test, actual_spec_test)
+                        print("PERTUB", var_idx, "ACTUAL TEST", actual_sens_test, actual_spec_test)
+                        logging.info("coef prop %s", proposed_mdl.coef_[:])
+                        logging.info("proposal %.3f %.3f", actual_sens_test, actual_spec_test)
                         #print("curr", var_idx, curr_coef)
 
                         # Generate predefined model
@@ -153,13 +159,15 @@ class BinaryAdversaryModeler(LockedModeler):
                         test_res = mtp_mechanism.get_test_res(
                             null_constraints, proposed_mdl, predef_mdl=self.predef_modeler
                         )
-                        print("perturb?", test_hist.curr_time, var_idx, test_res)
+                        print("perturb?", test_hist.curr_time, var_idx, update_dir, test_res)
                         if test_res:
+                            print("TEST RES")
                             sens_curr = sens_test
                             spec_curr = spec_test
                             sens_test += self.incr_sens_spec
                             spec_test += self.incr_sens_spec
                             set_model(self.modeler, curr_coef)
+                            logging.info("APPROVED %s", curr_coef)
                             # If we found a good direction, keep walking in that direction,
                             # be twice as aggressive
                             scale_factor *= 2
