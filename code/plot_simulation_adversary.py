@@ -60,10 +60,6 @@ def main():
     all_res["Dataset"] = all_res.dataset.map(data_dict)
     all_res = all_res.reset_index()
     max_iter = all_res.Iteration.max()
-    print("DID APPROVAL", np.mean(all_res.Value[
-        (all_res.variable == "did_approval")
-        & (all_res.Iteration == max_iter)
-        ]))
     print("ALL RES", all_res.shape)
 
     sns.set_context("paper", font_scale=2.5)
