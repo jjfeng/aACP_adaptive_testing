@@ -1,6 +1,13 @@
+"""
+ML algorithms considered by the model developer
+"""
 import numpy as np
 
 from sklearn.linear_model import LogisticRegression
+
+class MyLogisticRegression(LogisticRegression):
+    def get_decision(self, X):
+        return np.ones(X.shape[0])
 
 class SelectiveLogisticRegression(LogisticRegression):
     def __init__(self, penalty: str = "none", target_acc: float=1, subset_frac: float = 0.7):
@@ -26,7 +33,6 @@ class SelectiveLogisticRegression(LogisticRegression):
                 print("SUCCESS", subset_acc, "THRES", thres, self.target_acc, keep_mask.mean())
                 self.prob_thres = thres
                 return
-        print("SUBSET", subset_acc, self.target_acc, keep_mask.mean())
         raise ValueError("good threshold was never found")
 
     def predict(self, X):

@@ -1,20 +1,13 @@
+"""
+Classes that perform multiple hypothesis testing
+"""
 import logging
 from typing import List
-import subprocess
 
 import numpy as np
-from scipy.stats import norm, multivariate_normal
-import scipy.optimize
 
 from node import Node
 from hypothesis_tester import HypothesisTester
-from constants import RSCRIPT_PATH
-
-def get_losses(test_y, pred_y):
-    test_y = test_y.flatten()
-    pred_y = np.maximum(np.minimum(1 - 1e-10, pred_y.flatten()), 1e-10)
-    test_nlls = -(np.log(pred_y) * test_y + np.log(1 - pred_y) * (1 - test_y))
-    return test_nlls
 
 class BinaryThresholdMTP:
     """
@@ -32,8 +25,6 @@ class BinaryThresholdMTP:
         @param node: create children for this node
         @param query_idx: which adaptive query number we are on
         """
-        print("CREATA ORIG", query_idx)
-        print("self.correction", self.correction_factor)
         children = [Node(
             weight=self.correction_factor,
             history=node.history + ([1] if query_idx >= 0 else []) + [0] * i,
@@ -46,7 +37,6 @@ class BinaryThresholdMTP:
         # update tree
         self.num_queries += 1
 
-        print("NUM QUERIES", self.num_queries)
         if self.num_queries >= self.num_adapt_queries:
             # We are done
             return
@@ -83,8 +73,6 @@ class BinaryThresholdMTP:
         """
         @return test perf where 1 means approve and 0 means not approved
         """
-        print("HIST", self.test_tree.history)
-
         node_obs = self.hypo_tester.get_observations(mdl)
         self.test_tree.store_observations(node_obs)
         test_res = self.hypo_tester.test_null(self.alpha, self.test_tree, null_hypo, prior_nodes=[])
@@ -184,8 +172,6 @@ class GraphicalFFSMTP(GraphicalBonfMTP):
         """
         @return test perf where 1 means approve and 0 means not approved
         """
-        print("HIST FFS", self.test_tree.history)
-
         node_obs = self.hypo_tester.get_observations(mdl)
         self.test_tree.store_observations(node_obs)
         prior_nodes = self.test_tree.parent.children[:(self.parent_child_idx)]
@@ -287,8 +273,6 @@ class GraphicalParallelMTP(GraphicalFFSMTP):
         """
         @return test perf where 1 means approve and 0 means not approved
         """
-        print("HIST Parallel", self.test_tree.history)
-
         parallel_node = self.parallel_tree_nodes[self.num_queries]
         parallel_node_obs = self.hypo_tester.get_observations(predef_mdl)
         parallel_node.store_observations(parallel_node_obs)

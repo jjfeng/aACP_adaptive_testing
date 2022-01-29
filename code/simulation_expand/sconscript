@@ -12,7 +12,7 @@ localenv = env.Clone()
 nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 NUM_SEEDS = localenv['num_seeds']
-REUSE_ITERS = 20
+REUSE_ITERS = 50
 NUM_P = 10
 SPARSE_P = 1
 SPARSE_COEF_VAL = 2
@@ -30,18 +30,14 @@ nest.add(
     ])
 
 @nest.add_target_with_env(localenv)
-def create_modeler(env, outdir, c):
+def create_model_developer(env, outdir, c):
     cmd = [
-        'python create_modeler.py',
+        'python create_model_developer.py',
         '--model-type',
         "SelectiveLogistic",
         '--simulation',
         c['model_sim'],
-        '--min-var-idx',
-        SPARSE_P,
-        '--preset-coef',
-        SPARSE_COEF_VAL,
-	'--out ${TARGETS[0]}'
+        '--out ${TARGETS[0]}'
     ]
     return env.Command(
         [
@@ -51,6 +47,42 @@ def create_modeler(env, outdir, c):
 
 
 nest.add_aggregate("summary_res", list)
+
+nest.add(
+    'seed',
+    range(NUM_SEEDS),
+    label_func=lambda c: "seed_%d" % c)
+
+@nest.add_target_with_env(localenv)
+def generate_data(env, outdir, c):
+    cmd = [
+        'python generate_data.py',
+        '--meta-seed 0',
+        '--data-seed',
+        c['seed'],
+        '--sparse-p',
+        SPARSE_P,
+        '--p',
+        NUM_P,
+        '--init-train-n 100',
+        '--train-batch-n 15',
+        '--num-batches',
+        REUSE_ITERS,
+        '--reuse-test-n',
+        c['reuse_test_n'],
+        '--sparse-beta',
+        SPARSE_COEF_VAL,
+        '--test-n 4000',
+	'--out ${TARGETS[0]}',
+	'--log-file ${TARGETS[1]}',
+    ]
+    return env.Command(
+        [
+            join(outdir, 'data.pkl'),
+            join(outdir, 'data_log.txt')],
+        [],
+        ' '.join(map(str, cmd)))
+
 nest.add(
     'mtp_mech',
     [
@@ -60,11 +92,6 @@ nest.add(
         "graphical_ffs",
         "graphical_prespec",
     ])
-
-nest.add(
-    'seed',
-    range(NUM_SEEDS),
-    label_func=lambda c: "seed_%d" % c)
 
 @nest.add_target_with_env(localenv)
 def create_mtp(env, outdir, c):
@@ -85,36 +112,6 @@ def create_mtp(env, outdir, c):
     ]
     return env.Command(
         targets,
-        [],
-        ' '.join(map(str, cmd)))
-
-@nest.add_target_with_env(localenv)
-def generate_data(env, outdir, c):
-    cmd = [
-        'python generate_data.py',
-        '--meta-seed 0',
-        '--data-seed',
-        c['seed'],
-        '--sparse-p',
-        SPARSE_P,
-        '--p',
-        NUM_P,
-        '--init-train-n 80',
-        '--train-batch-n 40',
-        '--num-batches',
-        REUSE_ITERS,
-        '--reuse-test-n',
-        c['reuse_test_n'],
-        '--sparse-beta',
-        SPARSE_COEF_VAL,
-        '--test-n 4000',
-	'--out ${TARGETS[0]}',
-	'--log-file ${TARGETS[1]}',
-    ]
-    return env.Command(
-        [
-            join(outdir, 'data.pkl'),
-            join(outdir, 'data_log.txt')],
         [],
         ' '.join(map(str, cmd)))
 
@@ -141,17 +138,17 @@ def run_experiment(env, outdir, c):
         targets,
         [
             c["generate_data"][0],
-            c["create_modeler"][0],
+            c["create_model_developer"][0],
             c["create_mtp"][0],
         ],
         ' '.join(map(str, cmd)))
 
-nest.pop("mtp_mech")
+nest.pop("seed")
 
 @nest.add_target_with_env(localenv)
 def plot_avg(env, outdir, c):
     cmd = [
-        'python plot_simulation_adversary.py',
+        'python plot_simulation_expand.py',
 	'--results',
         ",".join(["simulation_expand/%s" % r for r in c['summary_res']]),
 	'--plot-file ${TARGETS[0]}',
