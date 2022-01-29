@@ -12,7 +12,7 @@ localenv = env.Clone()
 nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 NUM_SEEDS = localenv['num_seeds']
-REUSE_ITERS = 20
+REUSE_ITERS = 50
 NUM_P = 10
 SPARSE_P = 1
 SPARSE_COEF_VAL = 2
@@ -37,11 +37,7 @@ def create_model_developers(env, outdir, c):
         "SelectiveLogistic",
         '--simulation',
         c['model_sim'],
-        '--min-var-idx',
-        SPARSE_P,
-        '--preset-coef',
-        SPARSE_COEF_VAL,
-	'--out ${TARGETS[0]}'
+        '--out ${TARGETS[0]}'
     ]
     return env.Command(
         [
@@ -68,8 +64,8 @@ def generate_data(env, outdir, c):
         SPARSE_P,
         '--p',
         NUM_P,
-        '--init-train-n 80',
-        '--train-batch-n 40',
+        '--init-train-n 100',
+        '--train-batch-n 15',
         '--num-batches',
         REUSE_ITERS,
         '--reuse-test-n',
@@ -152,7 +148,7 @@ nest.pop("seed")
 @nest.add_target_with_env(localenv)
 def plot_avg(env, outdir, c):
     cmd = [
-        'python plot_simulation_adversary.py',
+        'python plot_simulation_expand.py',
 	'--results',
         ",".join(["simulation_expand/%s" % r for r in c['summary_res']]),
 	'--plot-file ${TARGETS[0]}',

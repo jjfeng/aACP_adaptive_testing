@@ -266,7 +266,9 @@ class OnlineFixedSelectiveModeler(LockedModeler):
 
         predef_dat = dat
         curr_idx = 0
-        test_hist = TestHistory(self.modeler)
+        test_hist = TestHistory(self.modeler, res_detail=pd.DataFrame({
+                "accept_curr": [self.curr_accept],
+                }))
         for i in range(maxfev):
             print("ITERATION", i)
 

@@ -134,6 +134,9 @@ class SensSpecHypothesisTester(HypothesisTester):
             particle_mask = np.all(step_particles > 0, axis=1)
             step_norms = particle_mask * np.min(np.abs(step_particles), axis=1)
             step_bound = np.quantile(step_norms, 1 - keep_alpha)
+            if np.mean(step_norms < step_bound) < keep_alpha:
+                # If the step bound is weird, just increment it and let all particles thru
+                step_bound += 1
             boundaries.append(step_bound)
             good_particles = good_particles[step_norms < step_bound]
         return np.array(boundaries)
