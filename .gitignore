@@ -2,3 +2,4 @@ _output
 *.swp
 *.pyc
 venv
+.sconsign.dblite
