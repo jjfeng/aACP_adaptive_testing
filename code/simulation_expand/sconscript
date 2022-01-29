@@ -30,9 +30,9 @@ nest.add(
     ])
 
 @nest.add_target_with_env(localenv)
-def create_model_developers(env, outdir, c):
+def create_model_developer(env, outdir, c):
     cmd = [
-        'python create_model_developers.py',
+        'python create_model_developer.py',
         '--model-type',
         "SelectiveLogistic",
         '--simulation',
@@ -138,7 +138,7 @@ def run_experiment(env, outdir, c):
         targets,
         [
             c["generate_data"][0],
-            c["create_model_developers"][0],
+            c["create_model_developer"][0],
             c["create_mtp"][0],
         ],
         ' '.join(map(str, cmd)))
