@@ -81,6 +81,7 @@ class BinaryAdversaryModeler(LockedModeler):
         """
         self.modeler = MyLogisticRegression()
         self.data_gen = data_gen
+        self.num_sparse_theta = np.max(np.where(self.data_gen.beta.flatten() != 0)[0]) + 1
         self.update_incr = update_incr
         self.incr_sens_spec = incr_sens_spec
 
@@ -124,7 +125,7 @@ class BinaryAdversaryModeler(LockedModeler):
                 }))
         while test_hist.curr_time < maxfev:
             # Test each coef (dont perturb intercept)
-            for var_idx in range(2, 1 + test_x.shape[1]):
+            for var_idx in range(self.num_sparse_theta, self.num_sparse_theta + test_x.shape[1]):
                 # Test update for the variable
                 for update_dir in self.update_dirs:
                     test_res = 1
@@ -148,8 +149,10 @@ class BinaryAdversaryModeler(LockedModeler):
 
                         # Generate predefined model
                         self.predef_modeler.coef_[0, :] = orig_coefs
+                        predef_coef_idx = self.num_sparse_theta + (test_hist.curr_time // len(self.update_dirs))
+                        predef_update_dir = test_hist.curr_time % len(self.update_dirs)
                         self.predef_modeler.coef_[0, test_hist.curr_time] += (
-                            self.update_dirs[0] * self.update_incr
+                            self.update_dirs[predef_update_dir] * self.update_incr
                         )
 
                         # Test the performance
