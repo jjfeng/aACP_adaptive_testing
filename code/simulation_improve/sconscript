@@ -13,14 +13,14 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 CLUSTER_STR = localenv['cluster']
 NUM_SEEDS = localenv['num_seeds']
-REUSE_ITERS = 20
-NUM_P = 8
-SPARSE_P = 2
+REUSE_ITERS = 15
+NUM_P = 6
+SPARSE_P = 3
 SPARSE_COEF_VAL = 1
 PERTURB_FACTOR = 0.02
 FWER = 0.1
 MTP_MECH_LIST = [
-    "bonferroni",
+    #"bonferroni",
     #"graphical_bonf",
     #"graphical_ffs",
     "graphical_prespec",
@@ -28,7 +28,7 @@ MTP_MECH_LIST = [
 
 nest.add(
     'reuse_test_n',
-    [400],
+    [200],
     label_func=lambda c: "test_%d" % c)
 
 nest.add(
@@ -44,6 +44,8 @@ def create_model_developer(env, outdir, c):
         'python create_model_developer.py',
         '--simulation',
         c['model_sim'],
+        '--min-valid-dat-size',
+        c['reuse_test_n'],
         '--out ${TARGETS[0]}'
     ]
     return env.Command(
@@ -63,8 +65,8 @@ def create_mtp(env, outdir, c):
     scratch_file = join("simulation_improve", outdir, "scratch.txt")
     cmd = [
         'python create_mtp_mechanism.py',
-        '--prespec-ratio 0.6' if "graphical_prespec" == c['mtp_mech'] else '',
-        '--success-weight 0.8' if "graphical" in c['mtp_mech'] else '',
+        '--prespec-ratio 0.2' if "graphical_prespec" == c['mtp_mech'] else '',
+        '--success-weight 0.6' if "graphical" in c['mtp_mech'] else '',
         '--alpha',
         FWER,
         '--mtp-mech',
@@ -100,8 +102,8 @@ def generate_data(env, outdir, c):
         SPARSE_P,
         '--p',
         NUM_P,
-        '--init-train-n 150',
-        '--train-batch-n 100',
+        '--init-train-n 400',
+        '--train-batch-n 75',
         '--num-batches',
         REUSE_ITERS,
         '--reuse-test-n',

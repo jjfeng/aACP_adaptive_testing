@@ -192,11 +192,12 @@ class OnlineFixedSensSpecModeler(LockedModeler):
     """
     Just do online learning on a separate dataset
     """
-    def __init__(self, model_type:str = "Logistic", seed:int = 0, incr_sens_spec: float = 0.02, validation_frac: float = 0.2):
+    def __init__(self, model_type:str = "Logistic", seed:int = 0, incr_sens_spec: float = 0.02, validation_frac: float = 0.2, min_valid_dat_size: int = 200):
         assert model_type == "Logistic"
         self.modeler = MyLogisticRegression(penalty="none")
         self.incr_sens_spec = incr_sens_spec
         self.validation_frac = validation_frac
+        self.min_valid_dat_size = min_valid_dat_size
 
     def _get_sensitivity_specificity_lower_bound(self, mdl, valid_dat: Dataset, se_factor: float = 1.96):
         pred_class = mdl.predict(valid_dat.x)
@@ -204,17 +205,20 @@ class OnlineFixedSensSpecModeler(LockedModeler):
         acc = pred_class == test_y
         sensitivity = np.sum(acc * test_y)/np.sum(test_y)
         specificity = np.sum(acc * (1 - test_y))/np.sum(1 - test_y)
-        sensitivity_se = np.sqrt(np.var(acc[test_y == 1])/np.sum(test_y))
-        specificity_se = np.sqrt(np.var(acc[test_y == 0])/np.sum(1 - test_y))
-        print("SandS", sensitivity, specificity)
+        sens_p = np.mean(acc[test_y == 1])
+        spec_p = np.mean(acc[test_y == 0])
+        sensitivity_se = np.sqrt(sens_p * (1 - sens_p)/np.sum(test_y))
+        specificity_se = np.sqrt(spec_p * (1 - spec_p)/np.sum(1 - test_y))
+        print("SandS", sensitivity, specificity, sensitivity_se, specificity_se)
         return sensitivity - se_factor * sensitivity_se, specificity - se_factor * specificity_se
 
-    def _create_train_valid_dat(self, dat: Dataset, min_valid_dat_size: int = 40):
+    def _create_train_valid_dat(self, dat: Dataset):
         #shuffle_idxs = np.random.choice(dat.size, dat.size, replace=False)
         shuffle_idxs = np.arange(dat.size)
-        valid_n = max(min_valid_dat_size, int(dat.size * self.validation_frac))
+        valid_n = max(self.min_valid_dat_size, int(dat.size * self.validation_frac))
+        print("valid_n", valid_n)
         train_dat = dat.subset_idxs(shuffle_idxs[:-valid_n])
-        valid_dat = dat.subset_idxs(shuffle_idxs[-valid__n:])
+        valid_dat = dat.subset_idxs(shuffle_idxs[-valid_n:])
         return train_dat, valid_dat
 
     def simulate_approval_process(self, dat, mtp_mechanism, dat_stream, maxfev=10):
@@ -224,12 +228,10 @@ class OnlineFixedSensSpecModeler(LockedModeler):
         """
         curr_sens = 1
         curr_spec = 1
-        for i in range(10):
-            train_dat, valid_dat = self._create_train_valid_dat(dat)
-            self.modeler.fit(train_dat.x, train_dat.y.flatten())
-            curr_sens, curr_spec = self._get_sensitivity_specificity_lower_bound(self.modeler, valid_dat)
-            if (curr_sens < 1) and (curr_spec < 1):
-                break
+        train_dat, valid_dat = self._create_train_valid_dat(dat)
+        self.modeler.fit(train_dat.x, train_dat.y.flatten())
+        curr_sens, curr_spec = self._get_sensitivity_specificity_lower_bound(self.modeler, valid_dat)
+        assert (curr_sens < 1) and (curr_spec < 1)
         print("CURR", curr_sens, curr_spec)
 
         predef_dat = dat
@@ -246,6 +248,8 @@ class OnlineFixedSensSpecModeler(LockedModeler):
             predef_lr = sklearn.base.clone(self.modeler)
             predef_lr.fit(predef_train_dat.x, predef_train_dat.y.flatten())
             new_sens, new_spec = self._get_sensitivity_specificity_lower_bound(predef_lr, predef_valid_dat)
+            assert (curr_sens + new_sens)/2 > (curr_sens + self.incr_sens_spec)
+            assert (curr_spec + new_spec)/2 > (curr_spec + self.incr_sens_spec)
             sens_test = max(curr_sens + self.incr_sens_spec, (curr_sens + new_sens)/2)
             spec_test = max(curr_spec + self.incr_sens_spec, (curr_spec + new_spec)/2)
             print("NEW", sens_test, spec_test)
@@ -273,14 +277,15 @@ class OnlineSensSpecModeler(OnlineFixedSensSpecModeler):
     """
     adaptive online testing
     """
-    def __init__(self, model_type:str = "Logistic", seed:int = 0, incr_sens_spec: float = 0.01, validation_frac: float = 0.2, countdown_reset: int = 4):
-        super(OnlineSensSpecModeler,self).__init__(model_type, seed, incr_sens_spec, validation_frac)
+    def __init__(self, model_type:str = "Logistic", seed:int = 0, incr_sens_spec: float = 1e-10, validation_frac: float = 0.2, min_valid_dat_size: int = 200, countdown_reset: int = 4):
+        super(OnlineSensSpecModeler,self).__init__(model_type, seed, incr_sens_spec, validation_frac, min_valid_dat_size)
         self.countdown_reset = countdown_reset
 
-    def _create_train_valid_dat(self, orig_dat: Dataset, new_dat: Dataset = None, min_valid_dat_size: int = 40):
+    def _create_train_valid_dat(self, orig_dat: Dataset, new_dat: Dataset = None):
         num_obs = orig_dat.size + new_dat.size if new_dat is not None else orig_dat.size
         shuffle_idxs = np.flip(np.arange(num_obs))
-        valid_n = max(min(orig_dat.size, int(num_obs * self.validation_frac)), min_valid_dat_size)
+        valid_n = max(min(orig_dat.size, int(num_obs * self.validation_frac)), self.min_valid_dat_size)
+        print("valid_n", valid_n)
         merge_dat = Dataset.merge([orig_dat, new_dat]) if new_dat is not None else orig_dat
         train_dat = merge_dat.subset_idxs(shuffle_idxs[valid_n:])
         valid_dat = merge_dat.subset_idxs(shuffle_idxs[:valid_n])
@@ -328,8 +333,11 @@ class OnlineSensSpecModeler(OnlineFixedSensSpecModeler):
             adapt_lr.fit(adapt_train_dat.x, adapt_train_dat.y.flatten())
 
             new_sens, new_spec = self._get_sensitivity_specificity_lower_bound(adapt_lr, adapt_valid_dat)
-            sens_test = max(curr_sens + self.incr_sens_spec, (curr_sens + new_sens)/2)
-            spec_test = max(curr_spec + self.incr_sens_spec, (curr_spec + new_spec)/2)
+            print(curr_sens, new_sens)
+            print(curr_spec, new_spec)
+            #assert ((curr_sens + new_sens)/2 > curr_sens) or ((curr_spec + new_spec)/2 > curr_spec)
+            sens_test = max(curr_sens, (curr_sens + new_sens)/2)
+            spec_test = max(curr_spec, (curr_spec + new_spec)/2)
             print("NEW", sens_test, spec_test)
             logging.info("sens spec test %.3f %.3f", sens_test, spec_test)
 

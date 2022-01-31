@@ -49,7 +49,7 @@ def main():
         perturbed_beta = None
     logging.info("perturbed beta %s", perturbed_beta)
 
-    np.random.seed(args.meta_seed + args.data_seed)
+    np.random.seed(args.meta_seed + args.data_seed + 1)
     data_generator = DataGenerator(true_beta, mean_x=0, perturb_beta=perturbed_beta)
     full_dat, betas = data_generator.generate_data(
         args.init_train_n,

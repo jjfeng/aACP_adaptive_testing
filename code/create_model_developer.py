@@ -24,6 +24,7 @@ def parse_args():
     parser.add_argument("--sparse-p", type=int, default=4, help="number of nonzero coefficients in the true logistic regression model")
     parser.add_argument("--p", type=int, default=10, help="number of covariates")
     parser.add_argument("--sparse-beta", type=float, default=0.5, help="values for the nonzero coefficients in the true model")
+    parser.add_argument("--min-valid-dat-size", type=int, default=200, help="number of observations to hold out for validation")
     args = parser.parse_args()
     return args
 
@@ -42,12 +43,12 @@ def main():
         clf = BinaryAdversaryModeler(data_generator)
     elif args.simulation == "online_fixed":
         if args.model_type != "SelectiveLogistic":
-            clf = OnlineFixedSensSpecModeler(args.model_type)
+            clf = OnlineFixedSensSpecModeler(args.model_type, min_valid_dat_size=args.min_valid_dat_size)
         else:
             clf = OnlineFixedSelectiveModeler(args.model_type, target_acc=0.8, init_accept=0.4, incr_accept=0.05)
     elif args.simulation == "online":
         if args.model_type != "SelectiveLogistic":
-            clf = OnlineSensSpecModeler(args.model_type)
+            clf = OnlineSensSpecModeler(args.model_type, min_valid_dat_size=args.min_valid_dat_size)
 
     if clf is None:
         raise NotImplementedError("modeler missing")

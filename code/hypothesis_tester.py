@@ -147,8 +147,8 @@ class SensSpecHypothesisTester(HypothesisTester):
             step_bound = np.quantile(step_norms, 1 - keep_alpha)
             keep_ratio = np.mean(step_norms < step_bound)
             # if the keep ratio is not close to what we desired, do not rejecanything
-            logging.info("keep ratio %f %f", keep_ratio, keep_alpha)
-            if keep_ratio < keep_alpha or (1 - keep_ratio)/keep_alpha > 2:
+            logging.info("keep ratio %f", (1 - keep_ratio)/keep_alpha)
+            if keep_ratio < keep_alpha or (1 - keep_ratio)/keep_alpha > 1.2:
                 # If the step bound is weird, do not reject anything
                 step_bound += 1
             boundaries.append(step_bound)
