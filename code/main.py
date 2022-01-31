@@ -132,8 +132,10 @@ def main():
         mtp_mech,
         dat_stream=data.iid_train_dat_stream,
         maxfev=args.max_iter,
+        side_dat_stream=data.side_train_dat_stream
     )
     print("APPROVAL", full_hist.approval_times)
+    logging.info("APPROVAL %s", full_hist.approval_times)
 
     conclusions_hist = full_hist.get_perf_hist()
     conclusions_hist["dataset"] = "reuse_test"

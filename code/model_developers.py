@@ -192,17 +192,13 @@ class OnlineFixedSensSpecModeler(LockedModeler):
     """
     Just do online learning on a separate dataset
     """
-    def __init__(self, model_type:str = "Logistic", seed:int = 0, incr_sens_spec: float = 0.02, init_sensitivity = 0.6, init_specificity = 0.6, validation_frac: float = 0.2):
-        if model_type == "Logistic":
-            self.modeler = MyLogisticRegression(penalty="none")
-        elif model_type == "SelectiveLogistic":
-            self.modeler = SelectiveLogisticRegression(penalty="none", target_acc=0.85)
-        else:
-            raise NotImplementedError("model type missing")
+    def __init__(self, model_type:str = "Logistic", seed:int = 0, incr_sens_spec: float = 0.02, validation_frac: float = 0.2):
+        assert model_type == "Logistic"
+        self.modeler = MyLogisticRegression(penalty="none")
         self.incr_sens_spec = incr_sens_spec
         self.validation_frac = validation_frac
 
-    def _get_sensitivity_specificity_lower_bound(self, mdl, valid_dat: Dataset, se_factor: float = 1):
+    def _get_sensitivity_specificity_lower_bound(self, mdl, valid_dat: Dataset, se_factor: float = 1.96):
         pred_class = mdl.predict(valid_dat.x)
         test_y = valid_dat.y.flatten()
         acc = pred_class == test_y
@@ -210,11 +206,15 @@ class OnlineFixedSensSpecModeler(LockedModeler):
         specificity = np.sum(acc * (1 - test_y))/np.sum(1 - test_y)
         sensitivity_se = np.sqrt(np.var(acc[test_y == 1])/np.sum(test_y))
         specificity_se = np.sqrt(np.var(acc[test_y == 0])/np.sum(1 - test_y))
+        print("SandS", sensitivity, specificity)
         return sensitivity - se_factor * sensitivity_se, specificity - se_factor * specificity_se
 
     def _create_train_valid_dat(self, dat: Dataset):
-        train_dat = dat.subset(n=int(dat.size * (1 - self.validation_frac)))
-        valid_dat = dat.subset(n=dat.size, start_n=int(dat.size * (1 - self.validation_frac)))
+        #shuffle_idxs = np.random.choice(dat.size, dat.size, replace=False)
+        shuffle_idxs = np.arange(dat.size)
+        train_n = int(dat.size * (1 - self.validation_frac))
+        train_dat = dat.subset_idxs(shuffle_idxs[:train_n])
+        valid_dat = dat.subset_idxs(shuffle_idxs[train_n:])
         return train_dat, valid_dat
 
     def simulate_approval_process(self, dat, mtp_mechanism, dat_stream, maxfev=10):
@@ -222,9 +222,14 @@ class OnlineFixedSensSpecModeler(LockedModeler):
         @param dat_stream: a list of datasets for further training the model
         @return perf_value
         """
-        train_dat, valid_dat = self._create_train_valid_dat(dat)
-        self.modeler.fit(train_dat.x, train_dat.y.flatten())
-        curr_sens, curr_spec = self._get_sensitivity_specificity_lower_bound(self.modeler, valid_dat)
+        curr_sens = 1
+        curr_spec = 1
+        for i in range(10):
+            train_dat, valid_dat = self._create_train_valid_dat(dat)
+            self.modeler.fit(train_dat.x, train_dat.y.flatten())
+            curr_sens, curr_spec = self._get_sensitivity_specificity_lower_bound(self.modeler, valid_dat)
+            if (curr_sens < 1) and (curr_spec < 1):
+                break
         print("CURR", curr_sens, curr_spec)
 
         predef_dat = dat
@@ -240,7 +245,7 @@ class OnlineFixedSensSpecModeler(LockedModeler):
             predef_train_dat, predef_valid_dat = self._create_train_valid_dat(predef_dat)
             predef_lr = sklearn.base.clone(self.modeler)
             predef_lr.fit(predef_train_dat.x, predef_train_dat.y.flatten())
-            new_sens, new_spec = self._get_sensitivity_specificity_lower_bound(self.modeler, predef_valid_dat)
+            new_sens, new_spec = self._get_sensitivity_specificity_lower_bound(predef_lr, predef_valid_dat)
             sens_test = max(curr_sens + self.incr_sens_spec, (curr_sens + new_sens)/2)
             spec_test = max(curr_spec + self.incr_sens_spec, (curr_spec + new_spec)/2)
             print("NEW", sens_test, spec_test)
@@ -266,14 +271,22 @@ class OnlineFixedSensSpecModeler(LockedModeler):
 
 class OnlineSensSpecModeler(OnlineFixedSensSpecModeler):
     """
-    Just adaptive online testing
+    adaptive online testing
     """
-    def __init__(self, model_type:str = "Logistic", seed:int = 0, validation_frac: float = 0.2):
-        assert model_type == "Logistic"
-        self.modeler = MyLogisticRegression(penalty="none")
-        self.validation_frac = validation_frac
+    def __init__(self, model_type:str = "Logistic", seed:int = 0, incr_sens_spec: float = 0.01, validation_frac: float = 0.2, countdown_reset: int = 4):
+        super(OnlineSensSpecModeler,self).__init__(model_type, seed, incr_sens_spec, validation_frac)
+        self.countdown_reset = countdown_reset
 
-    def simulate_approval_process(self, dat, mtp_mechanism, dat_stream, maxfev=10):
+    def _create_train_valid_dat(self, orig_dat: Dataset, new_dat: Dataset = None):
+        num_obs = orig_dat.size + new_dat.size if new_dat is not None else orig_dat.size
+        shuffle_idxs = np.flip(np.arange(num_obs))
+        valid_n = min(orig_dat.size, int(num_obs * self.validation_frac))
+        merge_dat = Dataset.merge([orig_dat, new_dat]) if new_dat is not None else orig_dat
+        train_dat = merge_dat.subset_idxs(shuffle_idxs[valid_n:])
+        valid_dat = merge_dat.subset_idxs(shuffle_idxs[:valid_n])
+        return train_dat, valid_dat
+
+    def simulate_approval_process(self, dat, mtp_mechanism, dat_stream, maxfev: int, side_dat_stream: Dataset):
         """
         @param dat_stream: a list of datasets for further training the model
         @return perf_value
@@ -283,7 +296,8 @@ class OnlineSensSpecModeler(OnlineFixedSensSpecModeler):
         curr_sens, curr_spec = self._get_sensitivity_specificity_lower_bound(self.modeler, valid_dat)
         print("CURR", curr_sens, curr_spec)
 
-        predef_dat = dat
+        adapt_dat = []
+        countdown = self.countdown_reset
         curr_idx = 0
         test_hist = TestHistory(self.modeler, res_detail=pd.DataFrame({
                 "sensitivity_curr": [curr_sens],
@@ -293,34 +307,50 @@ class OnlineSensSpecModeler(OnlineFixedSensSpecModeler):
         for i in range(maxfev):
             print("ITERATION", i)
 
-            predef_dat = Dataset.merge([predef_dat] + dat_stream[i : i + 1])
-            predef_train_dat, predef_valid_dat = self._create_train_valid_dat(predef_dat)
+            predef_train_dat, _ = self._create_train_valid_dat(dat, Dataset.merge(dat_stream[:i + 1]))
             predef_lr = sklearn.base.clone(self.modeler)
             predef_lr.fit(predef_train_dat.x, predef_train_dat.y.flatten())
 
-            1/0
-            new_sens, new_spec = self._get_sensitivity_specificity_lower_bound(self.modeler, predef_valid_dat)
-            sens_test = (curr_sens + new_sens)/2
-            spec_test = (curr_spec + new_spec)/2
+            if countdown == 0:
+                batches_read = side_dat_stream[i: i + 1]
+            else:
+                batches_read = dat_stream[i : i + 1]
+            logging.info("BATCH countdown %d", countdown)
+
+            adapt_dat = adapt_dat + batches_read
+            adapt_train_dat, adapt_valid_dat = self._create_train_valid_dat(
+                    dat,
+                    Dataset.merge(adapt_dat))
+            print("ADAPT SIDE", adapt_valid_dat.size)
+            adapt_lr = sklearn.base.clone(self.modeler)
+            adapt_lr.fit(adapt_train_dat.x, adapt_train_dat.y.flatten())
+
+            new_sens, new_spec = self._get_sensitivity_specificity_lower_bound(adapt_lr, adapt_valid_dat)
+            sens_test = max(curr_sens + self.incr_sens_spec, (curr_sens + new_sens)/2)
+            spec_test = max(curr_spec + self.incr_sens_spec, (curr_spec + new_spec)/2)
             print("NEW", sens_test, spec_test)
+            logging.info("sens spec test %.3f %.3f", sens_test, spec_test)
 
             # TODO: this should be defined adaptively
             null_constraints = np.array([
                     [0,sens_test],
                     [0,spec_test]])
             test_res = mtp_mechanism.get_test_res(
-                null_constraints, predef_lr, predef_mdl=predef_lr
+                null_constraints, adapt_lr, predef_mdl=predef_lr
             )
             if test_res:
                 curr_sens = sens_test
                 curr_spec = spec_test
+                countdown = self.countdown_reset
+            else:
+                countdown -= 1
 
             test_hist.update(
                     test_res=test_res,
                     res_detail = pd.DataFrame({
                         "sensitivity_curr": [curr_sens],
                         "specificity_curr": [curr_spec]}),
-                    proposed_mdl=predef_lr)
+                    proposed_mdl=adapt_lr)
         return test_hist
 
 
