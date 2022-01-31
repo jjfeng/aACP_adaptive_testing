@@ -248,9 +248,9 @@ class OnlineFixedSelectiveModeler(LockedModeler):
     """
     Just do online learning on a separate dataset
     """
-    def __init__(self, model_type:str = "SelectiveLogistic", seed:int = 0, incr_accept: float = 0.02, init_accept= 0.6, target_acc: float = 0.85):
+    def __init__(self, model_type:str = "SelectiveLogistic", seed:int = 0, incr_accept: float = 0.02, init_accept= 0.6, target_acc: float = 0.85, acc_buffer: float = 0.05):
         assert model_type == "SelectiveLogistic"
-        self.modeler = SelectiveLogisticRegression(penalty="none", target_acc=target_acc)
+        self.modeler = SelectiveLogisticRegression(penalty="none", target_acc=target_acc + acc_buffer)
         self.incr_accept = incr_accept
         self.curr_accept = init_accept
         self.accept_test = init_accept + incr_accept

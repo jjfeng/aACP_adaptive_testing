@@ -29,6 +29,7 @@ class SelectiveLogisticRegression(LogisticRegression):
         for thres in np.arange(0, 0.5, step=0.01):
             keep_mask = np.abs(fitted_probs - 0.5) > thres
             subset_acc = np.mean(acc[keep_mask])
+            #print("searching...", subset_acc, "THRES", thres, self.target_acc, keep_mask.mean())
             if subset_acc > self.target_acc:
                 print("SUCCESS", subset_acc, "THRES", thres, self.target_acc, keep_mask.mean())
                 self.prob_thres = thres

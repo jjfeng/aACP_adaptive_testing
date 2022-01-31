@@ -11,12 +11,20 @@ localenv = env.Clone()
 # Set up state
 nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
+CLUSTER_STR = localenv['cluster']
 NUM_SEEDS = localenv['num_seeds']
 REUSE_ITERS = 50
-NUM_P = 10
+NUM_P = 6
 SPARSE_P = 1
 SPARSE_COEF_VAL = 2
 FWER = 0.1
+MTP_MECH_LIST = [
+    "bonferroni",
+    "graphical_bonf",
+    "graphical_ffs",
+    "graphical_prespec",
+]
+
 
 nest.add(
     'reuse_test_n',
@@ -45,6 +53,34 @@ def create_model_developer(env, outdir, c):
         [],
         ' '.join(map(str, cmd)))
 
+nest.add_aggregate("mtp_mech_res", dict)
+nest.add(
+    'mtp_mech',
+    MTP_MECH_LIST)
+
+@nest.add_target_with_env(localenv)
+def create_mtp(env, outdir, c):
+    targets = [join(outdir, 'mtp_mech.pkl')]
+    scratch_file = join("simulation_expand", outdir, "scratch.txt")
+    cmd = [
+        'python create_mtp_mechanism.py',
+        '--prespec-ratio 0.6' if "graphical_prespec" == c['mtp_mech'] else '',
+        '--success-weight 0.7' if "graphical" in c['mtp_mech'] else '',
+        '--hypo-tester accept_accur',
+        '--alpha',
+        FWER,
+        '--mtp-mech',
+        c['mtp_mech'],
+	    '--scratch %s' % scratch_file if c['mtp_mech'] in ["graphical_prespec", "graphical_ffs"] else '',
+	    '--out ${TARGETS[0]}'
+    ]
+    c['mtp_mech_res'][c['mtp_mech']] = targets[0]
+    return env.Command(
+        targets,
+        [],
+        ' '.join(map(str, cmd)))
+
+nest.pop('mtp_mech')
 
 nest.add_aggregate("summary_res", list)
 
@@ -64,8 +100,8 @@ def generate_data(env, outdir, c):
         SPARSE_P,
         '--p',
         NUM_P,
-        '--init-train-n 100',
-        '--train-batch-n 15',
+        '--init-train-n 90',
+        '--train-batch-n 20',
         '--num-batches',
         REUSE_ITERS,
         '--reuse-test-n',
@@ -85,35 +121,7 @@ def generate_data(env, outdir, c):
 
 nest.add(
     'mtp_mech',
-    [
-        #"binary_thres_mtp",
-        "bonferroni",
-        "graphical_bonf",
-        "graphical_ffs",
-        "graphical_prespec",
-    ])
-
-@nest.add_target_with_env(localenv)
-def create_mtp(env, outdir, c):
-    targets = [join(outdir, 'mtp_mech.pkl')]
-    scratch_file = join("simulation_expand", outdir, "scratch.txt")
-    cmd = [
-        'python create_mtp_mechanism.py',
-        '--prespec-ratio 0.6' if "graphical_prespec" == c['mtp_mech'] else '',
-        '--success-weight 0.7' if "graphical" in c['mtp_mech'] else '',
-        '--alpha',
-        FWER,
-        '--hypo-tester',
-        'accept_accur',
-        '--mtp-mech',
-        c['mtp_mech'],
-	'--scratch %s' % scratch_file if c['mtp_mech'] in ["graphical_prespec", "graphical_ffs"] else '',
-	'--out ${TARGETS[0]}'
-    ]
-    return env.Command(
-        targets,
-        [],
-        ' '.join(map(str, cmd)))
+    MTP_MECH_LIST)
 
 @nest.add_target_with_env(localenv)
 def run_experiment(env, outdir, c):
@@ -125,7 +133,8 @@ def run_experiment(env, outdir, c):
         REUSE_ITERS,
 	'--data ${SOURCES[0]}',
 	'--model ${SOURCES[1]}',
-	'--mtp-mech ${SOURCES[2]}',
+	'--mtp-mech',
+    "simulation_expand/%s" % c['mtp_mech_res'][c['mtp_mech']],
 	'--log ${TARGETS[0]}',
 	'--out-csv ${TARGETS[1]}',
     ]
@@ -139,7 +148,7 @@ def run_experiment(env, outdir, c):
         [
             c["generate_data"][0],
             c["create_model_developer"][0],
-            c["create_mtp"][0],
+            c["mtp_mech_res"][c['mtp_mech']],
         ],
         ' '.join(map(str, cmd)))
 
