@@ -72,8 +72,6 @@ def create_mtp(env, outdir, c):
 	    '--scratch %s' % scratch_file if c['mtp_mech'] in ["graphical_prespec", "graphical_ffs"] else '',
 	    '--out ${TARGETS[0]}'
     ]
-    print(c['mtp_mech_res'])
-    print(c['mtp_mech'])
     c['mtp_mech_res'][c['mtp_mech']] = targets[0]
     return env.Command(
         targets,
