@@ -34,12 +34,6 @@ def parse_args():
     return args
 
 
-def get_nll(test_y, pred_y):
-    test_y = test_y.flatten()
-    pred_y = np.maximum(np.minimum(1 - 1e-10, pred_y.flatten()), 1e-10)
-    return -np.mean(test_y * np.log(pred_y) + (1 - test_y) * np.log(1 - pred_y))
-
-
 def get_deployed_scores(test_hist, test_dat, max_iter):
     """
     @return Dataframe with auc and nll for the approved models for the given test data
@@ -52,7 +46,6 @@ def get_deployed_scores(test_hist, test_dat, max_iter):
     ):
         pred_prob = mdl.predict_proba(test_dat.x)[:, 1].reshape((-1, 1))
         auc = roc_auc_score(test_dat.y, pred_prob)
-        nll = get_nll(test_dat.y, pred_prob)
 
         pred_y = mdl.predict(test_dat.x)
         sensitivity = np.sum((pred_y == test_y) * (test_y))/np.sum(test_y)
@@ -69,7 +62,6 @@ def get_deployed_scores(test_hist, test_dat, max_iter):
         for idx in range(time_idx, next_approve_time):
             scores.append({
                 "auc": auc,
-                "nll": nll,
                 "sensitivity": sensitivity,
                 "specificity": specificity,
                 "accuracy": accuracy,
@@ -79,41 +71,39 @@ def get_deployed_scores(test_hist, test_dat, max_iter):
     scores = pd.DataFrame(scores)
     return pd.melt(scores, id_vars=['time'], value_vars=[c for c in list(scores.columns) if c != "time"])
 
-def get_good_bad_approved(test_hist, test_dat, max_iter):
-    """
-    @return tuple with total number of good approvals, total number of bad approvals, proportion of good models approved
-    """
-    orig_mdl = test_hist.approved_mdls[0]
-    orig_pred_y = orig_mdl.predict_proba(test_dat.x)[:, 1].reshape((-1, 1))
-    orig_nll = get_nll(test_dat.y, orig_pred_y)
-    approval_idxs = np.array(test_hist.approval_times[1:])
-
-    # Tracks whether or not proposed model at each time is good
-    is_good_list = np.array([], dtype=bool)
-    good_approved = [0]
-    prop_good_approved = [0]
-    bad_approved = [0]
-    for idx, mdl in enumerate(test_hist.proposed_mdls[1:]):
-        time_idx = idx + 1
-        pred_y = mdl.predict_proba(test_dat.x)[:, 1].reshape((-1, 1))
-        proposed_nll = get_nll(test_dat.y, pred_y)
-        is_good = proposed_nll <= orig_nll
-        is_good_list = np.concatenate([is_good_list, [is_good]])
-        is_bad_list = np.logical_not(is_good_list)
-
-        if approval_idxs.size > 0:
-            num_good_approved = np.sum(is_good_list[approval_idxs[approval_idxs <= time_idx] - 1])
-            num_bad_approved = np.sum(is_bad_list[approval_idxs[approval_idxs <= time_idx] - 1])
-        else:
-            num_good_approved = 0
-            num_bad_approved = 0
-        num_good = np.sum(is_good_list)
-        num_bad = np.sum(is_bad_list)
-        good_approved.append(num_good_approved)
-        prop_good_approved.append(num_good_approved/num_good if num_good > 0 else 0)
-        bad_approved.append(num_bad_approved)
-
-    return np.array(good_approved), np.array(bad_approved), np.array(prop_good_approved)
+#def get_good_bad_approved(test_hist, test_dat, max_iter):
+#    """
+#    @return tuple with total number of good approvals, total number of bad approvals, proportion of good models approved
+#    """
+#    orig_mdl = test_hist.approved_mdls[0]
+#    orig_pred_y = orig_mdl.predict_proba(test_dat.x)[:, 1].reshape((-1, 1))
+#    approval_idxs = np.array(test_hist.approval_times[1:])
+#
+#    # Tracks whether or not proposed model at each time is good
+#    is_good_list = np.array([], dtype=bool)
+#    good_approved = [0]
+#    prop_good_approved = [0]
+#    bad_approved = [0]
+#    for idx, mdl in enumerate(test_hist.proposed_mdls[1:]):
+#        time_idx = idx + 1
+#        pred_y = mdl.predict_proba(test_dat.x)[:, 1].reshape((-1, 1))
+#        is_good = proposed_nll <= orig_nll
+#        is_good_list = np.concatenate([is_good_list, [is_good]])
+#        is_bad_list = np.logical_not(is_good_list)
+#
+#        if approval_idxs.size > 0:
+#            num_good_approved = np.sum(is_good_list[approval_idxs[approval_idxs <= time_idx] - 1])
+#            num_bad_approved = np.sum(is_bad_list[approval_idxs[approval_idxs <= time_idx] - 1])
+#        else:
+#            num_good_approved = 0
+#            num_bad_approved = 0
+#        num_good = np.sum(is_good_list)
+#        num_bad = np.sum(is_bad_list)
+#        good_approved.append(num_good_approved)
+#        prop_good_approved.append(num_good_approved/num_good if num_good > 0 else 0)
+#        bad_approved.append(num_bad_approved)
+#
+#    return np.array(good_approved), np.array(bad_approved), np.array(prop_good_approved)
 
 def main():
     args = parse_args()
@@ -139,8 +129,6 @@ def main():
     mtp_mech.init_test_dat(data.reuse_test_dat, args.max_iter)
     full_hist = modeler.simulate_approval_process(
         data.init_train_dat,
-        data.reuse_test_dat.x,
-        data.reuse_test_dat.y,
         mtp_mech,
         dat_stream=data.iid_train_dat_stream,
         maxfev=args.max_iter,

@@ -96,7 +96,7 @@ class BinaryAdversaryModeler(LockedModeler):
         #print("SENSE", sensitivity, "SPEC", specificity)
         return sensitivity, specificity
 
-    def simulate_approval_process(self, dat, test_x, test_y, mtp_mechanism, dat_stream=None, maxfev=10, side_dat_stream=None):
+    def simulate_approval_process(self, dat, mtp_mechanism, dat_stream=None, maxfev=10, side_dat_stream=None):
         """
         @param dat_stream: ignores this
         """
@@ -105,7 +105,6 @@ class BinaryAdversaryModeler(LockedModeler):
         self.modeler.coef_[:] = self.data_gen.beta.flatten()
         self.modeler.intercept_[:] = 0
         orig_coefs = self.modeler.coef_[:]
-        prev_pred_y = self.modeler.predict_proba(test_x)[:, 1].reshape((-1, 1))
         sens_curr, spec_curr = self._get_sensitivity_specificity(self.modeler)
         logging.info("orig %.3f %.3f", sens_curr, spec_curr)
         sens_test = sens_curr
@@ -125,7 +124,7 @@ class BinaryAdversaryModeler(LockedModeler):
                 }))
         while test_hist.curr_time < maxfev:
             # Test each coef (dont perturb intercept)
-            for var_idx in range(self.num_sparse_theta, self.num_sparse_theta + test_x.shape[1]):
+            for var_idx in range(self.num_sparse_theta, self.num_sparse_theta + dat.x.shape[1]):
                 # Test update for the variable
                 for update_dir in self.update_dirs:
                     test_res = 1
@@ -154,6 +153,7 @@ class BinaryAdversaryModeler(LockedModeler):
                         self.predef_modeler.coef_[0, predef_coef_idx] += (
                             self.update_dirs[predef_update_dir] * self.update_incr
                         )
+                        print(self.predef_modeler.coef_)
 
                         # Test the performance
                         null_constraints = np.array([
@@ -205,13 +205,12 @@ class OnlineFixedSensSpecModeler(LockedModeler):
         self.sensitivity_test = init_sensitivity + incr_sens_spec
         self.specificity_test = init_specificity + incr_sens_spec
 
-    def simulate_approval_process(self, dat, test_x, test_y, mtp_mechanism, dat_stream, maxfev=10, side_dat_stream=None):
+    def simulate_approval_process(self, dat, mtp_mechanism, dat_stream, maxfev=10, side_dat_stream=None):
         """
         @param dat_stream: a list of datasets for further training the model
         @return perf_value
         """
         self.modeler.fit(dat.x, dat.y.flatten())
-        prev_pred_y = self.modeler.predict_proba(test_x)[:, 1].reshape((-1, 1))
 
         predef_dat = dat
         curr_idx = 0
@@ -259,13 +258,12 @@ class OnlineFixedSelectiveModeler(LockedModeler):
         self.accept_test = init_accept + incr_accept
         self.accuracy_test = target_acc
 
-    def simulate_approval_process(self, dat, test_x, test_y, mtp_mechanism, dat_stream, maxfev=10, side_dat_stream=None):
+    def simulate_approval_process(self, dat, mtp_mechanism, dat_stream, maxfev=10, side_dat_stream=None):
         """
         @param dat_stream: a list of datasets for further training the model
         @return perf_value
         """
         self.modeler.fit(dat.x, dat.y.flatten())
-        prev_pred_y = self.modeler.predict_proba(test_x)[:, 1].reshape((-1, 1))
 
         predef_dat = dat
         curr_idx = 0
