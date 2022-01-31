@@ -34,7 +34,8 @@ class SelectiveLogisticRegression(LogisticRegression):
                 print("SUCCESS", subset_acc, "THRES", thres, self.target_acc, keep_mask.mean())
                 self.prob_thres = thres
                 return
-        raise ValueError("good threshold was never found")
+        print("WARNING: no threshold found")
+        self.prob_thres = 0.5
 
     def predict(self, X):
         pred_class = super().predict(X)
