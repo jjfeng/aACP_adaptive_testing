@@ -92,7 +92,10 @@ nest.add(
 @nest.add_target_with_env(localenv)
 def generate_data(env, outdir, c):
     cmd = [
-        'python generate_data.py',
+        'python run_script.py',
+        CLUSTER_STR,
+        '${TARGETS[0]}',
+        'generate_data.py',
         '--meta-seed 0',
         '--data-seed',
         c['seed'],
@@ -126,7 +129,10 @@ nest.add(
 @nest.add_target_with_env(localenv)
 def run_experiment(env, outdir, c):
     cmd = [
-        'python main.py',
+        'python run_script.py',
+        CLUSTER_STR,
+        '${TARGETS[0]}',
+        'main.py',
         '--seed',
 	c['seed'],
         '--max-iter',
