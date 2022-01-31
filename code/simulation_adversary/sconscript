@@ -11,10 +11,10 @@ localenv = env.Clone()
 # Set up state
 nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
-IS_CLUSTER = localenv['cluster'] == "cluster"
+CLUSTER_STR = localenv['cluster']
 NUM_SEEDS = localenv['num_seeds']
 TEST_N = 5000
-REUSE_ITERS = 100
+REUSE_ITERS = 50
 SPARSE_P = 1
 SPARSE_COEF_VAL = 2
 FWER = 0.1
@@ -55,7 +55,7 @@ nest.add(
 def generate_data(env, outdir, c):
     cmd = [
         'python run_script.py',
-        IS_CLUSTER,
+        CLUSTER_STR,
         '${TARGETS[0]}',
         'generate_data.py',
         '--meta-seed 0',
@@ -103,7 +103,7 @@ def create_mtp(env, outdir, c):
     scratch_file = join("simulation_adversary", outdir, "scratch.txt")
     cmd = [
         'python run_script.py',
-        IS_CLUSTER,
+        CLUSTER_STR,
         '${TARGETS[0]}',
         'create_mtp_mechanism.py',
         '--prespec-ratio 0.6' if "graphical_prespec" == c['mtp_mech'] else '',
@@ -124,7 +124,7 @@ def create_mtp(env, outdir, c):
 def run_experiment(env, outdir, c):
     cmd = [
         'python run_script.py',
-        IS_CLUSTER,
+        CLUSTER_STR,
         '${TARGETS[0]}',
         'main.py',
         '--seed',
