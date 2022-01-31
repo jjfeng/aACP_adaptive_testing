@@ -11,6 +11,7 @@ localenv = env.Clone()
 # Set up state
 nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
+CLUSTER_STR = localenv['cluster']
 NUM_SEEDS = localenv['num_seeds']
 REUSE_ITERS = 60
 SPARSE_P = 1
