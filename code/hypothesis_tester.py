@@ -2,6 +2,7 @@
 Classes for testing specific hypotheses
 All hypotheses here evaluate candidate modifications using multiple performance metrics
 """
+import logging
 from typing import List
 
 import pandas as pd
@@ -9,6 +10,9 @@ import numpy as np
 import scipy
 
 from node import Node
+
+MAX_PARTICLES = 100000
+MIN_PARTICLES = 5000
 
 class HypothesisTester:
     def set_test_dat(self, test_dat):
@@ -90,18 +94,25 @@ class SensSpecHypothesisTester(HypothesisTester):
         cov_est = delta_grad.T @ raw_covariance @ delta_grad
 
         node_weights = np.array([prior_node.weight for prior_node in prior_nodes] + [node.weight])
+        num_particles = int(np.sum(4/(alpha * node_weights))) if np.min(alpha * node_weights) > 1e-6 else MAX_PARTICLES
+        print("NUM PARTC", num_particles, node_weights * alpha)
+        #assert num_particles <= 50000
+        #1/0
         boundaries = self.generate_spending_boundaries(
            cov_est,
            self.stat_dim,
            alpha * node_weights,
-           num_particles=max(self.test_dat.size * 4, 5000)
+           num_particles=min(max(num_particles, MIN_PARTICLES), MAX_PARTICLES),
            )
 
         # Need to check if it is within any of the specified bounds (but not necessarily both bounds)
         min_norm = self.solve_min_norm(estimate, null_constraint)
         test_res = min_norm > boundaries[-1]
-        print("ESTIMATE", estimate)
-        print("TEST RES", test_res, min_norm, boundaries[-1])
+        logging.info("alpha level %f, bound %f", alpha * node_weights[-1], boundaries[-1])
+
+        if (alpha * node_weights)[-1] < 1/MAX_PARTICLES:
+             # Check that we don't reject the null when we can't even derive the spending boundaries accurately
+            assert not test_res
 
         return test_res
 
@@ -134,8 +145,11 @@ class SensSpecHypothesisTester(HypothesisTester):
             particle_mask = np.all(step_particles > 0, axis=1)
             step_norms = particle_mask * np.min(np.abs(step_particles), axis=1)
             step_bound = np.quantile(step_norms, 1 - keep_alpha)
-            if np.mean(step_norms < step_bound) < keep_alpha:
-                # If the step bound is weird, just increment it and let all particles thru
+            keep_ratio = np.mean(step_norms < step_bound)
+            # if the keep ratio is not close to what we desired, do not rejecanything
+            logging.info("keep ratio %f %f", keep_ratio, keep_alpha)
+            if keep_ratio < keep_alpha or (1 - keep_ratio)/keep_alpha > 2:
+                # If the step bound is weird, do not reject anything
                 step_bound += 1
             boundaries.append(step_bound)
             good_particles = good_particles[step_norms < step_bound]

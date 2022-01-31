@@ -14,21 +14,21 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 CLUSTER_STR = localenv['cluster']
 NUM_SEEDS = localenv['num_seeds']
 REUSE_ITERS = 20
-NUM_P = 6
-SPARSE_P = 1
-SPARSE_COEF_VAL = 2
-PERTURB_FACTOR = 0.2
+NUM_P = 8
+SPARSE_P = 2
+SPARSE_COEF_VAL = 1
+PERTURB_FACTOR = 0.02
 FWER = 0.1
 MTP_MECH_LIST = [
     "bonferroni",
-    "graphical_bonf",
-    "graphical_ffs",
+    #"graphical_bonf",
+    #"graphical_ffs",
     "graphical_prespec",
 ]
 
 nest.add(
     'reuse_test_n',
-    [200],
+    [400],
     label_func=lambda c: "test_%d" % c)
 
 nest.add(
@@ -64,7 +64,7 @@ def create_mtp(env, outdir, c):
     cmd = [
         'python create_mtp_mechanism.py',
         '--prespec-ratio 0.6' if "graphical_prespec" == c['mtp_mech'] else '',
-        '--success-weight 0.7' if "graphical" in c['mtp_mech'] else '',
+        '--success-weight 0.8' if "graphical" in c['mtp_mech'] else '',
         '--alpha',
         FWER,
         '--mtp-mech',
@@ -100,8 +100,8 @@ def generate_data(env, outdir, c):
         SPARSE_P,
         '--p',
         NUM_P,
-        '--init-train-n 120',
-        '--train-batch-n 40',
+        '--init-train-n 150',
+        '--train-batch-n 100',
         '--num-batches',
         REUSE_ITERS,
         '--reuse-test-n',

@@ -209,12 +209,12 @@ class OnlineFixedSensSpecModeler(LockedModeler):
         print("SandS", sensitivity, specificity)
         return sensitivity - se_factor * sensitivity_se, specificity - se_factor * specificity_se
 
-    def _create_train_valid_dat(self, dat: Dataset):
+    def _create_train_valid_dat(self, dat: Dataset, min_valid_dat_size: int = 40):
         #shuffle_idxs = np.random.choice(dat.size, dat.size, replace=False)
         shuffle_idxs = np.arange(dat.size)
-        train_n = int(dat.size * (1 - self.validation_frac))
-        train_dat = dat.subset_idxs(shuffle_idxs[:train_n])
-        valid_dat = dat.subset_idxs(shuffle_idxs[train_n:])
+        valid_n = max(min_valid_dat_size, int(dat.size * self.validation_frac))
+        train_dat = dat.subset_idxs(shuffle_idxs[:-valid_n])
+        valid_dat = dat.subset_idxs(shuffle_idxs[-valid__n:])
         return train_dat, valid_dat
 
     def simulate_approval_process(self, dat, mtp_mechanism, dat_stream, maxfev=10):
@@ -277,10 +277,10 @@ class OnlineSensSpecModeler(OnlineFixedSensSpecModeler):
         super(OnlineSensSpecModeler,self).__init__(model_type, seed, incr_sens_spec, validation_frac)
         self.countdown_reset = countdown_reset
 
-    def _create_train_valid_dat(self, orig_dat: Dataset, new_dat: Dataset = None):
+    def _create_train_valid_dat(self, orig_dat: Dataset, new_dat: Dataset = None, min_valid_dat_size: int = 40):
         num_obs = orig_dat.size + new_dat.size if new_dat is not None else orig_dat.size
         shuffle_idxs = np.flip(np.arange(num_obs))
-        valid_n = min(orig_dat.size, int(num_obs * self.validation_frac))
+        valid_n = max(min(orig_dat.size, int(num_obs * self.validation_frac)), min_valid_dat_size)
         merge_dat = Dataset.merge([orig_dat, new_dat]) if new_dat is not None else orig_dat
         train_dat = merge_dat.subset_idxs(shuffle_idxs[valid_n:])
         valid_dat = merge_dat.subset_idxs(shuffle_idxs[:valid_n])
@@ -298,6 +298,7 @@ class OnlineSensSpecModeler(OnlineFixedSensSpecModeler):
 
         adapt_dat = []
         countdown = self.countdown_reset
+        read_side_stream = False
         curr_idx = 0
         test_hist = TestHistory(self.modeler, res_detail=pd.DataFrame({
                 "sensitivity_curr": [curr_sens],
@@ -311,11 +312,12 @@ class OnlineSensSpecModeler(OnlineFixedSensSpecModeler):
             predef_lr = sklearn.base.clone(self.modeler)
             predef_lr.fit(predef_train_dat.x, predef_train_dat.y.flatten())
 
-            if countdown == 0:
+            if read_side_stream:
                 batches_read = side_dat_stream[i: i + 1]
             else:
                 batches_read = dat_stream[i : i + 1]
             logging.info("BATCH countdown %d", countdown)
+            logging.info("BATCH idx %d", read_side_stream)
 
             adapt_dat = adapt_dat + batches_read
             adapt_train_dat, adapt_valid_dat = self._create_train_valid_dat(
@@ -338,12 +340,16 @@ class OnlineSensSpecModeler(OnlineFixedSensSpecModeler):
             test_res = mtp_mechanism.get_test_res(
                 null_constraints, adapt_lr, predef_mdl=predef_lr
             )
+            logging.info("test res %d", test_res)
             if test_res:
                 curr_sens = sens_test
                 curr_spec = spec_test
                 countdown = self.countdown_reset
             else:
                 countdown -= 1
+                if countdown == 0:
+                    read_side_stream = not read_side_stream
+                    countdown = self.countdown_reset
 
             test_hist.update(
                     test_res=test_res,
