@@ -18,10 +18,10 @@ SPARSE_P = 1
 SPARSE_COEF_VAL = 2
 FWER = 0.1
 MTP_MECH_LIST = [
-    "bonferroni",
+    #"bonferroni",
     "graphical_bonf",
-    "graphical_ffs",
-    "graphical_prespec",
+    #"graphical_ffs",
+    #"graphical_prespec",
 ]
 
 nest.add(
@@ -98,8 +98,8 @@ def generate_data(env, outdir, c):
         SPARSE_P,
         '--p',
         REUSE_ITERS + 1,
-        '--init-train-n 40',
-        '--train-batch-n 5',
+        '--init-train-n 100',
+        '--train-batch-n 20',
         '--num-batches',
         REUSE_ITERS,
         '--reuse-test-n',

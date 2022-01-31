@@ -33,6 +33,7 @@ def main():
     np.random.seed(args.seed)
 
     # Create model
+    clf = None
     if args.simulation == "adversary":
         assert args.model_type == "Logistic"
         true_beta = np.zeros((args.p, 1))
@@ -41,12 +42,14 @@ def main():
         clf = BinaryAdversaryModeler(data_generator)
     elif args.simulation == "online_fixed":
         if args.model_type != "SelectiveLogistic":
-            clf = OnlineFixedSensSpecModeler(args.model_type, init_sensitivity=0.6, init_specificity=0.6)
+            clf = OnlineFixedSensSpecModeler(args.model_type)
         else:
             clf = OnlineFixedSelectiveModeler(args.model_type, target_acc=0.8, init_accept=0.4, incr_accept=0.05)
     elif args.simulation == "online":
-        clf = OnlineAdaptiveLearnerModeler(args.model_type, start_side_batch=False)
-    else:
+        if args.model_type != "SelectiveLogistic":
+            clf = OnlineSensSpecModeler(args.model_type)
+
+    if clf is None:
         raise NotImplementedError("modeler missing")
 
     with open(args.out_file, "wb") as f:

@@ -132,7 +132,6 @@ def main():
         mtp_mech,
         dat_stream=data.iid_train_dat_stream,
         maxfev=args.max_iter,
-        side_dat_stream=data.side_train_dat_stream,
     )
     print("APPROVAL", full_hist.approval_times)
 
