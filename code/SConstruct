@@ -15,11 +15,14 @@ import SCons.Script as sc
 
 sc.AddOption('--seeds', type='int', help="SEEDS", default=1)
 sc.AddOption('--output', type='string', help="output folder", default='_output')
+# Or set this to --cluster=cluster
+sc.AddOption('--cluster', type='string', help="cluster?", default='local')
 
 env = sc.Environment(
         ENV=os.environ,
         num_seeds=sc.GetOption('seeds'),
-        output=sc.GetOption('output'))
+        output=sc.GetOption('output'),
+        cluster=sc.GetOption('cluster'))
 
 sc.Export('env')
 
