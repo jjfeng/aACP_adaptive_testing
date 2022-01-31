@@ -151,7 +151,7 @@ class BinaryAdversaryModeler(LockedModeler):
                         self.predef_modeler.coef_[0, :] = orig_coefs
                         predef_coef_idx = self.num_sparse_theta + (test_hist.curr_time // len(self.update_dirs))
                         predef_update_dir = test_hist.curr_time % len(self.update_dirs)
-                        self.predef_modeler.coef_[0, test_hist.curr_time] += (
+                        self.predef_modeler.coef_[0, predef_coef_idx] += (
                             self.update_dirs[predef_update_dir] * self.update_incr
                         )
 
