@@ -14,22 +14,22 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 CLUSTER_STR = localenv['cluster']
 NUM_SEEDS = localenv['num_seeds']
 REUSE_ITERS = 10
-NUM_P = 6
-SPARSE_P = 3
-SPARSE_COEF_VAL = 1
+NUM_P = 25
+SPARSE_P = 6
+SPARSE_COEF_VAL = 0.5
 PERTURB_FACTOR = 0.02
 FWER = 0.1
 MTP_MECH_LIST = [
     #"binary_thres_mtp",
-    "bonferroni",
-    "graphical_bonf",
-    "graphical_ffs",
+    #"bonferroni",
+    #"graphical_bonf",
+    #"graphical_ffs",
     "graphical_prespec",
 ]
 
 nest.add(
     'reuse_test_n',
-    [400],
+    [200],
     label_func=lambda c: "test_%d" % c)
 
 nest.add(
@@ -96,7 +96,7 @@ def generate_data(env, outdir, c):
         CLUSTER_STR,
         '${TARGETS[0]}',
         'generate_data.py',
-        '--meta-seed 10',
+        '--meta-seed 1',
         '--data-seed',
         c['seed'],
         '--sparse-p',
@@ -104,7 +104,7 @@ def generate_data(env, outdir, c):
         '--p',
         NUM_P,
         '--init-train-n 100',
-        '--train-batch-n 100',
+        '--train-batch-n 200',
         '--num-batches',
         REUSE_ITERS,
         '--reuse-test-n',

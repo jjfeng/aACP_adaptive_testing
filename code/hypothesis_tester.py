@@ -85,8 +85,6 @@ class SensSpecHypothesisTester(HypothesisTester):
             delta_d0, delta_d1, delta_dother
             ])
         cov_est = delta_grad.T @ raw_covariance @ delta_grad
-        print("COV", cov_est)
-        print("raw COV", raw_covariance)
         assert not np.any(np.isnan(cov_est))
 
         node_weights = np.array([prior_node.weight for prior_node in prior_nodes] + [node.weight])
@@ -132,7 +130,6 @@ class SensSpecHypothesisTester(HypothesisTester):
         Simulates particle paths for alpha spending
         Assumes the test at each iteration is H_0: theta_i < 0 for some i (for i in stat_dim)
         """
-        print("COV", cov)
         good_particles = np.random.multivariate_normal(mean=np.zeros(cov.shape[0]), cov=cov, size=num_particles)
         boundaries = []
         for i, alpha in enumerate(alpha_spend):

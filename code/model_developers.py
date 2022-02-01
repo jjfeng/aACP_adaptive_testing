@@ -192,9 +192,9 @@ class OnlineFixedSensSpecModeler(LockedModeler):
     """
     Just do online learning on a separate dataset
     """
-    def __init__(self, model_type:str = "Logistic", seed:int = 0, incr_sens_spec: float = 0.001, validation_frac: float = 0.2, min_valid_dat_size: int = 200):
+    def __init__(self, model_type:str = "Logistic", seed:int = 0, incr_sens_spec: float = 0.1, validation_frac: float = 0.2, min_valid_dat_size: int = 200):
         assert model_type == "Logistic"
-        self.modeler = MyLogisticRegression(penalty="none")
+        self.modeler = MyLogisticRegression(penalty="none", target_spec=0.7)
         self.incr_sens_spec = incr_sens_spec
         self.validation_frac = validation_frac
         self.min_valid_dat_size = min_valid_dat_size
@@ -210,7 +210,7 @@ class OnlineFixedSensSpecModeler(LockedModeler):
         specificity = np.sum(acc_diff * (1 - test_y))/np.sum(1 - test_y)
         sensitivity_se = np.sqrt(np.var(acc_diff[test_y == 1])/np.sum(test_y))
         specificity_se = np.sqrt(np.var(acc_diff[test_y == 0])/np.sum(1 - test_y))
-        print("SandS", sensitivity, specificity, sensitivity_se, specificity_se)
+        print("sens", sensitivity, "spec", specificity, "sens-se", sensitivity_se, "spec-se", specificity_se)
         return sensitivity - se_factor * sensitivity_se, specificity - se_factor * specificity_se
 
     def _create_train_valid_dat(self, dat: Dataset):
@@ -232,7 +232,7 @@ class OnlineFixedSensSpecModeler(LockedModeler):
 
         curr_idx = 0
         curr_sens = 0
-        curr_spec = 0
+        curr_spec =  -self.incr_sens_spec
         test_hist = TestHistory(orig_mdl, res_detail=pd.DataFrame({
                 "sensitivity_curr": [0],
                 "specificity_curr": [0],
@@ -250,12 +250,12 @@ class OnlineFixedSensSpecModeler(LockedModeler):
             #assert (curr_spec + new_spec)/2 > curr_spec
             if ((curr_sens + new_sens)/2 > curr_sens) or ((curr_spec + new_spec)/2 > curr_spec):
                 sens_test = max(curr_sens, (curr_sens + new_sens)/2)
-                spec_test = max(curr_spec, (curr_spec + new_spec)/2)
+                spec_test = curr_spec
+                logging.info("TEST (avg) sens %f spec %f", sens_test, spec_test)
             else:
-                sens_test = curr_sens + self.incr_sens_spec
-                spec_test = curr_spec + self.incr_sens_spec
-
-            print("TEST", sens_test, spec_test)
+                sens_test = curr_sens
+                spec_test = curr_spec
+                logging.info("TEST (incr) sens %f spec %f", sens_test, spec_test)
 
             # TODO: this should be defined adaptively
             null_constraints = np.array([
@@ -266,7 +266,8 @@ class OnlineFixedSensSpecModeler(LockedModeler):
             )
             if test_res:
                 curr_sens = sens_test
-                curr_spec = spec_test
+            logging.info("Test res %d", test_res)
+            print("TEST RES", test_res)
 
             test_hist.update(
                     test_res=test_res,

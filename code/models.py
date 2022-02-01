@@ -6,6 +6,36 @@ import numpy as np
 from sklearn.linear_model import LogisticRegression
 
 class MyLogisticRegression(LogisticRegression):
+    def __init__(self, penalty: str = "none", target_spec: float=0.7, subset_frac: float = 0.7):
+        self.target_spec = target_spec
+        self.subset_frac = subset_frac
+        super().__init__(penalty=penalty)
+
+    def fit(self, X, y):
+        self.prob_thres = 0
+        ntrain = int(self.subset_frac * X.shape[0])
+        super().fit(X[:ntrain], y[:ntrain])
+
+        X_calib = X[ntrain:]
+        y_calib = y[ntrain:]
+        print("NTRAIN", ntrain, X_calib.shape[0])
+        fitted_probs = self.predict_proba(X_calib)[:,1]
+
+        for thres in np.arange(0, 1, step=0.01):
+            fitted_class = (fitted_probs > thres).astype(int)
+            acc = fitted_class == y_calib
+            spec_est = np.mean(acc[y_calib == 0])
+            if spec_est > self.target_spec:
+                print("SUCCESS", spec_est, "THRES", thres)
+                self.prob_thres = thres
+                return
+        print("WARNING: no threshold found")
+        self.prob_thres = 0.5
+
+    def predict(self, X):
+        pred_probs = self.predict_proba(X)[:,1]
+        return (pred_probs > self.prob_thres).astype(int)
+
     def get_decision(self, X):
         return np.ones(X.shape[0])
 
