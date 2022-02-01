@@ -38,10 +38,11 @@ def main():
 
     # Rename all the things for prettier figures
     measure_dict = {
-            'specificity_curr': 'specificity_curr',
-            'sensitivity_curr': 'sensitivity_curr',
-            'specificity': 'specificity',
-            'sensitivity': 'sensitivity',
+            'nll': 'nll',
+            #'specificity_curr': 'specificity_curr',
+            #'sensitivity_curr': 'sensitivity_curr',
+            #'specificity': 'specificity',
+            #'sensitivity': 'sensitivity',
             }
     data_dict = {'test':'Test', 'reuse_test': 'Reusable Test'}
     mtp_dict = {

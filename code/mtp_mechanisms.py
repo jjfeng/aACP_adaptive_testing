@@ -20,6 +20,10 @@ class BinaryThresholdMTP:
         self.alpha = alpha
         self.correction_factor = 1
 
+    @property
+    def curr_alpha(self):
+        return self.alpha * self.test_tree.weight
+
     def _create_children(self, node, query_idx):
         """
         @param node: create children for this node
@@ -39,6 +43,8 @@ class BinaryThresholdMTP:
 
         if self.num_queries >= self.num_adapt_queries:
             # We are done
+            #print("TREE UPDATE DONE")
+            #1/0
             return
 
         if test_result == 1:
@@ -254,6 +260,8 @@ class GraphicalParallelMTP(GraphicalFFSMTP):
         print("NUM QUERIES", self.num_queries)
         if self.num_queries >= self.num_adapt_queries:
             # We are done
+            #print("TREE UPDATE DONE")
+            #1/0
             return
 
         if adapt_tree_res == 1:
