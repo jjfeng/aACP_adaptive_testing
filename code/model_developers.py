@@ -19,9 +19,10 @@ class TestHistory:
         self.approved_mdls = [deepcopy(curr_mdl)]
         self.proposed_mdls = [deepcopy(curr_mdl)]
         self.curr_time = 0
+        self.test_times = []
         self.res_details = [res_detail]
 
-    def update(self, test_res: int, res_detail: pd.DataFrame, proposed_mdl):
+    def update(self, test_res: int, res_detail: pd.DataFrame, proposed_mdl, test_time: int = None):
         """
         @param test_res: 1 if we rejected the null, 0 if we failed to reject null
         @param res_detail: pd.DataFrame with one column for each performance measure that is being tracked
@@ -35,6 +36,7 @@ class TestHistory:
 
         self.proposed_mdls.append(proposed_mdl)
         self.res_details.append(res_detail)
+        self.test_times.append(test_time)
 
     @property
     def tot_approves(self):
@@ -160,7 +162,7 @@ class BinaryAdversaryModeler(LockedModeler):
                                 [0, sens_test],
                                 [0, spec_test]])
                         test_res = mtp_mechanism.get_test_res(
-                            null_constraints, proposed_mdl, predef_mdl=self.predef_modeler
+                            null_constraints, orig_mdl, proposed_mdl, predef_mdl=self.predef_modeler
                         )
                         print("perturb?", test_hist.curr_time, var_idx, update_dir, test_res)
                         if test_res:
@@ -181,99 +183,126 @@ class BinaryAdversaryModeler(LockedModeler):
                                 "sensitivity_curr": [sens_curr],
                                 "specificity_curr": [spec_curr],
                                 }),
-                            proposed_mdl=proposed_mdl
+                            proposed_mdl=proposed_mdl,
                         )
                     if test_res == 0 and scale_factor > 1:
                         break
 
         return test_hist
 
-class OnlineFixedSensSpecModeler(LockedModeler):
+class OnlineAdaptSensSpecModeler(LockedModeler):
     """
     Just do online learning on a separate dataset
     """
-    def __init__(self, model_type:str = "Logistic", seed:int = 0, incr_sens_spec: float = 0.02, validation_frac: float = 0.2, min_valid_dat_size: int = 200):
+    def __init__(self, model_type:str = "Logistic", seed:int = 0, incr_sens_spec: float = 0.05, validation_frac: float = 0.2, min_valid_dat_size: int = 200):
         assert model_type == "Logistic"
-        self.modeler = MyLogisticRegression(penalty="none")
+        self.modeler = RevisedLogisticRegression(penalty="none")
         self.incr_sens_spec = incr_sens_spec
         self.validation_frac = validation_frac
         self.min_valid_dat_size = min_valid_dat_size
 
-    def _get_sensitivity_specificity_lower_bound(self, mdl, valid_dat: Dataset, se_factor: float = 1.96):
-        pred_class = mdl.predict(valid_dat.x)
+    def _get_sensitivity_specificity_lower_bound_diff(self, orig_mdl, new_mdl, valid_dat: Dataset, se_factor: float = 1.96):
+        orig_pred_class = orig_mdl.predict(valid_dat.x)
+        new_pred_class = new_mdl.predict(valid_dat.x)
         test_y = valid_dat.y.flatten()
-        acc = pred_class == test_y
-        sensitivity = np.sum(acc * test_y)/np.sum(test_y)
-        specificity = np.sum(acc * (1 - test_y))/np.sum(1 - test_y)
-        sens_p = np.mean(acc[test_y == 1])
-        spec_p = np.mean(acc[test_y == 0])
-        sensitivity_se = np.sqrt(sens_p * (1 - sens_p)/np.sum(test_y))
-        specificity_se = np.sqrt(spec_p * (1 - spec_p)/np.sum(1 - test_y))
-        print("SandS", sensitivity, specificity, sensitivity_se, specificity_se)
+        acc_diff = (new_pred_class == test_y).astype(int) - (orig_pred_class == test_y).astype(int)
+        print("new", (new_pred_class == test_y).astype(int).mean())
+        print("ORIG", (orig_pred_class == test_y).astype(int).mean())
+        sensitivity = np.sum(acc_diff * test_y)/np.sum(test_y)
+        specificity = np.sum(acc_diff * (1 - test_y))/np.sum(1 - test_y)
+        sensitivity_se = np.sqrt(np.var(acc_diff[test_y == 1])/np.sum(test_y))
+        specificity_se = np.sqrt(np.var(acc_diff[test_y == 0])/np.sum(1 - test_y))
+        print("sens", sensitivity, "spec", specificity, "sens-se", sensitivity_se, "spec-se", specificity_se)
         return sensitivity - se_factor * sensitivity_se, specificity - se_factor * specificity_se
 
     def _create_train_valid_dat(self, dat: Dataset):
         #shuffle_idxs = np.random.choice(dat.size, dat.size, replace=False)
-        shuffle_idxs = np.arange(dat.size)
         valid_n = max(self.min_valid_dat_size, int(dat.size * self.validation_frac))
-        print("valid_n", valid_n)
-        train_dat = dat.subset_idxs(shuffle_idxs[:-valid_n])
-        valid_dat = dat.subset_idxs(shuffle_idxs[-valid_n:])
+        train_dat = dat.subset(dat.size - valid_n)
+        print("valid_n", valid_n, train_dat.size)
+        valid_dat = dat.subset(start_n=dat.size - valid_n, n=dat.size)
         return train_dat, valid_dat
 
-    def simulate_approval_process(self, dat, mtp_mechanism, dat_stream, maxfev=10):
+    def simulate_approval_process(self, dat, mtp_mechanism, dat_stream, maxfev=10, side_dat_stream = None):
         """
         @param dat_stream: a list of datasets for further training the model
         @return perf_value
         """
-        curr_sens = 1
-        curr_spec = 1
         train_dat, valid_dat = self._create_train_valid_dat(dat)
-        self.modeler.fit(train_dat.x, train_dat.y.flatten())
-        curr_sens, curr_spec = self._get_sensitivity_specificity_lower_bound(self.modeler, valid_dat)
-        assert (curr_sens < 1) and (curr_spec < 1)
-        print("CURR", curr_sens, curr_spec)
+        self.modeler.fit_orig_mdl(train_dat.x, train_dat.y.flatten())
+        orig_mdl = self.modeler.orig_mdl
 
-        predef_dat = dat
         curr_idx = 0
-        test_hist = TestHistory(self.modeler, res_detail=pd.DataFrame({
-                "sensitivity_curr": [curr_sens],
-                "specificity_curr": [curr_spec],
+        curr_sens = 0
+        curr_spec =  -self.incr_sens_spec
+        test_hist = TestHistory(orig_mdl, res_detail=pd.DataFrame({
+                "sensitivity_curr": [0],
+                "specificity_curr": [0],
                 }))
-        for i in range(maxfev):
-            print("ITERATION", i)
+        test_idx = 0
+        predef_test_idx = 0
+        adapt_read_idx = 0
+        predef_test_mdls = []
+        prior_predef_sens = 0
+        lag_frac = 1/6
+        while (test_idx < maxfev) and (adapt_read_idx < len(dat_stream)):
+            print("ITERATION", test_idx)
 
-            predef_dat = Dataset.merge([predef_dat] + dat_stream[i : i + 1])
+            predef_dat = Dataset.merge([dat] + dat_stream[: adapt_read_idx + 1])
             predef_train_dat, predef_valid_dat = self._create_train_valid_dat(predef_dat)
             predef_lr = sklearn.base.clone(self.modeler)
-            predef_lr.fit(predef_train_dat.x, predef_train_dat.y.flatten())
-            new_sens, new_spec = self._get_sensitivity_specificity_lower_bound(predef_lr, predef_valid_dat)
-            assert (curr_sens + new_sens)/2 > (curr_sens + self.incr_sens_spec)
-            assert (curr_spec + new_spec)/2 > (curr_spec + self.incr_sens_spec)
-            sens_test = max(curr_sens + self.incr_sens_spec, (curr_sens + new_sens)/2)
-            spec_test = max(curr_spec + self.incr_sens_spec, (curr_spec + new_spec)/2)
-            print("NEW", sens_test, spec_test)
+            predef_lr.fit(predef_train_dat.x, predef_train_dat.y.flatten(), orig_mdl)
+            new_sens, new_spec = self._get_sensitivity_specificity_lower_bound_diff(orig_mdl, predef_lr, predef_valid_dat)
+            print("PREDEF SENSE", new_sens, prior_predef_sens)
+            if new_sens > prior_predef_sens:
+                # Predef will not test if sensitivity or specificity estimates are bad
+                predef_test_mdls.append(predef_lr)
+                predef_test_idx += 1
+                prior_predef_sens = new_sens * lag_frac + prior_predef_sens * (1 - lag_frac)
+                print("PREDEF ETST", len(predef_test_mdls), test_idx, new_sens)
+                logging.info("predef idx %d, adapt idx %d, predef sens %.3f", len(predef_test_mdls) - 1, test_idx, new_sens)
 
-            # TODO: this should be defined adaptively
-            null_constraints = np.array([
-                    [0,sens_test],
-                    [0,spec_test]])
-            test_res = mtp_mechanism.get_test_res(
-                null_constraints, predef_lr, predef_mdl=predef_lr
-            )
-            if test_res:
-                curr_sens = sens_test
-                curr_spec = spec_test
+            logging.info("SENStivity diff %.3f %.3f", curr_sens, new_sens)
+            logging.info("Specificity diff %.3f %.3f", curr_spec, new_spec)
 
-            test_hist.update(
-                    test_res=test_res,
-                    res_detail = pd.DataFrame({
-                        "sensitivity_curr": [curr_sens],
-                        "specificity_curr": [curr_spec]}),
-                    proposed_mdl=predef_lr)
+            #assert (curr_sens + new_sens)/2 > curr_sens
+            #assert (curr_spec + new_spec)/2 > curr_spec
+            adapt_read_idx += 1
+            if (curr_sens + new_sens)/2 > (curr_sens + self.incr_sens_spec/4):
+                sens_test = (curr_sens + new_sens)/2
+                spec_test = curr_spec
+                logging.info("TEST (avg) sens %f spec %f", sens_test, spec_test)
+
+                # TODO: this should be defined adaptively
+                null_constraints = np.array([
+                        [0,sens_test],
+                        [0,spec_test]])
+                test_res = mtp_mechanism.get_test_res(
+                    null_constraints, orig_mdl, predef_lr, predef_mdl=predef_test_mdls[test_idx]
+                )
+                if test_res:
+                    curr_sens = sens_test
+                test_idx += 1
+                logging.info("Test res %d", test_res)
+                print("TEST RES", test_res)
+
+                test_hist.update(
+                        test_res=test_res,
+                        res_detail = pd.DataFrame({
+                            "sensitivity_curr": [curr_sens],
+                            "specificity_curr": [curr_spec]}),
+                        proposed_mdl=predef_lr,
+                        test_time=adapt_read_idx,
+                    )
+            else:
+                logging.info("CONTinuing to pull data until confident in sensitivity improvement")
+        logging.info("adapt read idx %d", adapt_read_idx)
+        print("adapt read", adapt_read_idx)
+        logging.info("TEST TIMES %s", test_hist.test_times)
+
         return test_hist
 
-class OnlineSensSpecModeler(OnlineFixedSensSpecModeler):
+class OnlineSensSpecModeler(OnlineAdaptSensSpecModeler):
     """
     adaptive online testing
     """
@@ -298,13 +327,14 @@ class OnlineSensSpecModeler(OnlineFixedSensSpecModeler):
         """
         train_dat, valid_dat = self._create_train_valid_dat(dat)
         self.modeler.fit(train_dat.x, train_dat.y.flatten())
-        curr_sens, curr_spec = self._get_sensitivity_specificity_lower_bound(self.modeler, valid_dat)
-        print("CURR", curr_sens, curr_spec)
+        orig_mdl = self.modeler
 
         adapt_dat = []
         countdown = self.countdown_reset
         read_side_stream = False
         curr_idx = 0
+        curr_sens = 0
+        curr_spec = 0
         test_hist = TestHistory(self.modeler, res_detail=pd.DataFrame({
                 "sensitivity_curr": [curr_sens],
                 "specificity_curr": [curr_spec],
@@ -332,7 +362,7 @@ class OnlineSensSpecModeler(OnlineFixedSensSpecModeler):
             adapt_lr = sklearn.base.clone(self.modeler)
             adapt_lr.fit(adapt_train_dat.x, adapt_train_dat.y.flatten())
 
-            new_sens, new_spec = self._get_sensitivity_specificity_lower_bound(adapt_lr, adapt_valid_dat)
+            new_sens, new_spec = self._get_sensitivity_specificity_lower_bound_diff(orig_mdl, adapt_lr, adapt_valid_dat)
             print(curr_sens, new_sens)
             print(curr_spec, new_spec)
             #assert ((curr_sens + new_sens)/2 > curr_sens) or ((curr_spec + new_spec)/2 > curr_spec)
@@ -346,7 +376,7 @@ class OnlineSensSpecModeler(OnlineFixedSensSpecModeler):
                     [0,sens_test],
                     [0,spec_test]])
             test_res = mtp_mechanism.get_test_res(
-                null_constraints, adapt_lr, predef_mdl=predef_lr
+                null_constraints, orig_mdl, adapt_lr, predef_mdl=predef_lr
             )
             logging.info("test res %d", test_res)
             if test_res:

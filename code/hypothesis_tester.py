@@ -18,7 +18,7 @@ class HypothesisTester:
     def set_test_dat(self, test_dat):
         self.test_dat = test_dat
 
-    def get_observations(self, mdl):
+    def get_observations(self, orig_mdl, new_mdl):
         raise NotImplementedError
 
     def test_null(self, node: Node, null_hypo: np.ndarray, prior_nodes: List):
@@ -37,11 +37,14 @@ class SensSpecHypothesisTester(HypothesisTester):
             "neg": (1 - self.test_dat.y).flatten(),
             })
 
-    def get_observations(self, mdl):
-        pred_y = mdl.predict(self.test_dat.x).reshape((-1, 1))
+    def get_observations(self, orig_mdl, new_mdl):
+        orig_pred_y = orig_mdl.predict(self.test_dat.x)
+        new_pred_y = new_mdl.predict(self.test_dat.x)
+        test_y = self.test_dat.y.flatten()
+        acc_diff = (test_y == new_pred_y).astype(int) - (test_y == orig_pred_y).astype(int)
         df = pd.DataFrame({
-            "equal_pos": ((self.test_dat.y == pred_y) * self.test_dat.y).flatten(),
-            "equal_neg": ((self.test_dat.y == pred_y) * (1 - self.test_dat.y)).flatten()
+            "equal_pos_diff": (acc_diff * test_y).flatten(),
+            "equal_neg_diff": (acc_diff * (1 - test_y)).flatten()
             })
         return df
 
@@ -55,29 +58,19 @@ class SensSpecHypothesisTester(HypothesisTester):
                 self.orig_obs.neg.mean()]
             + [
                 a for prior_node in prior_nodes
-                for a in [prior_node.obs.equal_pos.mean(), prior_node.obs.equal_neg.mean()]]
+                for a in [prior_node.obs.equal_pos_diff.mean(), prior_node.obs.equal_neg_diff.mean()]]
             + [
-                node.obs.equal_pos.mean(),
-                node.obs.equal_neg.mean()]
+                node.obs.equal_pos_diff.mean(),
+                node.obs.equal_neg_diff.mean()]
             )
         estimate = np.array([
             raw_estimates[-2]/raw_estimates[0],
             raw_estimates[-1]/raw_estimates[1]
             ])
+        logging.info("test set estimate %s", estimate.flatten())
 
         full_df = pd.concat([self.orig_obs] + [prior_node.obs for prior_node in prior_nodes] + [node.obs], axis=1).to_numpy().T
-        if np.unique(full_df).size == 2:
-            # All observations are binary
-            # use a better estimate of variance in that case?
-            probs = full_df.mean(axis=1)
-            raw_covariance = np.diag(probs * (1 - probs))
-            for i in range(full_df.shape[0]):
-                for j in range(i + 1, full_df.shape[0]):
-                    raw_covariance[i,j] = np.mean(full_df[i] * full_df[j]) - probs[i] * probs[j]
-                    raw_covariance[j,i] = raw_covariance[i,j]
-            raw_covariance /= self.test_dat.size
-        else:
-            raw_covariance = np.cov(full_df)/self.test_dat.size
+        raw_covariance = np.cov(full_df)/self.test_dat.size
 
         num_nodes = len(prior_nodes) + 1
         delta_d0 = np.array([dg_d0
@@ -92,6 +85,7 @@ class SensSpecHypothesisTester(HypothesisTester):
             delta_d0, delta_d1, delta_dother
             ])
         cov_est = delta_grad.T @ raw_covariance @ delta_grad
+        assert not np.any(np.isnan(cov_est))
 
         node_weights = np.array([prior_node.weight for prior_node in prior_nodes] + [node.weight])
         num_particles = int(np.sum(4/(alpha * node_weights))) if np.min(alpha * node_weights) > 1e-6 else MAX_PARTICLES
@@ -109,6 +103,7 @@ class SensSpecHypothesisTester(HypothesisTester):
         min_norm = self.solve_min_norm(estimate, null_constraint)
         test_res = min_norm > boundaries[-1]
         logging.info("alpha level %f, bound %f", alpha * node_weights[-1], boundaries[-1])
+        logging.info("norm %f", min_norm)
 
         if (alpha * node_weights)[-1] < 1/MAX_PARTICLES:
              # Check that we don't reject the null when we can't even derive the spending boundaries accurately
@@ -160,7 +155,7 @@ class AcceptAccurHypothesisTester(SensSpecHypothesisTester):
     def set_test_dat(self, test_dat):
         self.test_dat = test_dat
 
-    def get_observations(self, mdl):
+    def get_observations(self, orig_mdl, new_mdl):
         pred_y = mdl.predict(self.test_dat.x).reshape((-1, 1))
         pred_decision = mdl.get_decision(self.test_dat.x).reshape((-1, 1))
 
@@ -207,6 +202,7 @@ class AcceptAccurHypothesisTester(SensSpecHypothesisTester):
                     [1,raw_estimates[i * 2 + 1]],
                     [0,1/raw_estimates[i * 2 + 1]]]) for i in range(num_nodes)])
         cov_est = delta_grad.T @ raw_covariance @ delta_grad
+        assert not np.any(np.isnan(cov_est))
 
         node_weights = np.array([prior_node.weight for prior_node in prior_nodes] + [node.weight])
         boundaries = self.generate_spending_boundaries(

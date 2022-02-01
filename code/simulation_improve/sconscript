@@ -13,29 +13,30 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 CLUSTER_STR = localenv['cluster']
 NUM_SEEDS = localenv['num_seeds']
-REUSE_ITERS = 15
-NUM_P = 6
-SPARSE_P = 3
-SPARSE_COEF_VAL = 1
+REUSE_ITERS = 12
+NUM_P = 25
+SPARSE_P = 6
+SPARSE_COEF_VAL = 0.5
 PERTURB_FACTOR = 0.02
 FWER = 0.1
 MTP_MECH_LIST = [
+    #"binary_thres_mtp",
     #"bonferroni",
-    #"graphical_bonf",
+    "graphical_bonf",
     #"graphical_ffs",
     "graphical_prespec",
 ]
 
 nest.add(
     'reuse_test_n',
-    [200],
+    [800],
     label_func=lambda c: "test_%d" % c)
 
 nest.add(
     'model_sim',
     [
-        #"online_fixed",
-        "online",
+        "online_fixed",
+        #"online",
     ])
 
 @nest.add_target_with_env(localenv)
@@ -45,7 +46,7 @@ def create_model_developer(env, outdir, c):
         '--simulation',
         c['model_sim'],
         '--min-valid-dat-size',
-        c['reuse_test_n'],
+        30,
         '--out ${TARGETS[0]}'
     ]
     return env.Command(
@@ -65,8 +66,8 @@ def create_mtp(env, outdir, c):
     scratch_file = join("simulation_improve", outdir, "scratch.txt")
     cmd = [
         'python create_mtp_mechanism.py',
-        '--prespec-ratio 0.2' if "graphical_prespec" == c['mtp_mech'] else '',
-        '--success-weight 0.6' if "graphical" in c['mtp_mech'] else '',
+        '--prespec-ratio 0.5' if "graphical_prespec" == c['mtp_mech'] else '',
+        '--success-weight 0.8' if "graphical" in c['mtp_mech'] else '',
         '--alpha',
         FWER,
         '--mtp-mech',
@@ -102,20 +103,22 @@ def generate_data(env, outdir, c):
         SPARSE_P,
         '--p',
         NUM_P,
-        '--init-train-n 400',
-        '--train-batch-n 75',
+        '--init-train-n 100',
+        '--train-batch-n 175',
         '--num-batches',
-        REUSE_ITERS,
+        REUSE_ITERS * 20,
         '--reuse-test-n',
         c['reuse_test_n'],
         '--sparse-beta',
         SPARSE_COEF_VAL,
-        '--perturb-beta',
-        PERTURB_FACTOR,
         '--test-n 4000',
 	'--out ${TARGETS[0]}',
 	'--log-file ${TARGETS[1]}',
     ]
+    if c['model_sim'] == 'online':
+        cmd += [
+            '--perturb-beta',
+            PERTURB_FACTOR]
     return env.Command(
         [
             join(outdir, 'data.pkl'),

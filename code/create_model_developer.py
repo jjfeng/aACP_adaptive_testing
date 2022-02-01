@@ -43,7 +43,7 @@ def main():
         clf = BinaryAdversaryModeler(data_generator)
     elif args.simulation == "online_fixed":
         if args.model_type != "SelectiveLogistic":
-            clf = OnlineFixedSensSpecModeler(args.model_type, min_valid_dat_size=args.min_valid_dat_size)
+            clf = OnlineAdaptSensSpecModeler(args.model_type, min_valid_dat_size=args.min_valid_dat_size)
         else:
             clf = OnlineFixedSelectiveModeler(args.model_type, target_acc=0.8, init_accept=0.4, incr_accept=0.05)
     elif args.simulation == "online":

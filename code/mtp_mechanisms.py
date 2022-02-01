@@ -69,11 +69,11 @@ class BinaryThresholdMTP:
         self.test_tree = self.start_node
         self._do_tree_update(1)
 
-    def get_test_res(self, null_hypo: np.ndarray, mdl, predef_mdl=None):
+    def get_test_res(self, null_hypo: np.ndarray, orig_mdl, new_mdl, predef_mdl=None):
         """
         @return test perf where 1 means approve and 0 means not approved
         """
-        node_obs = self.hypo_tester.get_observations(mdl)
+        node_obs = self.hypo_tester.get_observations(orig_mdl, new_mdl)
         self.test_tree.store_observations(node_obs)
         test_res = self.hypo_tester.test_null(self.alpha, self.test_tree, null_hypo, prior_nodes=[])
 
@@ -155,11 +155,11 @@ class GraphicalBonfMTP(BinaryThresholdMTP):
 
         self.parent_child_idx = 0
 
-    def get_test_res(self, null_hypo: np.ndarray, mdl, predef_mdl=None):
+    def get_test_res(self, null_hypo: np.ndarray, orig_mdl, new_mdl, predef_mdl=None):
         """
         @return test perf where 1 means approve and 0 means not approved
         """
-        node_obs = self.hypo_tester.get_observations(mdl)
+        node_obs = self.hypo_tester.get_observations(orig_mdl, new_mdl)
         self.test_tree.store_observations(node_obs)
         test_res = self.hypo_tester.test_null(self.alpha, self.test_tree, null_hypo, prior_nodes=[])
         self._do_tree_update(test_res)
@@ -168,11 +168,11 @@ class GraphicalBonfMTP(BinaryThresholdMTP):
 class GraphicalFFSMTP(GraphicalBonfMTP):
     name = "graphical_ffs"
 
-    def get_test_res(self, null_hypo: np.ndarray, mdl, predef_mdl=None):
+    def get_test_res(self, null_hypo: np.ndarray, orig_mdl, new_mdl, predef_mdl=None):
         """
         @return test perf where 1 means approve and 0 means not approved
         """
-        node_obs = self.hypo_tester.get_observations(mdl)
+        node_obs = self.hypo_tester.get_observations(orig_mdl, new_mdl)
         self.test_tree.store_observations(node_obs)
         prior_nodes = self.test_tree.parent.children[:(self.parent_child_idx)]
         test_res = self.hypo_tester.test_null(self.alpha, self.test_tree, null_hypo, prior_nodes=prior_nodes)
@@ -269,15 +269,15 @@ class GraphicalParallelMTP(GraphicalFFSMTP):
         self._create_children(self.test_tree, self.num_queries)
         self.test_tree.local_alpha = self.alpha * self.test_tree.weight
 
-    def get_test_res(self, null_hypo: np.ndarray, mdl, predef_mdl=None):
+    def get_test_res(self, null_hypo: np.ndarray, orig_mdl, new_mdl, predef_mdl=None):
         """
         @return test perf where 1 means approve and 0 means not approved
         """
         parallel_node = self.parallel_tree_nodes[self.num_queries]
-        parallel_node_obs = self.hypo_tester.get_observations(predef_mdl)
+        parallel_node_obs = self.hypo_tester.get_observations(orig_mdl, predef_mdl)
         parallel_node.store_observations(parallel_node_obs)
 
-        node_obs = self.hypo_tester.get_observations(mdl)
+        node_obs = self.hypo_tester.get_observations(orig_mdl, new_mdl)
         self.test_tree.store_observations(node_obs)
         prior_nodes = self.parallel_tree_nodes[:(self.num_queries + 1)]
         test_res = self.hypo_tester.test_null(self.alpha, self.test_tree, null_hypo, prior_nodes=prior_nodes)
