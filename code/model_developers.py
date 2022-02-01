@@ -19,9 +19,10 @@ class TestHistory:
         self.approved_mdls = [deepcopy(curr_mdl)]
         self.proposed_mdls = [deepcopy(curr_mdl)]
         self.curr_time = 0
+        self.test_times = []
         self.res_details = [res_detail]
 
-    def update(self, test_res: int, res_detail: pd.DataFrame, proposed_mdl):
+    def update(self, test_res: int, res_detail: pd.DataFrame, proposed_mdl, test_time: int = None):
         """
         @param test_res: 1 if we rejected the null, 0 if we failed to reject null
         @param res_detail: pd.DataFrame with one column for each performance measure that is being tracked
@@ -35,6 +36,7 @@ class TestHistory:
 
         self.proposed_mdls.append(proposed_mdl)
         self.res_details.append(res_detail)
+        self.test_times.append(test_time)
 
     @property
     def tot_approves(self):
@@ -181,20 +183,20 @@ class BinaryAdversaryModeler(LockedModeler):
                                 "sensitivity_curr": [sens_curr],
                                 "specificity_curr": [spec_curr],
                                 }),
-                            proposed_mdl=proposed_mdl
+                            proposed_mdl=proposed_mdl,
                         )
                     if test_res == 0 and scale_factor > 1:
                         break
 
         return test_hist
 
-class OnlineFixedSensSpecModeler(LockedModeler):
+class OnlineAdaptSensSpecModeler(LockedModeler):
     """
     Just do online learning on a separate dataset
     """
     def __init__(self, model_type:str = "Logistic", seed:int = 0, incr_sens_spec: float = 0.05, validation_frac: float = 0.2, min_valid_dat_size: int = 200):
         assert model_type == "Logistic"
-        self.modeler = MyLogisticRegression(penalty="none", target_spec=0.7)
+        self.modeler = RevisedLogisticRegression(penalty="none")
         self.incr_sens_spec = incr_sens_spec
         self.validation_frac = validation_frac
         self.min_valid_dat_size = min_valid_dat_size
@@ -227,8 +229,8 @@ class OnlineFixedSensSpecModeler(LockedModeler):
         @return perf_value
         """
         train_dat, valid_dat = self._create_train_valid_dat(dat)
-        self.modeler.fit(train_dat.x, train_dat.y.flatten())
-        orig_mdl = self.modeler
+        self.modeler.fit_orig_mdl(train_dat.x, train_dat.y.flatten())
+        orig_mdl = self.modeler.orig_mdl
 
         curr_idx = 0
         curr_sens = 0
@@ -237,24 +239,36 @@ class OnlineFixedSensSpecModeler(LockedModeler):
                 "sensitivity_curr": [0],
                 "specificity_curr": [0],
                 }))
-        i = 0
-        read_idx = 0
-        while (i < maxfev) and (read_idx < len(dat_stream)):
-            print("ITERATION", i)
+        test_idx = 0
+        predef_test_idx = 0
+        adapt_read_idx = 0
+        predef_test_mdls = []
+        prior_predef_sens = 0
+        lag_frac = 1/6
+        while (test_idx < maxfev) and (adapt_read_idx < len(dat_stream)):
+            print("ITERATION", test_idx)
 
-            predef_dat = Dataset.merge([dat] + dat_stream[: read_idx + 1])
+            predef_dat = Dataset.merge([dat] + dat_stream[: adapt_read_idx + 1])
             predef_train_dat, predef_valid_dat = self._create_train_valid_dat(predef_dat)
             predef_lr = sklearn.base.clone(self.modeler)
-            predef_lr.fit(predef_train_dat.x, predef_train_dat.y.flatten())
+            predef_lr.fit(predef_train_dat.x, predef_train_dat.y.flatten(), orig_mdl)
             new_sens, new_spec = self._get_sensitivity_specificity_lower_bound_diff(orig_mdl, predef_lr, predef_valid_dat)
+            print("PREDEF SENSE", new_sens, prior_predef_sens)
+            if new_sens > prior_predef_sens:
+                # Predef will not test if sensitivity or specificity estimates are bad
+                predef_test_mdls.append(predef_lr)
+                predef_test_idx += 1
+                prior_predef_sens = new_sens * lag_frac + prior_predef_sens * (1 - lag_frac)
+                print("PREDEF ETST", len(predef_test_mdls), test_idx, new_sens)
+                logging.info("predef idx %d, adapt idx %d, predef sens %.3f", len(predef_test_mdls), test_idx, new_sens)
+
             logging.info("SENStivity diff %.3f %.3f", curr_sens, new_sens)
             logging.info("Specificity diff %.3f %.3f", curr_spec, new_spec)
 
             #assert (curr_sens + new_sens)/2 > curr_sens
             #assert (curr_spec + new_spec)/2 > curr_spec
-            read_idx += 1
+            adapt_read_idx += 1
             if (curr_sens + new_sens)/2 > (curr_sens + self.incr_sens_spec/4):
-                i += 1
                 sens_test = (curr_sens + new_sens)/2
                 spec_test = curr_spec
                 logging.info("TEST (avg) sens %f spec %f", sens_test, spec_test)
@@ -264,10 +278,11 @@ class OnlineFixedSensSpecModeler(LockedModeler):
                         [0,sens_test],
                         [0,spec_test]])
                 test_res = mtp_mechanism.get_test_res(
-                    null_constraints, orig_mdl, predef_lr, predef_mdl=predef_lr
+                    null_constraints, orig_mdl, predef_lr, predef_mdl=predef_test_mdls[test_idx]
                 )
                 if test_res:
                     curr_sens = sens_test
+                test_idx += 1
                 logging.info("Test res %d", test_res)
                 print("TEST RES", test_res)
 
@@ -276,14 +291,17 @@ class OnlineFixedSensSpecModeler(LockedModeler):
                         res_detail = pd.DataFrame({
                             "sensitivity_curr": [curr_sens],
                             "specificity_curr": [curr_spec]}),
-                        proposed_mdl=predef_lr)
+                        proposed_mdl=predef_lr,
+                        test_time=adapt_read_idx,
+                    )
             else:
                 logging.info("CONTinuing to pull data until confident in sensitivity improvement")
-        logging.info("read idx %d", read_idx)
+        logging.info("adapt read idx %d", adapt_read_idx)
+        print("adapt read", adapt_read_idx)
 
         return test_hist
 
-class OnlineSensSpecModeler(OnlineFixedSensSpecModeler):
+class OnlineSensSpecModeler(OnlineAdaptSensSpecModeler):
     """
     adaptive online testing
     """

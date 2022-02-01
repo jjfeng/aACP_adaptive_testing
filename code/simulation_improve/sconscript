@@ -46,7 +46,7 @@ def create_model_developer(env, outdir, c):
         '--simulation',
         c['model_sim'],
         '--min-valid-dat-size',
-        40,
+        30,
         '--out ${TARGETS[0]}'
     ]
     return env.Command(
@@ -66,8 +66,8 @@ def create_mtp(env, outdir, c):
     scratch_file = join("simulation_improve", outdir, "scratch.txt")
     cmd = [
         'python create_mtp_mechanism.py',
-        '--prespec-ratio 0.98' if "graphical_prespec" == c['mtp_mech'] else '',
-        '--success-weight 0.9' if "graphical" in c['mtp_mech'] else '',
+        '--prespec-ratio 0.6' if "graphical_prespec" == c['mtp_mech'] else '',
+        '--success-weight 0.7' if "graphical" in c['mtp_mech'] else '',
         '--alpha',
         FWER,
         '--mtp-mech',
