@@ -192,7 +192,7 @@ class OnlineFixedSensSpecModeler(LockedModeler):
     """
     Just do online learning on a separate dataset
     """
-    def __init__(self, model_type:str = "Logistic", seed:int = 0, incr_sens_spec: float = 0.1, validation_frac: float = 0.2, min_valid_dat_size: int = 200):
+    def __init__(self, model_type:str = "Logistic", seed:int = 0, incr_sens_spec: float = 0.05, validation_frac: float = 0.2, min_valid_dat_size: int = 200):
         assert model_type == "Logistic"
         self.modeler = MyLogisticRegression(penalty="none", target_spec=0.7)
         self.incr_sens_spec = incr_sens_spec
@@ -248,12 +248,12 @@ class OnlineFixedSensSpecModeler(LockedModeler):
             print("SENS SPEC VALUES", curr_sens, new_sens, curr_spec, new_spec)
             #assert (curr_sens + new_sens)/2 > curr_sens
             #assert (curr_spec + new_spec)/2 > curr_spec
-            if ((curr_sens + new_sens)/2 > curr_sens) or ((curr_spec + new_spec)/2 > curr_spec):
-                sens_test = max(curr_sens, (curr_sens + new_sens)/2)
+            if ((curr_sens + new_sens)/2 > curr_sens):
+                sens_test = max(curr_sens + self.incr_sens_spec/4, (curr_sens + new_sens)/2)
                 spec_test = curr_spec
                 logging.info("TEST (avg) sens %f spec %f", sens_test, spec_test)
             else:
-                sens_test = curr_sens
+                sens_test = curr_sens + self.incr_sens_spec/4
                 spec_test = curr_spec
                 logging.info("TEST (incr) sens %f spec %f", sens_test, spec_test)
 

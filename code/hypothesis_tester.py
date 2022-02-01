@@ -67,7 +67,7 @@ class SensSpecHypothesisTester(HypothesisTester):
             raw_estimates[-2]/raw_estimates[0],
             raw_estimates[-1]/raw_estimates[1]
             ])
-        print("ESTIMATE", estimate)
+        logging.info("test set estimate %s", estimate.flatten())
 
         full_df = pd.concat([self.orig_obs] + [prior_node.obs for prior_node in prior_nodes] + [node.obs], axis=1).to_numpy().T
         raw_covariance = np.cov(full_df)/self.test_dat.size

@@ -104,7 +104,7 @@ def generate_data(env, outdir, c):
         '--p',
         NUM_P,
         '--init-train-n 100',
-        '--train-batch-n 200',
+        '--train-batch-n 800',
         '--num-batches',
         REUSE_ITERS,
         '--reuse-test-n',
