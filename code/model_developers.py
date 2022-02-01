@@ -297,7 +297,7 @@ class OnlineAdaptNLLModeler(LockedModeler):
             if do_predef_test:
                 # Predef will not test if power is terrible
                 predef_test_mdls.append(predef_lr)
-                prior_predef_log_lik = predef_test_log_lik * lag_weight + prior_predef_log_lik * (1 - lag_weight)
+                prior_predef_log_lik = predef_test_log_lik * self.lag_weight + prior_predef_log_lik * (1 - self.lag_weight)
                 logging.info("predef test nll %.2f", predef_test_log_lik)
                 logging.info("predef TEST idx %d, adapt idx %d, batch %d", len(predef_test_mdls) - 1, test_idx, adapt_read_idx)
 

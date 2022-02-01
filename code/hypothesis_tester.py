@@ -16,6 +16,7 @@ MAX_PARTICLES = 500000
 MIN_PARTICLES = 5000
 
 def get_log_lik(y_true, y_pred):
+    y_pred = np.minimum(np.maximum(y_pred, 1e-10), 1 - 1e-10)
     return y_true * np.log(y_pred) + (1 - y_true) * np.log(1 - y_pred)
 
 
