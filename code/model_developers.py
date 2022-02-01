@@ -260,7 +260,7 @@ class OnlineAdaptSensSpecModeler(LockedModeler):
                 predef_test_idx += 1
                 prior_predef_sens = new_sens * lag_frac + prior_predef_sens * (1 - lag_frac)
                 print("PREDEF ETST", len(predef_test_mdls), test_idx, new_sens)
-                logging.info("predef idx %d, adapt idx %d, predef sens %.3f", len(predef_test_mdls), test_idx, new_sens)
+                logging.info("predef idx %d, adapt idx %d, predef sens %.3f", len(predef_test_mdls) - 1, test_idx, new_sens)
 
             logging.info("SENStivity diff %.3f %.3f", curr_sens, new_sens)
             logging.info("Specificity diff %.3f %.3f", curr_spec, new_spec)
@@ -298,6 +298,7 @@ class OnlineAdaptSensSpecModeler(LockedModeler):
                 logging.info("CONTinuing to pull data until confident in sensitivity improvement")
         logging.info("adapt read idx %d", adapt_read_idx)
         print("adapt read", adapt_read_idx)
+        logging.info("TEST TIMES %s", test_hist.test_times)
 
         return test_hist
 
