@@ -194,7 +194,7 @@ class OnlineAdaptNLLModeler(LockedModeler):
     """
     Just do online learning on a separate dataset
     """
-    def __init__(self, model_type:str = "Logistic", seed:int = 0, validation_frac: float = 0.2, min_valid_dat_size: int = 200, power: float = 0.3, ni_margin: float = 0.02, lag_weight: float = 0.2, predef_alpha: float = 0.1):
+    def __init__(self, model_type:str = "Logistic", seed:int = 0, validation_frac: float = 0.2, min_valid_dat_size: int = 200, power: float = 0.5, ni_margin: float = 0.02, lag_weight: float = 0.2, predef_alpha: float = 0.1):
         """
         @param lag_weight: used in the predefined model sequence to define what threshold we use to decide whether or not to test a particular model
         """
@@ -297,13 +297,14 @@ class OnlineAdaptNLLModeler(LockedModeler):
             if do_predef_test:
                 # Predef will not test if power is terrible
                 predef_test_mdls.append(predef_lr)
-                prior_predef_log_lik = predef_test_log_lik * self.lag_weight + prior_predef_log_lik * (1 - self.lag_weight)
+                #prior_predef_log_lik = 0 predef_test_log_lik # * self.lag_weight + prior_predef_log_lik * (1 - self.lag_weight)
                 logging.info("predef test nll %.2f", predef_test_log_lik)
                 logging.info("predef TEST idx %d, adapt idx %d, batch %d", len(predef_test_mdls) - 1, test_idx, adapt_read_idx)
 
             adapt_read_idx += 1
-            if (predef_test_log_lik + curr_log_lik)/2 > (curr_log_lik + self.ni_margin):
-                nll_test = (predef_test_log_lik + curr_log_lik)/2
+            #if (predef_test_log_lik + curr_log_lik)/2 > (curr_log_lik + self.ni_margin):
+            if predef_test_log_lik > (curr_log_lik + self.ni_margin):
+                nll_test = predef_test_log_lik # + curr_log_lik)/2
                 logging.info("TEST idx: %d (batch_number) %d", test_idx, adapt_read_idx)
                 logging.info("TEST (avg) nll %f", nll_test)
 

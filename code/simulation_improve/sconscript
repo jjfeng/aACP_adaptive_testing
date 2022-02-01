@@ -16,12 +16,12 @@ NUM_SEEDS = localenv['num_seeds']
 REUSE_ITERS = 20
 NUM_P = 25
 SPARSE_P = 6
-SPARSE_COEF_VAL = 0.5
+SPARSE_COEF_VAL = 0.75
 PERTURB_FACTOR = 0.02
 FWER = 0.1
 MTP_MECH_LIST = [
     #"binary_thres_mtp",
-    "bonferroni",
+    #"bonferroni",
     "graphical_bonf",
     "graphical_ffs",
     "graphical_prespec",
@@ -29,7 +29,7 @@ MTP_MECH_LIST = [
 
 nest.add(
     'reuse_test_n',
-    [800],
+    [400],
     label_func=lambda c: "test_%d" % c)
 
 nest.add(
@@ -107,7 +107,7 @@ def generate_data(env, outdir, c):
         SPARSE_P,
         '--p',
         NUM_P,
-        '--init-train-n 100',
+        '--init-train-n 80',
         '--train-batch-n 10',
         '--num-batches',
         REUSE_ITERS * 10,
