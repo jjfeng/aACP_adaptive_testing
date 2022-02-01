@@ -237,8 +237,8 @@ class OnlineAdaptNLLModeler(LockedModeler):
             return 0, mu_sim
 
         obs_sim = np.random.normal(loc=mu_sim, scale=np.sqrt(var_sim), size=(num_test, num_reps))
-        res = scipy.stats.ttest_1samp(obs_sim, popmean=candidate_log_lik.reshape((-1,1)), alternative="greater")
-        candidate_power = np.mean(res.pvalue < alpha, axis=1)
+        res = scipy.stats.ttest_1samp(obs_sim, popmean=candidate_log_lik.reshape((-1,1)))
+        candidate_power = np.mean(res.statistic > scipy.stats.norm.ppf(1 - alpha), axis=1)
 
         if np.any(candidate_power > self.power):
             selected_idx = np.max(np.where(candidate_power > self.power)[0])
