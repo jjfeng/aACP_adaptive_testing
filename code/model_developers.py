@@ -237,44 +237,50 @@ class OnlineFixedSensSpecModeler(LockedModeler):
                 "sensitivity_curr": [0],
                 "specificity_curr": [0],
                 }))
-        for i in range(maxfev):
+        i = 0
+        read_idx = 0
+        while (i < maxfev) and (read_idx < len(dat_stream)):
             print("ITERATION", i)
 
-            predef_dat = Dataset.merge([dat] + dat_stream[: i + 1])
+            predef_dat = Dataset.merge([dat] + dat_stream[: read_idx + 1])
             predef_train_dat, predef_valid_dat = self._create_train_valid_dat(predef_dat)
             predef_lr = sklearn.base.clone(self.modeler)
             predef_lr.fit(predef_train_dat.x, predef_train_dat.y.flatten())
             new_sens, new_spec = self._get_sensitivity_specificity_lower_bound_diff(orig_mdl, predef_lr, predef_valid_dat)
-            print("SENS SPEC VALUES", curr_sens, new_sens, curr_spec, new_spec)
+            logging.info("SENStivity diff %.3f %.3f", curr_sens, new_sens)
+            logging.info("Specificity diff %.3f %.3f", curr_spec, new_spec)
+
             #assert (curr_sens + new_sens)/2 > curr_sens
             #assert (curr_spec + new_spec)/2 > curr_spec
-            if ((curr_sens + new_sens)/2 > curr_sens):
-                sens_test = max(curr_sens + self.incr_sens_spec/4, (curr_sens + new_sens)/2)
+            read_idx += 1
+            if (curr_sens + new_sens)/2 > (curr_sens + self.incr_sens_spec/4):
+                i += 1
+                sens_test = (curr_sens + new_sens)/2
                 spec_test = curr_spec
                 logging.info("TEST (avg) sens %f spec %f", sens_test, spec_test)
+
+                # TODO: this should be defined adaptively
+                null_constraints = np.array([
+                        [0,sens_test],
+                        [0,spec_test]])
+                test_res = mtp_mechanism.get_test_res(
+                    null_constraints, orig_mdl, predef_lr, predef_mdl=predef_lr
+                )
+                if test_res:
+                    curr_sens = sens_test
+                logging.info("Test res %d", test_res)
+                print("TEST RES", test_res)
+
+                test_hist.update(
+                        test_res=test_res,
+                        res_detail = pd.DataFrame({
+                            "sensitivity_curr": [curr_sens],
+                            "specificity_curr": [curr_spec]}),
+                        proposed_mdl=predef_lr)
             else:
-                sens_test = curr_sens + self.incr_sens_spec/4
-                spec_test = curr_spec
-                logging.info("TEST (incr) sens %f spec %f", sens_test, spec_test)
+                logging.info("CONTinuing to pull data until confident in sensitivity improvement")
+        logging.info("read idx %d", read_idx)
 
-            # TODO: this should be defined adaptively
-            null_constraints = np.array([
-                    [0,sens_test],
-                    [0,spec_test]])
-            test_res = mtp_mechanism.get_test_res(
-                null_constraints, orig_mdl, predef_lr, predef_mdl=predef_lr
-            )
-            if test_res:
-                curr_sens = sens_test
-            logging.info("Test res %d", test_res)
-            print("TEST RES", test_res)
-
-            test_hist.update(
-                    test_res=test_res,
-                    res_detail = pd.DataFrame({
-                        "sensitivity_curr": [curr_sens],
-                        "specificity_curr": [curr_spec]}),
-                    proposed_mdl=predef_lr)
         return test_hist
 
 class OnlineSensSpecModeler(OnlineFixedSensSpecModeler):
