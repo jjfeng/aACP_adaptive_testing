@@ -8,11 +8,16 @@ from typing import List
 import pandas as pd
 import numpy as np
 import scipy
+import sklearn
 
 from node import Node
 
-MAX_PARTICLES = 100000
+MAX_PARTICLES = 500000
 MIN_PARTICLES = 5000
+
+def get_log_lik(y_true, y_pred):
+    return y_true * np.log(y_pred) + (1 - y_true) * np.log(1 - y_pred)
+
 
 class HypothesisTester:
     def set_test_dat(self, test_dat):
@@ -27,6 +32,93 @@ class HypothesisTester:
                and spending only the alpha allocated at this node
         """
         raise NotImplementedError()
+
+class LogLikHypothesisTester(HypothesisTester):
+    stat_dim = 1
+    def set_test_dat(self, test_dat):
+        self.test_dat = test_dat
+
+    def get_observations(self, orig_mdl, new_mdl):
+        orig_pred_y = orig_mdl.predict_proba(self.test_dat.x)[:,1]
+        new_pred_y = new_mdl.predict_proba(self.test_dat.x)[:,1]
+        test_y = self.test_dat.y.flatten()
+        log_lik_diff = get_log_lik(test_y, new_pred_y) - get_log_lik(test_y, orig_pred_y)
+        df = pd.DataFrame({
+            "log_lik_diff": log_lik_diff,
+            })
+
+        return df
+
+    def test_null(self, alpha: float, node: Node, null_constraint: np.ndarray, prior_nodes: List = []):
+        """
+        @return the CI code this node, accounting for the previous nodes in the true
+               and spending only the alpha allocated at this node
+        """
+        estimate = node.obs.log_lik_diff.mean()
+        logging.info("test set log lik %s", estimate)
+
+        full_df = pd.concat([prior_node.obs for prior_node in prior_nodes] + [node.obs], axis=1).to_numpy().T
+        cov_est = np.cov(full_df)/self.test_dat.size
+        if full_df.shape[0] == 1:
+            cov_est = np.array([[cov_est]])
+
+        num_nodes = len(prior_nodes) + 1
+        assert not np.any(np.isnan(cov_est))
+
+        node_weights = np.array([prior_node.weight for prior_node in prior_nodes] + [node.weight])
+        num_particles =  min(int(np.sum(1/(alpha * node_weights))), MAX_PARTICLES)
+        #assert num_particles <= MAX_PARTICLES
+        boundaries = self.generate_spending_boundaries(
+           cov_est,
+           self.stat_dim,
+           alpha * node_weights,
+           num_particles=min(max(num_particles, MIN_PARTICLES), MAX_PARTICLES)
+           )
+
+        # Need to check if it is within any of the specified bounds (but not necessarily both bounds)
+        min_norm = max(0, estimate - null_constraint[0,1])
+        test_res = min_norm > boundaries[-1]
+        print("TEST RES", test_res, min_norm, boundaries[-1])
+        logging.info("alpha level %f, bound %f", alpha * node_weights[-1], boundaries[-1])
+        logging.info("norm %f", min_norm)
+        if num_particles == MAX_PARTICLES:
+            logging.info("MAX PARTICLES REACHED")
+
+        return test_res
+
+    def generate_spending_boundaries(
+            self,
+            cov,
+            stat_dim: int,
+            alpha_spend: np.ndarray,
+            num_particles: int=5000,
+            ):
+        """
+        Simulates particle paths for alpha spending
+        Assumes the test at each iteration is H_0: theta_i < 0 for some i (for i in stat_dim)
+        """
+        good_particles = np.random.multivariate_normal(mean=np.zeros(cov.shape[0]), cov=cov, size=num_particles)
+        boundaries = []
+        for i, alpha in enumerate(alpha_spend):
+            start_idx = stat_dim * i
+            keep_alpha = alpha/(1 - alpha_spend[:i].sum())
+
+            step_particles = good_particles[:, start_idx:start_idx + stat_dim]
+            particle_mask = np.all(step_particles > 0, axis=1)
+            step_norms = particle_mask * np.min(np.abs(step_particles), axis=1)
+            step_bound = np.quantile(step_norms, 1 - keep_alpha)
+            keep_ratio = np.mean(step_norms < step_bound)
+            # if the keep ratio is not close to what we desired, do not rejecanything
+            logging.info("keep ratio %f", (1 - keep_ratio)/keep_alpha)
+            print("KEEP RATIO", keep_ratio, keep_alpha, (1 - keep_ratio)/keep_alpha)
+            if keep_ratio < keep_alpha or (1 - keep_ratio)/keep_alpha > 2:
+                print(np.max(step_norms), step_bound)
+                # If the step bound is weird, do not reject anything
+                step_bound = np.max(step_norms)
+                # step_bound += 1
+            boundaries.append(step_bound)
+            good_particles = good_particles[step_norms < step_bound]
+        return np.array(boundaries)
 
 class SensSpecHypothesisTester(HypothesisTester):
     stat_dim = 2
@@ -46,6 +138,17 @@ class SensSpecHypothesisTester(HypothesisTester):
             "equal_pos_diff": (acc_diff * test_y).flatten(),
             "equal_neg_diff": (acc_diff * (1 - test_y)).flatten()
             })
+
+        # for fun -- auc check?
+        logging.info("test accuracy orig %f", np.mean(test_y == orig_pred_y))
+        logging.info("test accuracy new %f", np.mean(test_y == new_pred_y))
+        orig_pred_y = orig_mdl.predict_proba(self.test_dat.x)[:,1]
+        new_pred_y = new_mdl.predict_proba(self.test_dat.x)[:,1]
+        logging.info("test auc orig %f", sklearn.metrics.roc_auc_score(test_y, orig_pred_y))
+        logging.info("test auc new %f", sklearn.metrics.roc_auc_score(test_y, new_pred_y))
+        logging.info("test log loss orig %f", sklearn.metrics.log_loss(test_y, orig_pred_y))
+        logging.info("test log loss new %f", sklearn.metrics.log_loss(test_y, new_pred_y))
+
         return df
 
     def test_null(self, alpha: float, node: Node, null_constraint: np.ndarray, prior_nodes: List = []):
@@ -88,26 +191,24 @@ class SensSpecHypothesisTester(HypothesisTester):
         assert not np.any(np.isnan(cov_est))
 
         node_weights = np.array([prior_node.weight for prior_node in prior_nodes] + [node.weight])
-        num_particles = int(np.sum(4/(alpha * node_weights))) if np.min(alpha * node_weights) > 1e-6 else MAX_PARTICLES
+        num_particles =  min(int(np.sum(1/(alpha * node_weights))), MAX_PARTICLES)
         print("NUM PARTC", num_particles, node_weights * alpha)
-        #assert num_particles <= 50000
-        #1/0
+        #assert num_particles <= MAX_PARTICLES
         boundaries = self.generate_spending_boundaries(
            cov_est,
            self.stat_dim,
            alpha * node_weights,
-           num_particles=min(max(num_particles, MIN_PARTICLES), MAX_PARTICLES),
+           num_particles=min(max(num_particles, MIN_PARTICLES), MAX_PARTICLES)
            )
 
         # Need to check if it is within any of the specified bounds (but not necessarily both bounds)
         min_norm = self.solve_min_norm(estimate, null_constraint)
         test_res = min_norm > boundaries[-1]
+        print("TEST RES", test_res, min_norm, boundaries[-1])
         logging.info("alpha level %f, bound %f", alpha * node_weights[-1], boundaries[-1])
         logging.info("norm %f", min_norm)
-
-        if (alpha * node_weights)[-1] < 1/MAX_PARTICLES:
-             # Check that we don't reject the null when we can't even derive the spending boundaries accurately
-            assert not test_res
+        if num_particles == MAX_PARTICLES:
+            logging.info("MAX PARTICLES REACHED")
 
         return test_res
 
@@ -143,9 +244,12 @@ class SensSpecHypothesisTester(HypothesisTester):
             keep_ratio = np.mean(step_norms < step_bound)
             # if the keep ratio is not close to what we desired, do not rejecanything
             logging.info("keep ratio %f", (1 - keep_ratio)/keep_alpha)
-            if keep_ratio < keep_alpha or (1 - keep_ratio)/keep_alpha > 1.2:
+            print("KEEP RATIO", keep_ratio, keep_alpha, (1 - keep_ratio)/keep_alpha)
+            if keep_ratio < keep_alpha or (1 - keep_ratio)/keep_alpha > 2:
+                print(np.max(step_norms), step_bound)
                 # If the step bound is weird, do not reject anything
-                step_bound += 1
+                step_bound = np.max(step_norms)
+                # step_bound += 1
             boundaries.append(step_bound)
             good_particles = good_particles[step_norms < step_bound]
         return np.array(boundaries)

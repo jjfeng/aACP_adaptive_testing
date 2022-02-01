@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from matplotlib import pyplot as plt
-from sklearn.metrics import roc_auc_score, plot_roc_curve, roc_curve
+from sklearn.metrics import roc_auc_score, plot_roc_curve, roc_curve, log_loss
 
 from dataset import *
 
@@ -46,6 +46,7 @@ def get_deployed_scores(test_hist, test_dat, max_iter):
     ):
         pred_prob = mdl.predict_proba(test_dat.x)[:, 1].reshape((-1, 1))
         auc = roc_auc_score(test_dat.y, pred_prob)
+        nll = log_loss(test_dat.y, pred_prob)
 
         pred_y = mdl.predict(test_dat.x)
         sensitivity = np.sum((pred_y == test_y) * (test_y))/np.sum(test_y)
@@ -62,6 +63,7 @@ def get_deployed_scores(test_hist, test_dat, max_iter):
         for idx in range(time_idx, next_approve_time):
             scores.append({
                 "auc": auc,
+                "nll": nll,
                 "sensitivity": sensitivity,
                 "specificity": specificity,
                 "accuracy": accuracy,
