@@ -20,16 +20,16 @@ SPARSE_COEF_VAL = 1
 PERTURB_FACTOR = 0.02
 FWER = 0.1
 MTP_MECH_LIST = [
-    "binary_thres_mtp",
-    #"bonferroni",
-    #"graphical_bonf",
-    #"graphical_ffs",
-    #"graphical_prespec",
+    #"binary_thres_mtp",
+    "bonferroni",
+    "graphical_bonf",
+    "graphical_ffs",
+    "graphical_prespec",
 ]
 
 nest.add(
     'reuse_test_n',
-    [200],
+    [400],
     label_func=lambda c: "test_%d" % c)
 
 nest.add(
@@ -46,7 +46,7 @@ def create_model_developer(env, outdir, c):
         '--simulation',
         c['model_sim'],
         '--min-valid-dat-size',
-        c['reuse_test_n'],
+        40,
         '--out ${TARGETS[0]}'
     ]
     return env.Command(
@@ -103,8 +103,8 @@ def generate_data(env, outdir, c):
         SPARSE_P,
         '--p',
         NUM_P,
-        '--init-train-n 300',
-        '--train-batch-n 250',
+        '--init-train-n 100',
+        '--train-batch-n 100',
         '--num-batches',
         REUSE_ITERS,
         '--reuse-test-n',

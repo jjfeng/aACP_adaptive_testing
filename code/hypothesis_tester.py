@@ -67,6 +67,7 @@ class SensSpecHypothesisTester(HypothesisTester):
             raw_estimates[-2]/raw_estimates[0],
             raw_estimates[-1]/raw_estimates[1]
             ])
+        print("ESTIMATE", estimate)
 
         full_df = pd.concat([self.orig_obs] + [prior_node.obs for prior_node in prior_nodes] + [node.obs], axis=1).to_numpy().T
         raw_covariance = np.cov(full_df)/self.test_dat.size
@@ -104,6 +105,7 @@ class SensSpecHypothesisTester(HypothesisTester):
         min_norm = self.solve_min_norm(estimate, null_constraint)
         test_res = min_norm > boundaries[-1]
         logging.info("alpha level %f, bound %f", alpha * node_weights[-1], boundaries[-1])
+        logging.info("norm %f", min_norm)
 
         if (alpha * node_weights)[-1] < 1/MAX_PARTICLES:
              # Check that we don't reject the null when we can't even derive the spending boundaries accurately
