@@ -224,11 +224,12 @@ class OnlineAdaptNLLModeler(LockedModeler):
         logging.info("fun: log lik new %f", get_log_lik(test_y, new_pred_y).mean())
 
         if mu_sim < 0:
-            return 0, None
+            return 0, mu_sim
 
         candidate_log_lik = np.arange(min_log_lik, mu_sim, self.ni_margin/4)
         if candidate_log_lik.size == 0:
-            return 0, None
+            logging.info("abort: no candidates found %f %f", min_log_lik, mu_sim)
+            return 0, mu_sim
 
         obs_sim = np.random.normal(loc=mu_sim, scale=np.sqrt(var_sim), size=(num_test, num_reps))
         res = scipy.stats.ttest_1samp(obs_sim, popmean=candidate_log_lik.reshape((-1,1)), alternative="greater")
@@ -236,11 +237,13 @@ class OnlineAdaptNLLModeler(LockedModeler):
 
         if np.any(candidate_power > self.power):
             selected_idx = np.max(np.where(candidate_power > self.power)[0])
-            selected_thres = candidate_log_lik[selected_idx]
-            test_power = candidate_power[selected_idx]
-            return test_power, selected_thres
         else:
-            return np.max(candidate_power), None
+            logging.info("abort: power too low")
+            selected_idx = np.argmax(candidate_power)
+
+        selected_thres = candidate_log_lik[selected_idx]
+        test_power = candidate_power[selected_idx]
+        return test_power, selected_thres
 
 
     def _create_train_valid_dat(self, dat: Dataset):
@@ -265,13 +268,14 @@ class OnlineAdaptNLLModeler(LockedModeler):
         curr_idx = 0
         curr_log_lik = 0
         test_hist = TestHistory(orig_mdl, res_detail=pd.DataFrame({
-                "nll_curr": [0],
+                "log_lik_curr": [0],
                 }))
         test_idx = 0
         predef_test_idx = 0
         adapt_read_idx = 0
         predef_test_mdls = []
         prior_predef_log_lik = 0
+        lag_weight = 0.2
         while (test_idx < maxfev) and (adapt_read_idx < len(dat_stream)):
             print("ITERATION", test_idx)
 
@@ -284,7 +288,7 @@ class OnlineAdaptNLLModeler(LockedModeler):
             predef_test_power, predef_test_log_lik = self._do_power_calc_test_bound(
                     orig_mdl,
                     predef_lr,
-                    min_log_lik=prior_predef_log_lik + self.ni_margin,
+                    min_log_lik=prior_predef_log_lik,
                     valid_dat=predef_valid_dat,
                     num_test=predef_mtp_mechanism.hypo_tester.test_dat.size,
                     # TODO: use a smart alpha
@@ -296,14 +300,14 @@ class OnlineAdaptNLLModeler(LockedModeler):
                 # Predef will not test if sensitivity or specificity estimates are bad
                 predef_test_mdls.append(predef_lr)
                 predef_test_idx += 1
-                prior_predef_log_lik = predef_test_log_lik
+                prior_predef_log_lik = predef_test_log_lik * lag_weight + prior_predef_log_lik * (1 - lag_weight)
                 logging.info("predef test nll %.2f", predef_test_log_lik)
                 logging.info("predef TEST idx %d, adapt idx %d, batch %d", len(predef_test_mdls) - 1, test_idx, adapt_read_idx)
                 # TODO: Predef assumes all rejects of the null. do tree update???
                 #predef_mtp_mechanism._do_tree_update(1)
 
             adapt_read_idx += 1
-            if do_predef_test and ((predef_test_log_lik + curr_log_lik)/2 > (curr_log_lik + self.ni_margin/4)):
+            if (predef_test_log_lik + curr_log_lik)/2 > (curr_log_lik + self.ni_margin):
                 nll_test = (predef_test_log_lik + curr_log_lik)/2
                 logging.info("TEST idx: %d (batch_number) %d", test_idx, adapt_read_idx)
                 logging.info("TEST (avg) nll %f", nll_test)
@@ -312,7 +316,7 @@ class OnlineAdaptNLLModeler(LockedModeler):
                 null_constraints = np.array([
                         [0,nll_test]])
                 test_res = mtp_mechanism.get_test_res(
-                    null_constraints, orig_mdl, predef_lr, predef_mdl=predef_test_mdls[test_idx]
+                    null_constraints, orig_mdl, predef_lr, predef_mdl=predef_test_mdls[test_idx] if mtp_mechanism.require_predef else None
                 )
                 if test_res:
                     curr_log_lik = nll_test
@@ -323,7 +327,7 @@ class OnlineAdaptNLLModeler(LockedModeler):
                 test_hist.update(
                         test_res=test_res,
                         res_detail = pd.DataFrame({
-                            "nll_curr": [curr_log_lik]}),
+                            "log_lik_curr": [curr_log_lik]}),
                         proposed_mdl=predef_lr,
                         batch_number=adapt_read_idx,
                     )
@@ -331,7 +335,7 @@ class OnlineAdaptNLLModeler(LockedModeler):
                 logging.info("CONTinuing to pull data until confident in NLL improvement")
         logging.info("adapt read idx %d", adapt_read_idx)
         print("adapt read", adapt_read_idx)
-        logging.info("TEST batch numbers %s", test_hist.batch_numbers)
+        logging.info("TEST batch numbers %s (len %d)", test_hist.batch_numbers, len(test_hist.batch_numbers))
 
         return test_hist
 

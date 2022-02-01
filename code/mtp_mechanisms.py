@@ -13,6 +13,7 @@ class BinaryThresholdMTP:
     """
     Repeatedly test at level alpha
     """
+    require_predef = False
     name = "binary_thres"
 
     def __init__(self, hypo_tester, alpha: float):
@@ -88,6 +89,7 @@ class BinaryThresholdMTP:
         return test_res
 
 class BonferroniThresholdMTP(BinaryThresholdMTP):
+    require_predef = False
     name = "bonferroni"
 
     def init_test_dat(self, test_dat, num_adapt_queries):
@@ -107,6 +109,7 @@ class BonferroniThresholdMTP(BinaryThresholdMTP):
         self._do_tree_update(1)
 
 class GraphicalBonfMTP(BinaryThresholdMTP):
+    require_predef = False
     name = "graphical_bonf_thres"
 
     def __init__(
@@ -172,6 +175,7 @@ class GraphicalBonfMTP(BinaryThresholdMTP):
         return test_res
 
 class GraphicalFFSMTP(GraphicalBonfMTP):
+    require_predef = False
     name = "graphical_ffs"
 
     def get_test_res(self, null_hypo: np.ndarray, orig_mdl, new_mdl, predef_mdl=None):
@@ -193,10 +197,8 @@ class GraphicalParallelMTP(GraphicalFFSMTP):
     Model developer PRESPECIFies a parallel online procedure
     AND assumes correlation structure among models in a level
     """
-
-    @property
-    def name(self):
-        return "graphical_par"
+    require_predef = True
+    name = "graphical_par"
 
     def __init__(
         self,

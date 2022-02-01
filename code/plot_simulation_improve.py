@@ -39,6 +39,9 @@ def main():
     # Rename all the things for prettier figures
     measure_dict = {
             'nll': 'nll',
+            'log_lik_curr': 'log_lik_curr',
+            'num_approvals': 'num_approvals',
+            'auc': 'auc',
             #'specificity_curr': 'specificity_curr',
             #'sensitivity_curr': 'sensitivity_curr',
             #'specificity': 'specificity',
