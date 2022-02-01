@@ -267,7 +267,6 @@ class OnlineAdaptNLLModeler(LockedModeler):
         self.modeler.fit(train_dat.x, train_dat.y.flatten())
         orig_mdl = self.modeler
 
-        curr_idx = 0
         curr_log_lik = 0
         test_hist = TestHistory(orig_mdl, res_detail=pd.DataFrame({
                 "log_lik_curr": [0],

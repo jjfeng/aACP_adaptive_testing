@@ -25,6 +25,10 @@ class BinaryThresholdMTP:
     def curr_alpha(self):
         return self.alpha * self.test_tree.weight
 
+    @property
+    def test_set_size(self):
+        return self.hypo_tester.test_dat.size
+
     def _create_children(self, node, query_idx):
         """
         @param node: create children for this node
