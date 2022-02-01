@@ -69,11 +69,11 @@ class BinaryThresholdMTP:
         self.test_tree = self.start_node
         self._do_tree_update(1)
 
-    def get_test_res(self, null_hypo: np.ndarray, mdl, predef_mdl=None):
+    def get_test_res(self, null_hypo: np.ndarray, orig_mdl, new_mdl, predef_mdl=None):
         """
         @return test perf where 1 means approve and 0 means not approved
         """
-        node_obs = self.hypo_tester.get_observations(mdl)
+        node_obs = self.hypo_tester.get_observations(orig_mdl, new_mdl)
         self.test_tree.store_observations(node_obs)
         test_res = self.hypo_tester.test_null(self.alpha, self.test_tree, null_hypo, prior_nodes=[])
 
