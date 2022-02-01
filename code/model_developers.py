@@ -194,13 +194,18 @@ class OnlineAdaptNLLModeler(LockedModeler):
     """
     Just do online learning on a separate dataset
     """
-    def __init__(self, model_type:str = "Logistic", seed:int = 0, validation_frac: float = 0.2, min_valid_dat_size: int = 200, power: float = 0.3, ni_margin: float = 0.02):
+    def __init__(self, model_type:str = "Logistic", seed:int = 0, validation_frac: float = 0.2, min_valid_dat_size: int = 200, power: float = 0.3, ni_margin: float = 0.02, lag_weight: float = 0.2, predef_alpha: float = 0.1):
+        """
+        @param lag_weight: used in the predefined model sequence to define what threshold we use to decide whether or not to test a particular model
+        """
         assert model_type == "LogisticNLL"
         self.modeler = MyLogisticRegression(penalty="none")
         self.validation_frac = validation_frac
         self.min_valid_dat_size = min_valid_dat_size
         self.ni_margin = ni_margin
         self.power = power
+        self.lag_weight = lag_weight
+        self.predef_alpha = predef_alpha
 
     def _do_power_calc_test_bound(self, orig_mdl, new_mdl, min_log_lik:float, valid_dat: Dataset, alpha: float, num_test: int, num_reps: int = 10000, se_factor: float = 1):
         """
@@ -258,9 +263,6 @@ class OnlineAdaptNLLModeler(LockedModeler):
         @param dat_stream: a list of datasets for further training the model
         @return perf_value
         """
-        # TODO: clean up this
-        predef_mtp_mechanism = deepcopy(mtp_mechanism)
-
         train_dat, valid_dat = self._create_train_valid_dat(dat)
         self.modeler.fit(train_dat.x, train_dat.y.flatten())
         orig_mdl = self.modeler
@@ -271,11 +273,9 @@ class OnlineAdaptNLLModeler(LockedModeler):
                 "log_lik_curr": [0],
                 }))
         test_idx = 0
-        predef_test_idx = 0
         adapt_read_idx = 0
         predef_test_mdls = []
         prior_predef_log_lik = 0
-        lag_weight = 0.2
         while (test_idx < maxfev) and (adapt_read_idx < len(dat_stream)):
             print("ITERATION", test_idx)
 
@@ -290,21 +290,17 @@ class OnlineAdaptNLLModeler(LockedModeler):
                     predef_lr,
                     min_log_lik=prior_predef_log_lik,
                     valid_dat=predef_valid_dat,
-                    num_test=predef_mtp_mechanism.hypo_tester.test_dat.size,
-                    # TODO: use a smart alpha
-                    alpha=0.1)
+                    num_test=mtp_mechanism.test_set_size,
+                    alpha=self.predef_alpha)
             do_predef_test = predef_test_power >= self.power
 
             logging.info("predef batch %d power %.5f", adapt_read_idx, predef_test_power)
             if do_predef_test:
-                # Predef will not test if sensitivity or specificity estimates are bad
+                # Predef will not test if power is terrible
                 predef_test_mdls.append(predef_lr)
-                predef_test_idx += 1
                 prior_predef_log_lik = predef_test_log_lik * lag_weight + prior_predef_log_lik * (1 - lag_weight)
                 logging.info("predef test nll %.2f", predef_test_log_lik)
                 logging.info("predef TEST idx %d, adapt idx %d, batch %d", len(predef_test_mdls) - 1, test_idx, adapt_read_idx)
-                # TODO: Predef assumes all rejects of the null. do tree update???
-                #predef_mtp_mechanism._do_tree_update(1)
 
             adapt_read_idx += 1
             if (predef_test_log_lik + curr_log_lik)/2 > (curr_log_lik + self.ni_margin):
@@ -312,7 +308,6 @@ class OnlineAdaptNLLModeler(LockedModeler):
                 logging.info("TEST idx: %d (batch_number) %d", test_idx, adapt_read_idx)
                 logging.info("TEST (avg) nll %f", nll_test)
 
-                # TODO: this should be defined adaptively
                 null_constraints = np.array([
                         [0,nll_test]])
                 test_res = mtp_mechanism.get_test_res(
