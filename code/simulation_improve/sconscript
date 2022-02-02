@@ -13,23 +13,22 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 CLUSTER_STR = localenv['cluster']
 NUM_SEEDS = localenv['num_seeds']
-REUSE_ITERS = 20
-NUM_P = 25
+REUSE_ITERS = 8
+NUM_P = 50
 SPARSE_P = 6
 SPARSE_COEF_VAL = 0.75
-PERTURB_FACTOR = 0.02
 FWER = 0.1
 MTP_MECH_LIST = [
     #"binary_thres_mtp",
     #"bonferroni",
     "graphical_bonf",
-    "graphical_ffs",
+    #"graphical_ffs",
     "graphical_prespec",
 ]
 
 nest.add(
     'reuse_test_n',
-    [400],
+    [800],
     label_func=lambda c: "test_%d" % c)
 
 nest.add(
@@ -41,7 +40,7 @@ nest.add(
 
 nest.add(
     'perf_measure',
-    ['accuracy'])
+    ['auc'])
 
 
 @nest.add_target_with_env(localenv)
@@ -51,7 +50,9 @@ def create_model_developer(env, outdir, c):
         '--simulation',
         c['model_sim'],
         '--model-type',
-        'LogisticAccuracy', # logisticNLL
+        'Logistic', # logisticNLL
+        '--hypo-tester',
+        c['perf_measure'],
         '--min-valid-dat-size',
         30,
         '--out ${TARGETS[0]}'
@@ -111,10 +112,10 @@ def generate_data(env, outdir, c):
         SPARSE_P,
         '--p',
         NUM_P,
-        '--init-train-n 80',
-        '--train-batch-n 20',
+        '--init-train-n 50',
+        '--train-batch-n 10',
         '--num-batches',
-        REUSE_ITERS * 10,
+        REUSE_ITERS * 40,
         '--reuse-test-n',
         c['reuse_test_n'],
         '--sparse-beta',

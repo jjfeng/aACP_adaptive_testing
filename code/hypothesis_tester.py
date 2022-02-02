@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 import scipy
 import sklearn
+from sklearn.metrics import roc_auc_score
 
 from node import Node
 
@@ -140,6 +141,85 @@ class AccuracyHypothesisTester(LogLikHypothesisTester):
         """
         estimate = node.obs.acc_diff.mean()
         logging.info("test set accuracy %s", estimate)
+
+        full_df = pd.concat([prior_node.obs for prior_node in prior_nodes] + [node.obs], axis=1).to_numpy().T
+        cov_est = np.cov(full_df)/self.test_dat.size
+        if full_df.shape[0] == 1:
+            cov_est = np.array([[cov_est]])
+
+        num_nodes = len(prior_nodes) + 1
+        assert not np.any(np.isnan(cov_est))
+
+        node_weights = np.array([prior_node.weight for prior_node in prior_nodes] + [node.weight])
+        num_particles =  min(int(np.sum(1/(alpha * node_weights))), MAX_PARTICLES)
+        #assert num_particles <= MAX_PARTICLES
+        boundaries = self.generate_spending_boundaries(
+           cov_est,
+           self.stat_dim,
+           alpha * node_weights,
+           num_particles=min(max(num_particles, MIN_PARTICLES), MAX_PARTICLES)
+           )
+
+        # Need to check if it is within any of the specified bounds (but not necessarily both bounds)
+        min_norm = max(0, estimate - null_constraint[0,1])
+        test_res = min_norm > boundaries[-1]
+        print("TEST RES", test_res, min_norm, boundaries[-1])
+        logging.info("alpha level %f, bound %f", alpha * node_weights[-1], boundaries[-1])
+        logging.info("norm %f", min_norm)
+        if num_particles == MAX_PARTICLES:
+            logging.info("MAX PARTICLES REACHED")
+
+        return test_res
+
+
+class AUCHypothesisTester(LogLikHypothesisTester):
+    def get_auc(self, test_y, score_y):
+        score_y0 = score_y[test_y == 0]
+        score_y1 = score_y[test_y == 1]
+        all_ranks = score_y0.reshape((1,-1)) < score_y1.reshape((-1,1))
+        return np.mean(all_ranks)
+
+    def get_influence_func(self, mdl):
+        pred_y = mdl.predict_log_proba(self.test_dat.x)[:,1]
+        test_y = self.test_dat.y.flatten()
+        prob_y1 = test_y.mean()
+        prob_y0 = 1 - prob_y1
+        mask_y0 = test_y == 0
+        mask_y1 = test_y == 1
+        cdf_score_y0 = np.array([np.mean(pred_y[mask_y0] < pred_y[i]) for i in range(self.test_dat.size)])
+        cdf_score_y1 = np.array([np.mean(pred_y[mask_y1] > pred_y[i]) for i in range(self.test_dat.size)])
+        auc = self.get_auc(test_y, pred_y)
+
+        # Note that this can actually be quite different!
+        sklearn_auc = roc_auc_score(test_y, pred_y)
+        logging.info("AUC %f SKLEARN %f", auc, sklearn_auc)
+
+        influence_func = mask_y1/prob_y1 * cdf_score_y0 + mask_y0/prob_y0 * cdf_score_y1 - (mask_y0/prob_y0 + mask_y1/prob_y1) * auc + auc
+
+        #if auc < 0.5:
+        #    raise ValueError("weird auc")
+
+        if np.abs(auc - sklearn_auc) > 0.2:
+            raise ValueError("WEIRD AUC")
+
+        return influence_func, auc
+
+    def get_observations(self, orig_mdl, new_mdl):
+        orig_auc_ic, orig_auc = self.get_influence_func(orig_mdl)
+        new_auc_ic, new_auc = self.get_influence_func(new_mdl)
+        df = pd.DataFrame({
+            "auc_diff_ic": new_auc_ic - orig_auc_ic,
+            })
+
+        return df
+
+    def test_null(self, alpha: float, node: Node, null_constraint: np.ndarray, prior_nodes: List = []):
+        """
+        @return the CI code this node, accounting for the previous nodes in the true
+               and spending only the alpha allocated at this node
+        """
+        estimate = node.obs.auc_diff_ic.mean()
+        logging.info("test set estimate %.3f", estimate)
 
         full_df = pd.concat([prior_node.obs for prior_node in prior_nodes] + [node.obs], axis=1).to_numpy().T
         cov_est = np.cov(full_df)/self.test_dat.size

@@ -20,7 +20,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="create mtp mechanism")
     parser.add_argument("--mtp-mech", type=str, default="graphical_bonf", choices=["binary_thres_mtp", "bonferroni", "graphical_bonf", "graphical_prespec", "graphical_ffs"], help="Multiple testing mechanism")
     parser.add_argument(
-        "--hypo-tester", type=str, default="sens_spec", choices=["sens_spec", "accept_accur", "log_lik", "accuracy"]
+        "--hypo-tester", type=str, default="sens_spec", choices=["sens_spec", "accept_accur", "log_lik", "accuracy", "auc"]
     )
     parser.add_argument(
         "--prespec-ratio", type=float, default=1.0, help="parallel factor"
@@ -35,20 +35,26 @@ def parse_args():
     args = parser.parse_args()
     return args
 
+def get_hypo_tester(hypo_tester_str):
+    if hypo_tester_str == "log_lik":
+        hypo_tester = LogLikHypothesisTester()
+    elif hypo_tester_str == "accuracy":
+        hypo_tester = AccuracyHypothesisTester()
+    elif hypo_tester_str == "auc":
+        hypo_tester = AUCHypothesisTester()
+    elif hypo_tester_str == "sens_spec":
+        hypo_tester = SensSpecHypothesisTester()
+    elif hypo_tester_str == "accept_accur":
+        hypo_tester = AcceptAccurHypothesisTester()
+    else:
+        raise NotImplementedError("dont know this hypothesis")
+    return hypo_tester
+
 
 def main():
     args = parse_args()
 
-    if args.hypo_tester == "log_lik":
-        hypo_tester = LogLikHypothesisTester()
-    elif args.hypo_tester == "accuracy":
-        hypo_tester = AccuracyHypothesisTester()
-    elif args.hypo_tester == "sens_spec":
-        hypo_tester = SensSpecHypothesisTester()
-    elif args.hypo_tester == "accept_accur":
-        hypo_tester = AcceptAccurHypothesisTester()
-    else:
-        raise NotImplementedError("dont know this hypothesis")
+    hypo_tester = get_hypo_tester(args.hypo_tester)
 
     # Create MTP mech
     if args.mtp_mech == "binary_thres_mtp":

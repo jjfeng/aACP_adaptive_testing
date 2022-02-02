@@ -12,13 +12,15 @@ from sklearn.ensemble import RandomForestClassifier
 
 from dataset import DataGenerator
 from model_developers import *
+from create_mtp_mechanism import get_hypo_tester
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="create model developer for generating algorithmic modifications")
     parser.add_argument("--seed", type=int, default=0, help="seed")
     parser.add_argument("--simulation", type=str, default="online", choices=["adversary", "online", "online_fixed"])
-    parser.add_argument("--model-type", type=str, default="Logistic", choices=["Logistic", "GBT", "SelectiveLogistic", "LogisticAccuracy"])
+    parser.add_argument("--hypo-tester", type=str, default="auc", choices=["log_lik", "auc", "accuracy"])
+    parser.add_argument("--model-type", type=str, default="Logistic", choices=["Logistic", "GBT", "SelectiveLogistic"])
     parser.add_argument("--out-file", type=str, default="_output/model.pkl")
     # ONLY RELEVANT TO ADVERSARIAL DEVELOPER
     parser.add_argument("--sparse-p", type=int, default=4, help="number of nonzero coefficients in the true logistic regression model")
@@ -33,6 +35,7 @@ def main():
     args = parse_args()
     np.random.seed(args.seed)
 
+    hypo_tester = get_hypo_tester(args.hypo_tester)
     # Create model
     clf = None
     if args.simulation == "adversary":
@@ -42,10 +45,8 @@ def main():
         data_generator = DataGenerator(true_beta, mean_x=0)
         clf = BinaryAdversaryModeler(data_generator)
     elif args.simulation == "online_fixed":
-        if args.model_type == "LogisticNLL":
-            clf = OnlineAdaptNLLModeler(args.model_type, min_valid_dat_size=args.min_valid_dat_size)
-        elif args.model_type == "LogisticAccuracy":
-            clf = OnlineAdaptAccuracyModeler(min_valid_dat_size=args.min_valid_dat_size)
+        if args.model_type == "Logistic":
+            clf = OnlineAdaptLossModeler(hypo_tester, min_valid_dat_size=args.min_valid_dat_size)
         elif args.model_type == "Logistic":
             clf = OnlineAdaptSensSpecModeler(args.model_type, min_valid_dat_size=args.min_valid_dat_size)
         elif args.model_type == "SelectiveLogistic":

@@ -263,11 +263,7 @@ class GraphicalParallelMTP(GraphicalFFSMTP):
     def _do_tree_update(self, adapt_tree_res):
         # update adaptive tree
         self.num_queries += 1
-        print("NUM QUERIES", self.num_queries)
         if self.num_queries >= self.num_adapt_queries:
-            # We are done
-            #print("TREE UPDATE DONE")
-            #1/0
             return
 
         if adapt_tree_res == 1:
@@ -294,6 +290,7 @@ class GraphicalParallelMTP(GraphicalFFSMTP):
         node_obs = self.hypo_tester.get_observations(orig_mdl, new_mdl)
         self.test_tree.store_observations(node_obs)
         prior_nodes = self.parallel_tree_nodes[:(self.num_queries + 1)]
+        print("HIST", self.test_tree.history)
         test_res = self.hypo_tester.test_null(self.alpha, self.test_tree, null_hypo, prior_nodes=prior_nodes)
 
         self._do_tree_update(test_res)
