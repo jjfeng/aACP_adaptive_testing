@@ -301,7 +301,7 @@ class OnlineAdaptNLLModeler(LockedModeler):
 
             adapt_read_idx += 1
             #if (predef_test_log_lik + curr_log_lik)/2 > (curr_log_lik + self.ni_margin):
-            if predef_test_log_lik > (curr_log_lik + self.ni_margin):
+            if predef_test_log_lik >= (curr_log_lik + self.ni_margin):
                 nll_test = predef_test_log_lik # + curr_log_lik)/2
                 logging.info("TEST idx: %d (batch_number) %d", test_idx, adapt_read_idx)
                 logging.info("TEST (avg) nll %f", nll_test)
@@ -336,7 +336,7 @@ class OnlineAdaptLossModeler(OnlineAdaptNLLModeler):
     """
     Just do online learning on a separate dataset
     """
-    def __init__(self, hypo_tester, validation_frac: float = 0.2, min_valid_dat_size: int = 200, power: float = 0.7, ni_margin: float = 0.02, predef_alpha: float = 0.1, se_factor: float = 1.96):
+    def __init__(self, hypo_tester, validation_frac: float = 0.2, min_valid_dat_size: int = 200, power: float = 0.5, ni_margin: float = 0.02, predef_alpha: float = 0.1, se_factor: float = 1.96):
         """
         """
         self.modeler = MyLogisticRegression(penalty="l2")
@@ -365,7 +365,7 @@ class OnlineAdaptLossModeler(OnlineAdaptNLLModeler):
         if mu_sim < 0:
             return 0, mu_sim
 
-        candidate_diffs = np.arange(min_diff, mu_sim, self.ni_margin/4)
+        candidate_diffs = np.arange(min_diff, mu_sim, self.ni_margin)[:1]
         if candidate_diffs.size == 0:
             logging.info("abort: no candidates found %f %f", min_diff, mu_sim)
             return 0, mu_sim
@@ -401,7 +401,6 @@ class OnlineAdaptLossModeler(OnlineAdaptNLLModeler):
         test_idx = 0
         adapt_read_idx = 0
         predef_test_mdls = []
-        prior_predef_diff = 0
         while (test_idx < maxfev) and (adapt_read_idx < len(dat_stream)):
             print("ITERATION", test_idx)
 
@@ -411,34 +410,41 @@ class OnlineAdaptLossModeler(OnlineAdaptNLLModeler):
             predef_lr.fit(predef_train_dat.x, predef_train_dat.y.flatten())
 
             # calculate the threshold that we can test at such that the power of rejecting the null given Type I error at level alpha_node
-            predef_test_power, predef_test_diff = self._do_power_calc_test_bound(
+            predef_test_power, _ = self._do_power_calc_test_bound(
                     orig_mdl,
                     predef_lr,
-                    min_diff=prior_predef_diff,
+                    min_diff=len(predef_test_mdls) * self.ni_margin/2,
                     valid_dat=predef_valid_dat,
                     num_test=mtp_mechanism.test_set_size,
                     alpha=self.predef_alpha)
-            do_predef_test = predef_test_power >= self.power
 
             logging.info("predef batch %d power %.5f", adapt_read_idx, predef_test_power)
-            if do_predef_test:
+            if predef_test_power >= self.power/2:
                 # Predef will not test if power is terrible
                 predef_test_mdls.append(predef_lr)
-                logging.info("predef test %.2f", predef_test_diff)
                 logging.info("predef TEST idx %d, adapt idx %d, batch %d", len(predef_test_mdls) - 1, test_idx, adapt_read_idx)
 
+            # do the same for an adaptively decided min difference
+            adapt_test_power, adapt_test_diff = self._do_power_calc_test_bound(
+                    orig_mdl,
+                    predef_lr,
+                    min_diff=curr_diff + self.ni_margin,
+                    valid_dat=predef_valid_dat,
+                    num_test=mtp_mechanism.test_set_size,
+                    alpha=self.predef_alpha)
+
             adapt_read_idx += 1
-            if predef_test_diff > (curr_diff + self.ni_margin):
+            if (adapt_test_power > self.power) and (adapt_test_diff >= (curr_diff + self.ni_margin)):
                 logging.info("TEST idx: %d (batch_number) %d", test_idx, adapt_read_idx)
-                logging.info("TEST (avg) diff %f", predef_test_diff)
+                logging.info("TEST (avg) diff %f", adapt_test_diff)
 
                 null_constraints = np.array([
-                        [0,predef_test_diff]])
+                        [0,adapt_test_diff]])
                 test_res = mtp_mechanism.get_test_res(
                     null_constraints, orig_mdl, predef_lr, predef_mdl=predef_test_mdls[test_idx] if mtp_mechanism.require_predef else None
                 )
                 if test_res:
-                    curr_diff = predef_test_diff
+                    curr_diff = adapt_test_diff
                 test_idx += 1
                 logging.info("Test res %d", test_res)
                 print("TEST RES", test_res)
@@ -451,7 +457,7 @@ class OnlineAdaptLossModeler(OnlineAdaptNLLModeler):
                         batch_number=adapt_read_idx,
                     )
             else:
-                logging.info("CONTinuing to pull data until confident in NLL improvement")
+                logging.info("CONTinuing to pull data until confident in NLL improvement %f <  %f + %f", adapt_test_diff, curr_diff, self.ni_margin)
         logging.info("adapt read idx %d", adapt_read_idx)
         print("adapt read", adapt_read_idx)
         logging.info("TEST batch numbers %s (len %d)", test_hist.batch_numbers, len(test_hist.batch_numbers))

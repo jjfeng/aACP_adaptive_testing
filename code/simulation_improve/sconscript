@@ -13,7 +13,7 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 CLUSTER_STR = localenv['cluster']
 NUM_SEEDS = localenv['num_seeds']
-REUSE_ITERS = 8
+REUSE_ITERS = 20
 NUM_P = 50
 SPARSE_P = 6
 SPARSE_COEF_VAL = 0.75
@@ -21,7 +21,7 @@ FWER = 0.1
 MTP_MECH_LIST = [
     #"binary_thres_mtp",
     #"bonferroni",
-    "graphical_bonf",
+    #"graphical_bonf",
     #"graphical_ffs",
     "graphical_prespec",
 ]
@@ -113,9 +113,9 @@ def generate_data(env, outdir, c):
         '--p',
         NUM_P,
         '--init-train-n 50',
-        '--train-batch-n 10',
+        '--train-batch-n 5',
         '--num-batches',
-        REUSE_ITERS * 40,
+        REUSE_ITERS * 30,
         '--reuse-test-n',
         c['reuse_test_n'],
         '--sparse-beta',
