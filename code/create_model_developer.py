@@ -18,7 +18,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="create model developer for generating algorithmic modifications")
     parser.add_argument("--seed", type=int, default=0, help="seed")
     parser.add_argument("--simulation", type=str, default="online", choices=["adversary", "online", "online_fixed"])
-    parser.add_argument("--model-type", type=str, default="Logistic", choices=["Logistic", "GBT", "SelectiveLogistic", "LogisticNLL"])
+    parser.add_argument("--model-type", type=str, default="Logistic", choices=["Logistic", "GBT", "SelectiveLogistic", "LogisticAccuracy"])
     parser.add_argument("--out-file", type=str, default="_output/model.pkl")
     # ONLY RELEVANT TO ADVERSARIAL DEVELOPER
     parser.add_argument("--sparse-p", type=int, default=4, help="number of nonzero coefficients in the true logistic regression model")
@@ -44,6 +44,8 @@ def main():
     elif args.simulation == "online_fixed":
         if args.model_type == "LogisticNLL":
             clf = OnlineAdaptNLLModeler(args.model_type, min_valid_dat_size=args.min_valid_dat_size)
+        elif args.model_type == "LogisticAccuracy":
+            clf = OnlineAdaptAccuracyModeler(min_valid_dat_size=args.min_valid_dat_size)
         elif args.model_type == "Logistic":
             clf = OnlineAdaptSensSpecModeler(args.model_type, min_valid_dat_size=args.min_valid_dat_size)
         elif args.model_type == "SelectiveLogistic":

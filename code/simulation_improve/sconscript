@@ -39,6 +39,11 @@ nest.add(
         #"online",
     ])
 
+nest.add(
+    'perf_measure',
+    ['accuracy'])
+
+
 @nest.add_target_with_env(localenv)
 def create_model_developer(env, outdir, c):
     cmd = [
@@ -46,7 +51,7 @@ def create_model_developer(env, outdir, c):
         '--simulation',
         c['model_sim'],
         '--model-type',
-        'LogisticNLL',
+        'LogisticAccuracy', # logisticNLL
         '--min-valid-dat-size',
         30,
         '--out ${TARGETS[0]}'
@@ -56,7 +61,6 @@ def create_model_developer(env, outdir, c):
             join(outdir, 'model.pkl')],
         [],
         ' '.join(map(str, cmd)))
-
 nest.add_aggregate("mtp_mech_res", dict)
 nest.add(
     'mtp_mech',
@@ -73,7 +77,7 @@ def create_mtp(env, outdir, c):
         '--alpha',
         FWER,
         '--hypo-tester',
-        'log_lik',
+        c['perf_measure'],
         '--mtp-mech',
         c['mtp_mech'],
 	    '--scratch %s' % scratch_file if c['mtp_mech'] in ["graphical_prespec", "graphical_ffs"] else '',
@@ -108,7 +112,7 @@ def generate_data(env, outdir, c):
         '--p',
         NUM_P,
         '--init-train-n 80',
-        '--train-batch-n 10',
+        '--train-batch-n 20',
         '--num-batches',
         REUSE_ITERS * 10,
         '--reuse-test-n',

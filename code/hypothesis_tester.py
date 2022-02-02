@@ -121,6 +121,55 @@ class LogLikHypothesisTester(HypothesisTester):
             good_particles = good_particles[step_norms < step_bound]
         return np.array(boundaries)
 
+class AccuracyHypothesisTester(LogLikHypothesisTester):
+    def get_observations(self, orig_mdl, new_mdl):
+        orig_pred_y = orig_mdl.predict(self.test_dat.x)
+        new_pred_y = new_mdl.predict(self.test_dat.x)
+        test_y = self.test_dat.y.flatten()
+        acc_diff = (test_y == new_pred_y).astype(int) - (test_y == orig_pred_y).astype(int)
+        df = pd.DataFrame({
+            "acc_diff": acc_diff,
+            })
+
+        return df
+
+    def test_null(self, alpha: float, node: Node, null_constraint: np.ndarray, prior_nodes: List = []):
+        """
+        @return the CI code this node, accounting for the previous nodes in the true
+               and spending only the alpha allocated at this node
+        """
+        estimate = node.obs.acc_diff.mean()
+        logging.info("test set accuracy %s", estimate)
+
+        full_df = pd.concat([prior_node.obs for prior_node in prior_nodes] + [node.obs], axis=1).to_numpy().T
+        cov_est = np.cov(full_df)/self.test_dat.size
+        if full_df.shape[0] == 1:
+            cov_est = np.array([[cov_est]])
+
+        num_nodes = len(prior_nodes) + 1
+        assert not np.any(np.isnan(cov_est))
+
+        node_weights = np.array([prior_node.weight for prior_node in prior_nodes] + [node.weight])
+        num_particles =  min(int(np.sum(1/(alpha * node_weights))), MAX_PARTICLES)
+        #assert num_particles <= MAX_PARTICLES
+        boundaries = self.generate_spending_boundaries(
+           cov_est,
+           self.stat_dim,
+           alpha * node_weights,
+           num_particles=min(max(num_particles, MIN_PARTICLES), MAX_PARTICLES)
+           )
+
+        # Need to check if it is within any of the specified bounds (but not necessarily both bounds)
+        min_norm = max(0, estimate - null_constraint[0,1])
+        test_res = min_norm > boundaries[-1]
+        print("TEST RES", test_res, min_norm, boundaries[-1])
+        logging.info("alpha level %f, bound %f", alpha * node_weights[-1], boundaries[-1])
+        logging.info("norm %f", min_norm)
+        if num_particles == MAX_PARTICLES:
+            logging.info("MAX PARTICLES REACHED")
+
+        return test_res
+
 class SensSpecHypothesisTester(HypothesisTester):
     stat_dim = 2
     def set_test_dat(self, test_dat):

@@ -334,6 +334,138 @@ class OnlineAdaptNLLModeler(LockedModeler):
 
         return test_hist
 
+class OnlineAdaptAccuracyModeler(OnlineAdaptNLLModeler):
+    """
+    Just do online learning on a separate dataset
+    """
+    def __init__(self, seed:int = 0, validation_frac: float = 0.2, min_valid_dat_size: int = 200, power: float = 0.5, ni_margin: float = 0.02, lag_weight: float = 0.2, predef_alpha: float = 0.1):
+        """
+        @param lag_weight: used in the predefined model sequence to define what threshold we use to decide whether or not to test a particular model
+        """
+        self.modeler = MyLogisticRegression(penalty="none")
+        self.validation_frac = validation_frac
+        self.min_valid_dat_size = min_valid_dat_size
+        self.ni_margin = ni_margin
+        self.power = power
+        self.lag_weight = lag_weight
+        self.predef_alpha = predef_alpha
+
+    def _do_power_calc_test_bound(self, orig_mdl, new_mdl, min_acc:float, valid_dat: Dataset, alpha: float, num_test: int, num_reps: int = 10000, se_factor: float = 1):
+        """
+        @param valid_dat: data for evaluating performance of model
+        @param alpha: the type I error of the current test node
+        """
+        logging.info("predef alpha %f", alpha)
+        # use valid_dat to evaluate the model first
+        orig_pred_y = orig_mdl.predict(valid_dat.x)
+        new_pred_y = new_mdl.predict(valid_dat.x)
+        test_y = valid_dat.y.flatten()
+        acc_diff = (test_y == new_pred_y).astype(int) - (test_y == orig_pred_y).astype(int)
+        # Estimate the performance, but rather than using the estimate, use a slightly lower estimate
+        mu_sim_raw = np.mean(acc_diff)
+        var_sim = np.var(acc_diff)
+        mu_sim = mu_sim_raw - np.sqrt(var_sim/valid_dat.size) * se_factor
+        logging.info("power calc: MU SIM lower %s", mu_sim_raw)
+
+        if mu_sim < 0:
+            return 0, mu_sim
+
+        candidate_acc = np.arange(min_acc, mu_sim, self.ni_margin/4)
+        if candidate_acc.size == 0:
+            logging.info("abort: no candidates found %f %f", min_acc, mu_sim)
+            return 0, mu_sim
+
+        obs_sim = np.random.normal(loc=mu_sim, scale=np.sqrt(var_sim), size=(num_test, num_reps))
+        res = scipy.stats.ttest_1samp(obs_sim, popmean=candidate_acc.reshape((-1,1)))
+        candidate_power = np.mean(res.statistic > scipy.stats.norm.ppf(1 - alpha), axis=1)
+
+        if np.any(candidate_power > self.power):
+            selected_idx = np.max(np.where(candidate_power > self.power)[0])
+        else:
+            logging.info("abort: power too low")
+            selected_idx = np.argmax(candidate_power)
+
+        selected_thres = candidate_acc[selected_idx]
+        test_power = candidate_power[selected_idx]
+        return test_power, selected_thres
+
+
+    def simulate_approval_process(self, dat, mtp_mechanism, dat_stream, maxfev=10, side_dat_stream = None):
+        """
+        @param dat_stream: a list of datasets for further training the model
+        @return perf_value
+        """
+        train_dat, valid_dat = self._create_train_valid_dat(dat)
+        self.modeler.fit(train_dat.x, train_dat.y.flatten())
+        orig_mdl = self.modeler
+
+        curr_acc = 0
+        test_hist = TestHistory(orig_mdl, res_detail=pd.DataFrame({
+                "acc_curr": [0],
+                }))
+        test_idx = 0
+        adapt_read_idx = 0
+        predef_test_mdls = []
+        prior_predef_acc = 0
+        while (test_idx < maxfev) and (adapt_read_idx < len(dat_stream)):
+            print("ITERATION", test_idx)
+
+            predef_dat = Dataset.merge([dat] + dat_stream[: adapt_read_idx + 1])
+            predef_train_dat, predef_valid_dat = self._create_train_valid_dat(predef_dat)
+            predef_lr = sklearn.base.clone(self.modeler)
+            predef_lr.fit(predef_train_dat.x, predef_train_dat.y.flatten())
+
+            # calculate the threshold that we can test at such that the power of rejecting the null given Type I error at level alpha_node
+            predef_test_power, predef_test_acc = self._do_power_calc_test_bound(
+                    orig_mdl,
+                    predef_lr,
+                    min_acc=prior_predef_acc,
+                    valid_dat=predef_valid_dat,
+                    num_test=mtp_mechanism.test_set_size,
+                    alpha=self.predef_alpha)
+            do_predef_test = predef_test_power >= self.power
+
+            logging.info("predef batch %d power %.5f", adapt_read_idx, predef_test_power)
+            if do_predef_test:
+                # Predef will not test if power is terrible
+                predef_test_mdls.append(predef_lr)
+                #prior_predef_acc = 0 predef_test_acc # * self.lag_weight + prior_predef_acc * (1 - self.lag_weight)
+                logging.info("predef test nll %.2f", predef_test_acc)
+                logging.info("predef TEST idx %d, adapt idx %d, batch %d", len(predef_test_mdls) - 1, test_idx, adapt_read_idx)
+
+            adapt_read_idx += 1
+            #if (predef_test_acc + curr_acc)/2 > (curr_acc + self.ni_margin):
+            if predef_test_acc > (curr_acc + self.ni_margin):
+                nll_test = predef_test_acc # + curr_acc)/2
+                logging.info("TEST idx: %d (batch_number) %d", test_idx, adapt_read_idx)
+                logging.info("TEST (avg) nll %f", nll_test)
+
+                null_constraints = np.array([
+                        [0,nll_test]])
+                test_res = mtp_mechanism.get_test_res(
+                    null_constraints, orig_mdl, predef_lr, predef_mdl=predef_test_mdls[test_idx] if mtp_mechanism.require_predef else None
+                )
+                if test_res:
+                    curr_acc = nll_test
+                test_idx += 1
+                logging.info("Test res %d", test_res)
+                print("TEST RES", test_res)
+
+                test_hist.update(
+                        test_res=test_res,
+                        res_detail = pd.DataFrame({
+                            "acc_curr": [curr_acc]}),
+                        proposed_mdl=predef_lr,
+                        batch_number=adapt_read_idx,
+                    )
+            else:
+                logging.info("CONTinuing to pull data until confident in NLL improvement")
+        logging.info("adapt read idx %d", adapt_read_idx)
+        print("adapt read", adapt_read_idx)
+        logging.info("TEST batch numbers %s (len %d)", test_hist.batch_numbers, len(test_hist.batch_numbers))
+
+        return test_hist
+
 #class OnlineAdaptSensSpecModeler(LockedModeler):
 #    """
 #    Just do online learning on a separate dataset
