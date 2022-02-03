@@ -37,10 +37,8 @@ def main():
 
     # Rename all the things for prettier figures
     measure_dict = {
-            'specificity_curr': 'specificity_curr',
-            'sensitivity_curr': 'sensitivity_curr',
-            'specificity': 'specificity',
-            'sensitivity': 'sensitivity',
+            'curr_diff': 'curr_diff',
+            'auc': 'auc',
             'did_approval': 'did_approval'
             }
     data_dict = {'test':'Test', 'reuse_test': 'Reusable Test'}
@@ -60,7 +58,7 @@ def main():
     all_res["Dataset"] = all_res.dataset.map(data_dict)
     all_res = all_res.reset_index()
     max_iter = all_res.Iteration.max()
-    print("ALL RES", all_res.shape)
+    print(all_res[(all_res.variable == "did_approval") & (all_res.Iteration == max_iter)])
 
     sns.set_context("paper", font_scale=2.5)
     rel_plt = sns.relplot(

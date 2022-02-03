@@ -21,6 +21,7 @@ def parse_args():
     parser.add_argument("--se-factor", type=float, default=0.1, help="se factor for estimating perf")
     parser.add_argument("--alpha", type=float, default=0.1, help="assumed alpha for adaptive testing")
     parser.add_argument("--power", type=float, default=0.3, help="desired power for testing")
+    parser.add_argument("--update-incr", type=float, default=0.1, help="how much the adversary perturbs things")
     parser.add_argument("--simulation", type=str, default="online", choices=["adversary", "online", "online_fixed"])
     parser.add_argument("--hypo-tester", type=str, default="auc", choices=["log_lik", "auc", "accuracy"])
     parser.add_argument("--model-type", type=str, default="Logistic", choices=["Logistic", "GBT", "SelectiveLogistic"])
@@ -46,7 +47,8 @@ def main():
         true_beta = np.zeros((args.p, 1))
         true_beta[: args.sparse_p] = args.sparse_beta
         data_generator = DataGenerator(true_beta, mean_x=0)
-        clf = BinaryAdversaryModeler(data_generator)
+        #clf = BinaryAdversaryModeler(data_generator)
+        clf = AdversaryLossModeler(data_generator, update_incr=args.update_incr)
     elif args.simulation == "online_fixed":
         if args.model_type == "Logistic":
             clf = OnlineAdaptLossModeler(hypo_tester, min_valid_dat_size=args.min_valid_dat_size, predef_alpha=args.alpha, power=args.power, se_factor=args.se_factor)

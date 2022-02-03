@@ -207,6 +207,7 @@ class AUCHypothesisTester(LogLikHypothesisTester):
     def get_observations(self, orig_mdl, new_mdl):
         orig_auc_ic, orig_auc = self.get_influence_func(orig_mdl)
         new_auc_ic, new_auc = self.get_influence_func(new_mdl)
+        logging.info("orig AUC %.4f, new AUC %.4f", orig_auc, new_auc)
         df = pd.DataFrame({
             "auc_diff_ic": new_auc_ic - orig_auc_ic,
             })
@@ -225,28 +226,31 @@ class AUCHypothesisTester(LogLikHypothesisTester):
         cov_est = np.cov(full_df)/self.test_dat.size
         if full_df.shape[0] == 1:
             cov_est = np.array([[cov_est]])
+        logging.info("cov est %s", np.sqrt(cov_est))
 
         num_nodes = len(prior_nodes) + 1
         assert not np.any(np.isnan(cov_est))
 
         node_weights = np.array([prior_node.weight for prior_node in prior_nodes] + [node.weight])
-        num_particles =  min(int(np.sum(1/(alpha * node_weights))), MAX_PARTICLES)
-        #assert num_particles <= MAX_PARTICLES
-        boundaries = self.generate_spending_boundaries(
-           cov_est,
-           self.stat_dim,
-           alpha * node_weights,
-           num_particles=min(max(num_particles, MIN_PARTICLES), MAX_PARTICLES)
-           )
+        test_res = False
+        if np.isfinite(np.sum(1/(alpha * node_weights))):
+            num_particles =  min(int(np.sum(1/(alpha * node_weights))), MAX_PARTICLES)
+            #assert num_particles <= MAX_PARTICLES
+            boundaries = self.generate_spending_boundaries(
+               cov_est,
+               self.stat_dim,
+               alpha * node_weights,
+               num_particles=min(max(num_particles, MIN_PARTICLES), MAX_PARTICLES)
+               )
 
-        # Need to check if it is within any of the specified bounds (but not necessarily both bounds)
-        min_norm = max(0, estimate - null_constraint[0,1])
-        test_res = min_norm > boundaries[-1]
-        print("TEST RES", test_res, min_norm, boundaries[-1])
-        logging.info("alpha level %f, bound %f", alpha * node_weights[-1], boundaries[-1])
-        logging.info("norm %f", min_norm)
-        if num_particles == MAX_PARTICLES:
-            logging.info("MAX PARTICLES REACHED")
+            # Need to check if it is within any of the specified bounds (but not necessarily both bounds)
+            min_norm = max(0, estimate - null_constraint[0,1])
+            test_res = min_norm > boundaries[-1]
+            print("TEST RES", test_res, min_norm, boundaries[-1])
+            logging.info("alpha level %f, bound %f", alpha * node_weights[-1], boundaries[-1])
+            logging.info("norm %f", min_norm)
+            if num_particles == MAX_PARTICLES:
+                logging.info("MAX PARTICLES REACHED")
 
         return test_res
 

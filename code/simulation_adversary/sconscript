@@ -16,14 +16,14 @@ NUM_SEEDS = localenv['num_seeds']
 TEST_N = 5000
 REUSE_ITERS = 50
 SPARSE_P = 1
-SPARSE_COEF_VAL = 2
+SPARSE_COEF_VAL = 0.8
 FWER = 0.1
 MTP_MECH_LIST = [
     "binary_thres_mtp",
     #"bonferroni",
     "graphical_bonf",
-    "graphical_ffs",
-    "graphical_prespec",
+    #"graphical_ffs",
+    #"graphical_prespec",
 ]
 
 nest.add(
@@ -31,12 +31,18 @@ nest.add(
     [50],
     label_func=lambda c: "test_%d" % c)
 
+nest.add(
+    'perf_measure',
+    ['auc'])
+
 @nest.add_target_with_env(localenv)
 def create_model_developer(env, outdir, c):
     cmd = [
         'python create_model_developer.py',
         '--simulation',
         'adversary',
+        '--update-incr',
+        0.5,
         '--sparse-p',
         SPARSE_P,
         '--p',
@@ -67,6 +73,8 @@ def create_mtp(env, outdir, c):
         '--success-weight 0.7' if "graphical" in c['mtp_mech'] else '',
         '--alpha',
         FWER,
+        '--hypo-tester',
+        c['perf_measure'],
         '--mtp-mech',
         c['mtp_mech'],
 	    '--scratch %s' % scratch_file if c['mtp_mech'] in ["graphical_prespec", "graphical_ffs"] else '',
