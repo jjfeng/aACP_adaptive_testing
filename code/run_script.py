@@ -28,13 +28,13 @@ def main(args=sys.argv[1:]):
     if not is_debug:
         # This code is really simple. Wait at most 100 * 10 seconds until the
         # desired result pops up in the file system.
-        for i in range(200):
+        for i in range(400):
             if not os.path.exists(target_file):
-                time.sleep(20)
+                time.sleep(40)
             else:
                 break
 
-        time.sleep(20)
+        time.sleep(40)
 
 
 if __name__ == "__main__":
