@@ -39,6 +39,7 @@ def main():
     measure_dict = {
             'curr_diff': 'curr_diff',
             'auc': 'auc',
+            'nll': 'nll',
             'did_approval': 'did_approval'
             }
     data_dict = {'test':'Test', 'reuse_test': 'Reusable Test'}

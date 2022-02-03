@@ -14,6 +14,7 @@ from matplotlib import pyplot as plt
 def parse_args():
     parser = argparse.ArgumentParser(description="Summarize csvs by taking mean")
     parser.add_argument("--seed", type=int, default=0, help="seed")
+    parser.add_argument("--max-batch", type=int, default=0, help="max batch")
     parser.add_argument("--results", type=str)
     parser.add_argument("--plot-file", type=str, default="_output/plot.png")
     args = parser.parse_args()
@@ -28,6 +29,25 @@ def main():
     for idx, res_file in enumerate(args.results):
         if os.path.exists(res_file):
             res = pd.read_csv(res_file)
+            print(res)
+            batch_dict = res[res.variable == "batch_number"][["time", "value"]]
+            batch_df = pd.DataFrame({
+                "batch_number": batch_dict.value,
+                "time": batch_dict.time}).drop_duplicates()
+
+            res = res.merge(batch_df, on="time")
+            for i in range(batch_df.shape[0]):
+                batch_start = int(batch_df.batch_number.iloc[i])
+                if i == (batch_df.shape[0] - 1):
+                    batch_end = args.max_batch
+                else:
+                    batch_end = int(batch_df.batch_number.iloc[i + 1])
+                batch_filler = res[res.batch_number == batch_start].copy()
+                for batch_fill_idx in range(batch_start + 1, batch_end):
+                    batch_filler.batch_number = batch_fill_idx
+                    res = pd.concat([
+                        res,
+                        batch_filler])
             all_res.append(res)
         else:
             print("file missing", res_file)
@@ -68,7 +88,7 @@ def main():
     sns.set_context("paper", font_scale=2.5)
     rel_plt = sns.relplot(
         data=all_res[all_res.variable.isin(list(measure_dict.keys()))],
-        x="Iteration",
+        x="batch_number",
         y="Value",
         hue="Procedure",
         row="Dataset",
@@ -76,7 +96,6 @@ def main():
         kind="line",
         style="Procedure",
         facet_kws={"sharey": False, "sharex": True},
-        linewidth=3
     )
     rel_plt.set_titles('{row_name}' ' | ' '{col_name}')
     plt.savefig(args.plot_file)

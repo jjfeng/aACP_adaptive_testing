@@ -22,6 +22,12 @@ def get_log_lik(y_true, y_pred):
 
 
 class HypothesisTester:
+    def get_auc(self, test_y, score_y):
+        score_y0 = score_y[test_y == 0]
+        score_y1 = score_y[test_y == 1]
+        all_ranks = score_y0.reshape((1,-1)) < score_y1.reshape((-1,1))
+        return np.mean(all_ranks)
+
     def set_test_dat(self, test_dat):
         self.test_dat = test_dat
 
@@ -37,8 +43,6 @@ class HypothesisTester:
 
 class LogLikHypothesisTester(HypothesisTester):
     stat_dim = 1
-    def set_test_dat(self, test_dat):
-        self.test_dat = test_dat
 
     def get_observations(self, orig_mdl, new_mdl):
         orig_pred_y = orig_mdl.predict_proba(self.test_dat.x)[:,1]
@@ -173,11 +177,6 @@ class AccuracyHypothesisTester(LogLikHypothesisTester):
 
 
 class AUCHypothesisTester(LogLikHypothesisTester):
-    def get_auc(self, test_y, score_y):
-        score_y0 = score_y[test_y == 0]
-        score_y1 = score_y[test_y == 1]
-        all_ranks = score_y0.reshape((1,-1)) < score_y1.reshape((-1,1))
-        return np.mean(all_ranks)
 
     def get_influence_func(self, mdl):
         pred_y = mdl.predict_log_proba(self.test_dat.x)[:,1]
@@ -203,6 +202,15 @@ class AUCHypothesisTester(LogLikHypothesisTester):
             raise ValueError("WEIRD AUC")
 
         return influence_func, auc
+
+    def _get_observations(self, orig_mdl, new_mdl):
+        orig_auc_ic, orig_auc = self.get_influence_func(orig_mdl)
+        new_auc_ic, new_auc = self.get_influence_func(new_mdl)
+        df = pd.DataFrame({
+            "auc_diff_ic": new_auc_ic - orig_auc_ic,
+            })
+
+        return df, orig_auc, new_auc
 
     def get_observations(self, orig_mdl, new_mdl):
         orig_auc_ic, orig_auc = self.get_influence_func(orig_mdl)

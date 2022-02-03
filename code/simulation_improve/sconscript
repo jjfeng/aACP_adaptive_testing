@@ -13,8 +13,8 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 CLUSTER_STR = localenv['cluster']
 NUM_SEEDS = localenv['num_seeds']
-REUSE_ITERS = 20
-NUM_P = 50
+REUSE_ITERS = 10
+NUM_P = 100
 SPARSE_P = 6
 SPARSE_COEF_VAL = 0.75
 FWER = 0.1
@@ -22,8 +22,8 @@ MTP_MECH_LIST = [
     #"binary_thres_mtp",
     "bonferroni",
     "graphical_bonf",
-    "graphical_ffs",
-    "graphical_prespec",
+    #"graphical_ffs",
+    #"graphical_prespec",
 ]
 
 nest.add(
@@ -49,7 +49,11 @@ nest.add(
 
 nest.add(
     'se_factor',
-    [0, 1, 1.96],
+    [
+        #0,
+        1,
+        #1.96
+    ],
     label_func=lambda c: "se_factor_%.3f" % c)
 
 @nest.add_target_with_env(localenv)
@@ -67,7 +71,7 @@ def create_model_developer(env, outdir, c):
         '--alpha',
         0.1,
         '--model-type',
-        'Logistic', # logisticNLL
+        'Logistic',
         '--hypo-tester',
         c['perf_measure'],
         '--min-valid-dat-size',
@@ -129,8 +133,8 @@ def generate_data(env, outdir, c):
         SPARSE_P,
         '--p',
         NUM_P,
-        '--init-train-n 50',
-        '--train-batch-n 5',
+        '--init-train-n 80',
+        '--train-batch-n 1',
         '--num-batches',
         REUSE_ITERS * 30,
         '--reuse-test-n',
@@ -196,6 +200,8 @@ def plot_avg(env, outdir, c):
         'python plot_simulation_improve.py',
 	'--results',
         ",".join(["simulation_improve/%s" % r for r in c['summary_res']]),
+	'--max-batch',
+        REUSE_ITERS * 30,
 	'--plot-file ${TARGETS[0]}',
     ]
     return env.Command(
