@@ -413,13 +413,13 @@ class OnlineAdaptLossModeler(OnlineAdaptNLLModeler):
             predef_test_power, _ = self._do_power_calc_test_bound(
                     orig_mdl,
                     predef_lr,
-                    min_diff=len(predef_test_mdls) * self.ni_margin/2,
+                    min_diff=len(predef_test_mdls) * self.ni_margin/4,
                     valid_dat=predef_valid_dat,
                     num_test=mtp_mechanism.test_set_size,
                     alpha=self.predef_alpha)
 
             logging.info("predef batch %d power %.5f", adapt_read_idx, predef_test_power)
-            if predef_test_power >= self.power/2:
+            if predef_test_power >= self.power/4:
                 # Predef will not test if power is terrible
                 predef_test_mdls.append(predef_lr)
                 logging.info("predef TEST idx %d, adapt idx %d, batch %d", len(predef_test_mdls) - 1, test_idx, adapt_read_idx)

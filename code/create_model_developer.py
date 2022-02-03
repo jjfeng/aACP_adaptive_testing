@@ -18,6 +18,9 @@ from create_mtp_mechanism import get_hypo_tester
 def parse_args():
     parser = argparse.ArgumentParser(description="create model developer for generating algorithmic modifications")
     parser.add_argument("--seed", type=int, default=0, help="seed")
+    parser.add_argument("--se-factor", type=float, default=0.1, help="se factor for estimating perf")
+    parser.add_argument("--alpha", type=float, default=0.1, help="assumed alpha for adaptive testing")
+    parser.add_argument("--power", type=float, default=0.3, help="desired power for testing")
     parser.add_argument("--simulation", type=str, default="online", choices=["adversary", "online", "online_fixed"])
     parser.add_argument("--hypo-tester", type=str, default="auc", choices=["log_lik", "auc", "accuracy"])
     parser.add_argument("--model-type", type=str, default="Logistic", choices=["Logistic", "GBT", "SelectiveLogistic"])
@@ -46,7 +49,7 @@ def main():
         clf = BinaryAdversaryModeler(data_generator)
     elif args.simulation == "online_fixed":
         if args.model_type == "Logistic":
-            clf = OnlineAdaptLossModeler(hypo_tester, min_valid_dat_size=args.min_valid_dat_size)
+            clf = OnlineAdaptLossModeler(hypo_tester, min_valid_dat_size=args.min_valid_dat_size, predef_alpha=args.alpha, power=args.power, se_factor=args.se_factor)
         elif args.model_type == "Logistic":
             clf = OnlineAdaptSensSpecModeler(args.model_type, min_valid_dat_size=args.min_valid_dat_size)
         elif args.model_type == "SelectiveLogistic":
