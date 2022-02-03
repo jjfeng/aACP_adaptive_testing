@@ -20,8 +20,8 @@ SPARSE_COEF_VAL = 0.75
 FWER = 0.1
 MTP_MECH_LIST = [
     #"binary_thres_mtp",
-    #"bonferroni",
-    #"graphical_bonf",
+    "bonferroni",
+    "graphical_bonf",
     "graphical_ffs",
     "graphical_prespec",
 ]
@@ -44,12 +44,12 @@ nest.add(
 
 nest.add(
     'power',
-    [0.8],
+    [0.5],
     label_func=lambda c: "power_%d" % int(c * 100))
 
 nest.add(
     'se_factor',
-    [0, 1.96],
+    [0, 1, 1.96],
     label_func=lambda c: "se_factor_%.3f" % c)
 
 @nest.add_target_with_env(localenv)
