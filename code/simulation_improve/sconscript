@@ -44,42 +44,13 @@ nest.add(
 
 nest.add(
     'power',
-    [0.3],
+    [0.8],
     label_func=lambda c: "power_%d" % int(c * 100))
 
 nest.add(
     'se_factor',
-    [1],
+    [1.96],
     label_func=lambda c: "se_factor_%.3f" % c)
-
-nest.add_aggregate("mtp_mech_res", dict)
-nest.add_aggregate("model_developer_res", dict)
-nest.add(
-    'mtp_mech',
-    MTP_MECH_LIST)
-
-@nest.add_target_with_env(localenv)
-def create_mtp(env, outdir, c):
-    targets = [join(outdir, 'mtp_mech.pkl')]
-    scratch_file = join("simulation_improve", outdir, "scratch.txt")
-    cmd = [
-        'python create_mtp_mechanism.py',
-        '--prespec-ratio 0.6' if "graphical_prespec" == c['mtp_mech'] else '',
-        '--success-weight 0.8' if "graphical" in c['mtp_mech'] else '',
-        '--alpha',
-        FWER,
-        '--hypo-tester',
-        c['perf_measure'],
-        '--mtp-mech',
-        c['mtp_mech'],
-	    '--scratch %s' % scratch_file if c['mtp_mech'] in ["graphical_prespec", "graphical_ffs"] else '',
-	    '--out ${TARGETS[0]}'
-    ]
-    c['mtp_mech_res'][c['mtp_mech']] = targets[0]
-    return env.Command(
-        targets,
-        [],
-        ' '.join(map(str, cmd)))
 
 @nest.add_target_with_env(localenv)
 def create_model_developer(env, outdir, c):
@@ -103,7 +74,34 @@ def create_model_developer(env, outdir, c):
         30,
         '--out ${TARGETS[0]}'
     ]
-    c['model_developer_res'][c['mtp_mech']] = targets[0]
+    return env.Command(
+        targets,
+        [],
+        ' '.join(map(str, cmd)))
+
+nest.add_aggregate("mtp_mech_res", dict)
+nest.add(
+    'mtp_mech',
+    MTP_MECH_LIST)
+
+@nest.add_target_with_env(localenv)
+def create_mtp(env, outdir, c):
+    targets = [join(outdir, 'mtp_mech.pkl')]
+    scratch_file = join("simulation_improve", outdir, "scratch.txt")
+    cmd = [
+        'python create_mtp_mechanism.py',
+        '--prespec-ratio 0.6' if "graphical_prespec" == c['mtp_mech'] else '',
+        '--success-weight 0.8' if "graphical" in c['mtp_mech'] else '',
+        '--alpha',
+        FWER,
+        '--hypo-tester',
+        c['perf_measure'],
+        '--mtp-mech',
+        c['mtp_mech'],
+	    '--scratch %s' % scratch_file if c['mtp_mech'] in ["graphical_prespec", "graphical_ffs"] else '',
+	    '--out ${TARGETS[0]}'
+    ]
+    c['mtp_mech_res'][c['mtp_mech']] = targets[0]
     return env.Command(
         targets,
         [],
@@ -170,8 +168,7 @@ def run_experiment(env, outdir, c):
         '--max-iter',
         REUSE_ITERS,
 	'--data ${SOURCES[0]}',
-	'--model', # ${SOURCES[1]}',
-    "simulation_improve/%s" % c['model_developer_res'][c['mtp_mech']],
+	'--model ${SOURCES[1]}',
 	'--mtp-mech',
     "simulation_improve/%s" % c['mtp_mech_res'][c['mtp_mech']],
 	'--log ${TARGETS[0]}',
@@ -186,8 +183,7 @@ def run_experiment(env, outdir, c):
         targets,
         [
             c["generate_data"][0],
-            #c["create_model_developer"][0],
-            c["model_developer_res"][c['mtp_mech']],
+            c["create_model_developer"][0],
             c["mtp_mech_res"][c['mtp_mech']],
         ],
         ' '.join(map(str, cmd)))
