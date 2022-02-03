@@ -1,0 +1,40 @@
+---
+title: "ICU data"
+output: html_notebook
+---
+```{r}
+library(ranger)
+library(ROCit)
+```
+
+
+```{r}
+head(eicu_hypotension_data)
+```
+
+```{r}
+eicu_hypotension_data$y <- eicu_hypotension_data$`unified.map_16-predict` < 65
+eicu_hypotension_data$x1 <- eicu_hypotension_data$`unified.map_1-obs`
+```
+
+```{r}
+write.csv(eicu_hypotension_data, "~/Downloads/eicu_hypotension_data.csv", row.names = F)
+```
+
+```{r}
+train_idx <- sample(1:nrow(eicu_hypotension_data), nrow(eicu_hypotension_data) * 0.5, replace = F)
+train_dat <- eicu_hypotension_data[train_idx,]
+test_dat <- eicu_hypotension_data[-train_idx,]
+```
+
+
+```{r}
+rf_res <- ranger(y ~ x1, train_dat, probability = T)
+```
+
+```{r}
+rf_pred <- predict(rf_res, test_dat)$prediction
+roc_res <- rocit(score = rf_pred[,2], class = test_dat$y)
+summary(roc_res)
+```
+
