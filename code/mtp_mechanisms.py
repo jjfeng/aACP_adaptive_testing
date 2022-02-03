@@ -80,7 +80,7 @@ class BinaryThresholdMTP:
         self.test_tree = self.start_node
         self._do_tree_update(1)
 
-    def get_test_res(self, null_hypo: np.ndarray, orig_mdl, new_mdl, predef_mdl=None):
+    def get_test_res(self, null_hypo: np.ndarray, orig_mdl, new_mdl, orig_predef_mdl=None, predef_mdl=None):
         """
         @return test perf where 1 means approve and 0 means not approved
         """
@@ -168,7 +168,7 @@ class GraphicalBonfMTP(BinaryThresholdMTP):
 
         self.parent_child_idx = 0
 
-    def get_test_res(self, null_hypo: np.ndarray, orig_mdl, new_mdl, predef_mdl=None):
+    def get_test_res(self, null_hypo: np.ndarray, orig_mdl, new_mdl, orig_predef_mdl=None,  predef_mdl=None):
         """
         @return test perf where 1 means approve and 0 means not approved
         """
@@ -182,7 +182,7 @@ class GraphicalFFSMTP(GraphicalBonfMTP):
     require_predef = False
     name = "graphical_ffs"
 
-    def get_test_res(self, null_hypo: np.ndarray, orig_mdl, new_mdl, predef_mdl=None):
+    def get_test_res(self, null_hypo: np.ndarray, orig_mdl, new_mdl, orig_predef_mdl=None,  predef_mdl=None):
         """
         @return test perf where 1 means approve and 0 means not approved
         """
@@ -279,12 +279,12 @@ class GraphicalParallelMTP(GraphicalFFSMTP):
         self._create_children(self.test_tree, self.num_queries)
         self.test_tree.local_alpha = self.alpha * self.test_tree.weight
 
-    def get_test_res(self, null_hypo: np.ndarray, orig_mdl, new_mdl, predef_mdl=None):
+    def get_test_res(self, null_hypo: np.ndarray, orig_mdl, new_mdl, orig_predef_mdl=None, predef_mdl=None):
         """
         @return test perf where 1 means approve and 0 means not approved
         """
         parallel_node = self.parallel_tree_nodes[self.num_queries]
-        parallel_node_obs = self.hypo_tester.get_observations(orig_mdl, predef_mdl)
+        parallel_node_obs = self.hypo_tester.get_observations(orig_predef_mdl, predef_mdl)
         parallel_node.store_observations(parallel_node_obs)
 
         node_obs = self.hypo_tester.get_observations(orig_mdl, new_mdl)

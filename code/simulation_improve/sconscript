@@ -13,7 +13,7 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 CLUSTER_STR = localenv['cluster']
 NUM_SEEDS = localenv['num_seeds']
-REUSE_ITERS = 10
+REUSE_ITERS = 20
 NUM_P = 100
 SPARSE_P = 6
 SPARSE_COEF_VAL = 0.75
@@ -23,7 +23,7 @@ MTP_MECH_LIST = [
     "bonferroni",
     "graphical_bonf",
     #"graphical_ffs",
-    #"graphical_prespec",
+    "graphical_prespec",
 ]
 
 nest.add(
@@ -34,8 +34,8 @@ nest.add(
 nest.add(
     'model_sim',
     [
-        "online_fixed",
-        #"online",
+        #"online_delta",
+        "online_compare",
     ])
 
 nest.add(
@@ -74,6 +74,8 @@ def create_model_developer(env, outdir, c):
         'Logistic',
         '--hypo-tester',
         c['perf_measure'],
+        '--valid-frac',
+        0.5,
         '--min-valid-dat-size',
         30,
         '--out ${TARGETS[0]}'

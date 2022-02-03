@@ -22,7 +22,7 @@ def parse_args():
     parser.add_argument("--alpha", type=float, default=0.1, help="assumed alpha for adaptive testing")
     parser.add_argument("--power", type=float, default=0.3, help="desired power for testing")
     parser.add_argument("--update-incr", type=float, default=0.1, help="how much the adversary perturbs things")
-    parser.add_argument("--simulation", type=str, default="online", choices=["adversary", "online", "online_fixed"])
+    parser.add_argument("--simulation", type=str, default="online", choices=["adversary", "online_delta", "online_compare"])
     parser.add_argument("--hypo-tester", type=str, default="auc", choices=["log_lik", "auc", "accuracy"])
     parser.add_argument("--model-type", type=str, default="Logistic", choices=["Logistic", "GBT", "SelectiveLogistic"])
     parser.add_argument("--out-file", type=str, default="_output/model.pkl")
@@ -30,6 +30,7 @@ def parse_args():
     parser.add_argument("--sparse-p", type=int, default=4, help="number of nonzero coefficients in the true logistic regression model")
     parser.add_argument("--p", type=int, default=10, help="number of covariates")
     parser.add_argument("--sparse-beta", type=float, default=0.5, help="values for the nonzero coefficients in the true model")
+    parser.add_argument("--valid-frac", type=float, default=0.2, help="number of obs used in validation")
     parser.add_argument("--min-valid-dat-size", type=int, default=200, help="number of observations to hold out for validation")
     args = parser.parse_args()
     return args
@@ -49,13 +50,14 @@ def main():
         data_generator = DataGenerator(true_beta, mean_x=0)
         #clf = BinaryAdversaryModeler(data_generator)
         clf = AdversaryLossModeler(data_generator, update_incr=args.update_incr)
-    elif args.simulation == "online_fixed":
+    elif args.simulation == "online_delta":
         if args.model_type == "Logistic":
             clf = OnlineAdaptLossModeler(hypo_tester, min_valid_dat_size=args.min_valid_dat_size, predef_alpha=args.alpha, power=args.power, se_factor=args.se_factor)
-        elif args.model_type == "Logistic":
-            clf = OnlineAdaptSensSpecModeler(args.model_type, min_valid_dat_size=args.min_valid_dat_size)
         elif args.model_type == "SelectiveLogistic":
             clf = OnlineFixedSelectiveModeler(args.model_type, target_acc=0.8, init_accept=0.4, incr_accept=0.05)
+    elif args.simulation == "online_compare":
+        if args.model_type == "Logistic":
+            clf = OnlineAdaptCompareModeler(hypo_tester, min_valid_dat_size=args.min_valid_dat_size, validation_frac=args.valid_frac, predef_alpha=args.alpha, power=args.power, se_factor=args.se_factor)
     elif args.simulation == "online":
         if args.model_type != "SelectiveLogistic":
             clf = OnlineSensSpecModeler(args.model_type, min_valid_dat_size=args.min_valid_dat_size)

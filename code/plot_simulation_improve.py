@@ -29,7 +29,6 @@ def main():
     for idx, res_file in enumerate(args.results):
         if os.path.exists(res_file):
             res = pd.read_csv(res_file)
-            print(res)
             batch_dict = res[res.variable == "batch_number"][["time", "value"]]
             batch_df = pd.DataFrame({
                 "batch_number": batch_dict.value,
