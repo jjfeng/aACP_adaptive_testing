@@ -38,16 +38,9 @@ def main():
 
     # Rename all the things for prettier figures
     measure_dict = {
-            #'nll': 'nll',
-            #'log_lik_curr': 'log_lik_curr',
+            'curr_diff': 'curr_diff',
             'num_approvals': 'num_approvals',
             'auc': 'auc',
-            'accuracy': 'accuracy',
-            'accuracy_curr': 'accuracy_curr',
-            #'specificity_curr': 'specificity_curr',
-            #'sensitivity_curr': 'sensitivity_curr',
-            #'specificity': 'specificity',
-            #'sensitivity': 'sensitivity',
             }
     data_dict = {'test':'Test', 'reuse_test': 'Reusable Test'}
     mtp_dict = {
@@ -67,7 +60,7 @@ def main():
     all_res = all_res.reset_index()
     max_iter = all_res.Iteration.max()
     print("NUM APPROVALS")
-    print(all_res.Value[
+    print(all_res[
         (all_res.variable == "num_approvals")
         & (all_res.Iteration == max_iter)
         ])

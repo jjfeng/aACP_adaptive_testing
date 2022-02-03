@@ -34,7 +34,7 @@ def parse_args():
     return args
 
 
-def get_deployed_scores(test_hist, test_dat, max_iter):
+def get_deployed_scores(mtp_mech, test_hist, test_dat, max_iter):
     """
     @return Dataframe with auc and nll for the approved models for the given test data
     """
@@ -45,7 +45,7 @@ def get_deployed_scores(test_hist, test_dat, max_iter):
         zip(test_hist.approved_mdls, test_hist.approval_times)
     ):
         pred_prob = mdl.predict_proba(test_dat.x)[:, 1].reshape((-1, 1))
-        auc = roc_auc_score(test_dat.y, pred_prob)
+        auc = mtp_mech.hypo_tester.get_auc(test_dat.y, pred_prob)
         nll = log_loss(test_dat.y, pred_prob)
 
         pred_y = mdl.predict(test_dat.x)
@@ -141,8 +141,8 @@ def main():
 
     conclusions_hist = full_hist.get_perf_hist()
     conclusions_hist["dataset"] = "reuse_test"
-    reuse_res = get_deployed_scores(full_hist, data.reuse_test_dat, args.max_iter)
-    test_res = get_deployed_scores(full_hist, data.test_dat, args.max_iter)
+    reuse_res = get_deployed_scores(mtp_mech, full_hist, data.reuse_test_dat, args.max_iter)
+    test_res = get_deployed_scores(mtp_mech, full_hist, data.test_dat, args.max_iter)
     reuse_res["dataset"] = "reuse_test"
     test_res["dataset"] = "test"
     #good_approvals, bad_approvals, prop_good_approvals = get_good_bad_approved(full_hist, data.test_dat, args.max_iter)

@@ -14,22 +14,21 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 CLUSTER_STR = localenv['cluster']
 NUM_SEEDS = localenv['num_seeds']
 REUSE_ITERS = 20
-NUM_P = 25
+NUM_P = 50
 SPARSE_P = 6
 SPARSE_COEF_VAL = 0.75
-PERTURB_FACTOR = 0.02
 FWER = 0.1
 MTP_MECH_LIST = [
     #"binary_thres_mtp",
     #"bonferroni",
-    "graphical_bonf",
+    #"graphical_bonf",
     "graphical_ffs",
     "graphical_prespec",
 ]
 
 nest.add(
     'reuse_test_n',
-    [400],
+    [800],
     label_func=lambda c: "test_%d" % c)
 
 nest.add(
@@ -41,26 +40,45 @@ nest.add(
 
 nest.add(
     'perf_measure',
-    ['accuracy'])
+    ['auc'])
 
+nest.add(
+    'power',
+    [0.8],
+    label_func=lambda c: "power_%d" % int(c * 100))
+
+nest.add(
+    'se_factor',
+    [0, 1.96],
+    label_func=lambda c: "se_factor_%.3f" % c)
 
 @nest.add_target_with_env(localenv)
 def create_model_developer(env, outdir, c):
+    targets = [
+            join(outdir, 'model.pkl')]
     cmd = [
         'python create_model_developer.py',
         '--simulation',
         c['model_sim'],
+        '--se-factor',
+        c['se_factor'],
+        '--power',
+        c['power'],
+        '--alpha',
+        0.1,
         '--model-type',
-        'LogisticAccuracy', # logisticNLL
+        'Logistic', # logisticNLL
+        '--hypo-tester',
+        c['perf_measure'],
         '--min-valid-dat-size',
         30,
         '--out ${TARGETS[0]}'
     ]
     return env.Command(
-        [
-            join(outdir, 'model.pkl')],
+        targets,
         [],
         ' '.join(map(str, cmd)))
+
 nest.add_aggregate("mtp_mech_res", dict)
 nest.add(
     'mtp_mech',
@@ -72,7 +90,7 @@ def create_mtp(env, outdir, c):
     scratch_file = join("simulation_improve", outdir, "scratch.txt")
     cmd = [
         'python create_mtp_mechanism.py',
-        '--prespec-ratio 0.4' if "graphical_prespec" == c['mtp_mech'] else '',
+        '--prespec-ratio 0.6' if "graphical_prespec" == c['mtp_mech'] else '',
         '--success-weight 0.8' if "graphical" in c['mtp_mech'] else '',
         '--alpha',
         FWER,
@@ -111,10 +129,10 @@ def generate_data(env, outdir, c):
         SPARSE_P,
         '--p',
         NUM_P,
-        '--init-train-n 80',
-        '--train-batch-n 20',
+        '--init-train-n 50',
+        '--train-batch-n 5',
         '--num-batches',
-        REUSE_ITERS * 10,
+        REUSE_ITERS * 30,
         '--reuse-test-n',
         c['reuse_test_n'],
         '--sparse-beta',
