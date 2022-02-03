@@ -49,7 +49,7 @@ nest.add(
 
 nest.add(
     'se_factor',
-    [1.96],
+    [0, 1.96],
     label_func=lambda c: "se_factor_%.3f" % c)
 
 @nest.add_target_with_env(localenv)
