@@ -39,7 +39,7 @@ def get_hypo_tester(hypo_tester_str, scratch_file):
     if hypo_tester_str == "log_lik":
         hypo_tester = LogLikHypothesisTester()
     elif hypo_tester_str == "auc":
-        hypo_tester = AUCHypothesisTester(scartch_file)
+        hypo_tester = AUCHypothesisTester(scratch_file)
     else:
         raise NotImplementedError("dont know this hypothesis")
     return hypo_tester

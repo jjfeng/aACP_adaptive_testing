@@ -207,7 +207,7 @@ class AUCHypothesisTester(LogLikHypothesisTester):
         else:
             np.savetxt(self.scratch_file, cov_est, delimiter=",")
             prior_bound_str = " ".join(map(str, prior_bounds))
-            rcmd = "Rscript R/pmvnorm.R %s %f %s" % (cov_txt, np.log10(alpha_spend), prior_bound_str)
+            rcmd = "Rscript R/pmvnorm.R %s %f %s" % (self.scratch_file, np.log10(alpha_spend), prior_bound_str)
             output = subprocess.check_output(
                 rcmd,
                 stderr=subprocess.STDOUT,
