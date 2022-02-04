@@ -127,6 +127,8 @@ def main():
     with open(args.model_file, "rb") as f:
         modeler = pickle.load(f)
         modeler.hypo_tester.make_scratch(args.scratch_file)
+        modeler.hypo_tester.test_dat = data.reuse_test_dat
+        modeler.calib_hypo_tester.test_dat = data.reuse_test_dat
 
     np.random.seed(args.seed)
 

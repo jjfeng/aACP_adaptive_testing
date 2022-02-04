@@ -22,7 +22,7 @@ def parse_args():
     parser.add_argument("--alpha", type=float, default=0.1, help="assumed alpha for adaptive testing")
     parser.add_argument("--power", type=float, default=0.3, help="desired power for testing")
     parser.add_argument("--update-incr", type=float, default=0.1, help="how much the adversary perturbs things")
-    parser.add_argument("--simulation", type=str, default="online_delta", choices=["adversary", "online_delta", "online_compare"])
+    parser.add_argument("--simulation", type=str, default="online_delta", choices=["adversary", "online_delta", "online_compare", "online_delta_calib"])
     parser.add_argument("--hypo-tester", type=str, default="auc", choices=["log_lik", "auc", "accuracy"])
     parser.add_argument("--model-type", type=str, default="Logistic", choices=["Logistic", "GBT", "SelectiveLogistic"])
     parser.add_argument("--out-file", type=str, default="_output/model.pkl")
@@ -55,6 +55,14 @@ def main():
             clf = OnlineAdaptLossModeler(hypo_tester, min_valid_dat_size=args.min_valid_dat_size, predef_alpha=args.alpha, power=args.power, se_factor=args.se_factor)
         elif args.model_type == "SelectiveLogistic":
             clf = OnlineFixedSelectiveModeler(args.model_type, target_acc=0.8, init_accept=0.4, incr_accept=0.05)
+    elif args.simulation == "online_delta_calib":
+        if args.model_type == "Logistic":
+            calib_hypo_tester = get_hypo_tester("calib")
+            auc_hypo_tester = get_hypo_tester("auc")
+            clf = OnlineAdaptLossCalibModeler(
+                    calib_hypo_tester,
+                    auc_hypo_tester,
+                    min_valid_dat_size=args.min_valid_dat_size, predef_alpha=args.alpha, power=args.power, se_factor=args.se_factor)
     elif args.simulation == "online_compare":
         if args.model_type == "Logistic":
             clf = OnlineAdaptCompareModeler(hypo_tester, min_valid_dat_size=args.min_valid_dat_size, validation_frac=args.valid_frac, predef_alpha=args.alpha, power=args.power, se_factor=args.se_factor)

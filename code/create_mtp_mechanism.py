@@ -18,7 +18,7 @@ from mtp_mechanisms import *
 
 def parse_args():
     parser = argparse.ArgumentParser(description="create mtp mechanism")
-    parser.add_argument("--mtp-mech", type=str, default="graphical_bonf", choices=["binary_thres_mtp", "bonferroni", "graphical_bonf", "graphical_prespec", "graphical_ffs"], help="Multiple testing mechanism")
+    parser.add_argument("--mtp-mech", type=str, default="graphical_bonf", choices=["binary_thres_mtp", "bonferroni", "graphical_bonf", "graphical_prespec", "graphical_ffs", "binary_flex_mtp"], help="Multiple testing mechanism")
     parser.add_argument(
         "--hypo-tester", type=str, default="auc", choices=["log_lik", "auc"]
     )
@@ -39,6 +39,8 @@ def get_hypo_tester(hypo_tester_str):
         hypo_tester = LogLikHypothesisTester()
     elif hypo_tester_str == "auc":
         hypo_tester = AUCHypothesisTester()
+    elif hypo_tester_str == "calib":
+        hypo_tester = CalibrationScoreHypothesisTester()
     else:
         raise NotImplementedError("dont know this hypothesis")
     return hypo_tester
@@ -52,6 +54,8 @@ def main():
     # Create MTP mech
     if args.mtp_mech == "binary_thres_mtp":
         mtp_mech = BinaryThresholdMTP(hypo_tester, args.alpha)
+    if args.mtp_mech == "binary_flex_mtp":
+        mtp_mech = BinaryThresholdFlexMTP(hypo_tester, args.alpha)
     elif args.mtp_mech == "bonferroni":
         mtp_mech = BonferroniThresholdMTP(hypo_tester, args.alpha)
     elif args.mtp_mech == "graphical_bonf":

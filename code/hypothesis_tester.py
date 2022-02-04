@@ -142,38 +142,20 @@ class LogLikHypothesisTester(AUCHypothesisTester):
 
         return df, orig_loglik, new_loglik
 
-   # def generate_spending_boundaries(
-   #         self,
-   #         cov,
-   #         stat_dim: int,
-   #         alpha_spend: np.ndarray,
-   #         num_particles: int=5000,
-   #         batch_size: int= 50000
-   #         ):
-   #     """
-   #     Simulates particle paths for alpha spending
-   #     Assumes the test at each iteration is H_0: theta_i < 0 for some i (for i in stat_dim)
-   #     """
-   #     boundaries = []
-   #     good_particles = np.random.multivariate_normal(mean=np.zeros(cov.shape[0]), cov=cov, size=batch_size)
-   #     for i, alpha in enumerate(alpha_spend):
-   #         start_idx = stat_dim * i
-   #         keep_alpha = alpha/(1 - alpha_spend[:i].sum())
+def get_calib_score(test_y, pred_prob):
+    """
+    @return the gradient of the logistic loss when intercept 0, slope 1, and take gradient only with respect to slope
+    """
+    return (pred_prob - test_y) * pred_prob
 
-   #         step_particles = good_particles[:, start_idx:start_idx + stat_dim]
-   #         particle_mask = np.all(step_particles > 0, axis=1)
-   #         step_norms = particle_mask * np.min(np.abs(step_particles), axis=1)
-   #         step_bound = np.quantile(step_norms, 1 - keep_alpha)
-   #         keep_ratio = np.mean(step_norms < step_bound)
-   #         # if the keep ratio is not close to what we desired, do not rejecanything
-   #         logging.info("keep ratio %f", (1 - keep_ratio)/keep_alpha)
-   #         print("KEEP RATIO", keep_ratio, keep_alpha, (1 - keep_ratio)/keep_alpha)
-   #         if keep_ratio < keep_alpha or (1 - keep_ratio)/keep_alpha > 2:
-   #             print(np.max(step_norms), step_bound)
-   #             # If the step bound is weird, do not reject anything
-   #             step_bound = np.max(step_norms)
-   #             # step_bound += 1
-   #         boundaries.append(step_bound)
-   #         good_particles = good_particles[step_norms < step_bound]
-   #     return np.array(boundaries)
+class CalibrationScoreHypothesisTester(AUCHypothesisTester):
+    def _get_observations(self, orig_mdl, new_mdl):
+        new_pred_y = new_mdl.predict_proba(self.test_dat.x)[:,1]
+        test_y = self.test_dat.y.flatten()
+        mdl_calib_score = get_calib_score(test_y, new_pred_y)
+        logging.info("model calib %f", mdl_calib_score.mean())
+        df = pd.DataFrame({
+            "calib_score": mdl_calib_score,
+            })
 
+        return df, 0, mdl_calib_score

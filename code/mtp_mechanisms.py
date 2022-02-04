@@ -92,6 +92,38 @@ class BinaryThresholdMTP:
 
         return test_res
 
+class BinaryThresholdFlexMTP(BinaryThresholdMTP):
+    require_predef = False
+    name = "bonferroni_flex"
+
+    def init_test_dat(self, test_dat, num_adapt_queries):
+        self.hypo_tester.set_test_dat(test_dat)
+
+        self.num_queries = -1
+        self.num_adapt_queries = num_adapt_queries
+        self.correction_factor = 1/np.power(2, num_adapt_queries)
+
+        self.start_node = Node(
+            weight=self.correction_factor,
+            history=[],
+            parent=None,
+        )
+        self._create_children(self.start_node, self.num_queries)
+        self.test_tree = self.start_node
+        self._do_tree_update(1)
+
+    def get_test_res(self, hypo_tester, null_hypo: np.ndarray, orig_mdl, new_mdl, orig_predef_mdl=None, predef_mdl=None):
+        """
+        @return test perf where 1 means approve and 0 means not approved
+        """
+        node_obs = hypo_tester.get_observations(orig_mdl, new_mdl)
+        self.test_tree.store_observations(node_obs)
+        test_res, _  = hypo_tester.test_null(self.alpha, self.test_tree, null_hypo, prior_nodes=[])
+
+        self._do_tree_update(test_res)
+
+        return test_res
+
 class BonferroniThresholdMTP(BinaryThresholdMTP):
     require_predef = False
     name = "bonferroni"
