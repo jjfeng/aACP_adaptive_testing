@@ -61,7 +61,6 @@ nest.add(
 def create_model_developer(env, outdir, c):
     targets = [
             join(outdir, 'model.pkl')]
-    scratch_file = join("simulation_improve", outdir, "scratch.txt")
     cmd = [
         'python create_model_developer.py',
         '--simulation',
@@ -76,7 +75,6 @@ def create_model_developer(env, outdir, c):
         'Logistic',
         '--hypo-tester',
         c['perf_measure'],
-	    '--scratch %s' % scratch_file,
         '--valid-frac',
         0.5,
         '--min-valid-dat-size',
@@ -96,7 +94,6 @@ nest.add(
 @nest.add_target_with_env(localenv)
 def create_mtp(env, outdir, c):
     targets = [join(outdir, 'mtp_mech.pkl')]
-    scratch_file = join("simulation_improve", outdir, "scratch.txt")
     cmd = [
         'python create_mtp_mechanism.py',
         '--prespec-ratio 0.6' if "graphical_prespec" == c['mtp_mech'] else '',
@@ -107,7 +104,6 @@ def create_mtp(env, outdir, c):
         c['perf_measure'],
         '--mtp-mech',
         c['mtp_mech'],
-	    '--scratch %s' % scratch_file if c['mtp_mech'] in ["graphical_prespec", "graphical_ffs"] else '',
 	    '--out ${TARGETS[0]}'
     ]
     c['mtp_mech_res'][c['mtp_mech']] = targets[0]
@@ -162,6 +158,7 @@ nest.add(
 
 @nest.add_target_with_env(localenv)
 def run_experiment(env, outdir, c):
+    scratch_file = join("simulation_improve", outdir, "scratch.txt")
     cmd = [
         'python run_script.py',
         CLUSTER_STR,
@@ -175,6 +172,7 @@ def run_experiment(env, outdir, c):
 	'--model ${SOURCES[1]}',
 	'--mtp-mech',
     "simulation_improve/%s" % c['mtp_mech_res'][c['mtp_mech']],
+	    '--scratch %s' % scratch_file if c['mtp_mech'] in ["graphical_prespec", "graphical_ffs"] else '',
 	'--log ${TARGETS[0]}',
 	'--out-csv ${TARGETS[1]}',
     ]

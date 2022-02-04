@@ -28,6 +28,7 @@ def parse_args():
     parser.add_argument("--mtp-mech-file", type=str, default="_output/mtp_mech.pkl")
     parser.add_argument("--model-file", type=str, default="_output/model.pkl")
     parser.add_argument("--out-csv", type=str, default="_output/res.csv")
+    parser.add_argument("--scratch-file", type=str, default="_output/scratch.txt")
     parser.add_argument("--log-file", type=str, default="_output/log.txt")
     parser.add_argument("--plot-file", type=str, default=None)
     args = parser.parse_args()
@@ -121,9 +122,11 @@ def main():
 
     with open(args.mtp_mech_file, "rb") as f:
         mtp_mech = pickle.load(f)
+        mtp_mech.hypo_tester.make_scratch(args.scratch_file)
 
     with open(args.model_file, "rb") as f:
         modeler = pickle.load(f)
+        modeler.hypo_tester.make_scratch(args.scratch_file)
 
     np.random.seed(args.seed)
 

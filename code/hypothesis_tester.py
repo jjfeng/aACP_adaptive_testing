@@ -129,7 +129,7 @@ class LogLikHypothesisTester(HypothesisTester):
         return np.array(boundaries)
 
 class AUCHypothesisTester(LogLikHypothesisTester):
-    def __init__(self, scratch_file: str):
+    def make_scratch(self, scratch_file: str):
         self.scratch_file = scratch_file
 
     def get_influence_func(self, mdl):

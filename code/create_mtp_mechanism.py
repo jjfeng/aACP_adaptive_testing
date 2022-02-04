@@ -30,16 +30,15 @@ def parse_args():
     )
     parser.add_argument("--alpha", type=float, default=0.1, help="ci alpha")
     parser.add_argument("--first-pres-weight", type=float, default=0.1, help="weight for first prespecified node versus other prespecified nodes")
-    parser.add_argument("--scratch-file", type=str, default="_output/scratch.txt")
     parser.add_argument("--out-file", type=str, default="_output/mtp_mech.pkl")
     args = parser.parse_args()
     return args
 
-def get_hypo_tester(hypo_tester_str, scratch_file):
+def get_hypo_tester(hypo_tester_str):
     if hypo_tester_str == "log_lik":
         hypo_tester = LogLikHypothesisTester()
     elif hypo_tester_str == "auc":
-        hypo_tester = AUCHypothesisTester(scratch_file)
+        hypo_tester = AUCHypothesisTester()
     else:
         raise NotImplementedError("dont know this hypothesis")
     return hypo_tester
@@ -48,7 +47,7 @@ def get_hypo_tester(hypo_tester_str, scratch_file):
 def main():
     args = parse_args()
 
-    hypo_tester = get_hypo_tester(args.hypo_tester, args.scratch_file)
+    hypo_tester = get_hypo_tester(args.hypo_tester)
 
     # Create MTP mech
     if args.mtp_mech == "binary_thres_mtp":

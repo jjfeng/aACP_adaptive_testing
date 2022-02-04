@@ -25,7 +25,6 @@ def parse_args():
     parser.add_argument("--simulation", type=str, default="online_delta", choices=["adversary", "online_delta", "online_compare"])
     parser.add_argument("--hypo-tester", type=str, default="auc", choices=["log_lik", "auc", "accuracy"])
     parser.add_argument("--model-type", type=str, default="Logistic", choices=["Logistic", "GBT", "SelectiveLogistic"])
-    parser.add_argument("--scratch-file", type=str, default="_output/scratch.txt")
     parser.add_argument("--out-file", type=str, default="_output/model.pkl")
     # ONLY RELEVANT TO ADVERSARIAL DEVELOPER
     parser.add_argument("--sparse-p", type=int, default=4, help="number of nonzero coefficients in the true logistic regression model")
@@ -41,7 +40,7 @@ def main():
     args = parse_args()
     np.random.seed(args.seed)
 
-    hypo_tester = get_hypo_tester(args.hypo_tester, args.scratch_file)
+    hypo_tester = get_hypo_tester(args.hypo_tester)
     # Create model
     clf = None
     if args.simulation == "adversary":
