@@ -107,7 +107,7 @@ class AUCHypothesisTester(HypothesisTester):
         alpha_spend = alpha * node_weights[-1]
         test_stat = estimate
         if len(prior_nodes) == 0:
-            boundary = scipy.stats.norm.ppf(1 - alpha_spend, loc=null_constraint[0,1], scale=np.sqrt(cov_est[0,0]))
+            boundary = scipy.stats.norm.ppf(1 - alpha_spend, scale=np.sqrt(cov_est[0,0]))
             stat, pval = scipy.stats.ttest_1samp(node.obs.to_numpy().flatten(), popmean=null_constraint[0,1], alternative="greater")
             logging.info("tstat %f pval %f alpha %f", stat, pval, alpha_spend)
         else:
@@ -124,7 +124,7 @@ class AUCHypothesisTester(HypothesisTester):
             logging.info(rcmd)
             logging.info("Test bound %f, est %f, log alpha %f, prior_bound_str %s", boundary, estimate, np.log10(alpha_spend), prior_bound_str)
 
-        test_res = test_stat > boundary
+        test_res = (test_stat - null_constraint[0,1]) > boundary
         return test_res, boundary
 
 class LogLikHypothesisTester(AUCHypothesisTester):
@@ -142,38 +142,99 @@ class LogLikHypothesisTester(AUCHypothesisTester):
 
         return df, orig_loglik, new_loglik
 
-   # def generate_spending_boundaries(
-   #         self,
-   #         cov,
-   #         stat_dim: int,
-   #         alpha_spend: np.ndarray,
-   #         num_particles: int=5000,
-   #         batch_size: int= 50000
-   #         ):
-   #     """
-   #     Simulates particle paths for alpha spending
-   #     Assumes the test at each iteration is H_0: theta_i < 0 for some i (for i in stat_dim)
-   #     """
-   #     boundaries = []
-   #     good_particles = np.random.multivariate_normal(mean=np.zeros(cov.shape[0]), cov=cov, size=batch_size)
-   #     for i, alpha in enumerate(alpha_spend):
-   #         start_idx = stat_dim * i
-   #         keep_alpha = alpha/(1 - alpha_spend[:i].sum())
+class CalibHypothesisTester(AUCHypothesisTester):
+    def get_influence_func(self, mdl):
+        pred_y = mdl.predict_proba(self.test_dat.x)[:,1]
+        test_y = self.test_dat.y.flatten()
+        influence_func = (pred_y - test_y) * pred_y
+        return influence_func, influence_func.mean(axis=0)
 
-   #         step_particles = good_particles[:, start_idx:start_idx + stat_dim]
-   #         particle_mask = np.all(step_particles > 0, axis=1)
-   #         step_norms = particle_mask * np.min(np.abs(step_particles), axis=1)
-   #         step_bound = np.quantile(step_norms, 1 - keep_alpha)
-   #         keep_ratio = np.mean(step_norms < step_bound)
-   #         # if the keep ratio is not close to what we desired, do not rejecanything
-   #         logging.info("keep ratio %f", (1 - keep_ratio)/keep_alpha)
-   #         print("KEEP RATIO", keep_ratio, keep_alpha, (1 - keep_ratio)/keep_alpha)
-   #         if keep_ratio < keep_alpha or (1 - keep_ratio)/keep_alpha > 2:
-   #             print(np.max(step_norms), step_bound)
-   #             # If the step bound is weird, do not reject anything
-   #             step_bound = np.max(step_norms)
-   #             # step_bound += 1
-   #         boundaries.append(step_bound)
-   #         good_particles = good_particles[step_norms < step_bound]
-   #     return np.array(boundaries)
+class CalibAUCHypothesisTester(AUCHypothesisTester):
+    stats_dim = 2
+    def __init__(self, calib_alloc_frac: float=0.1):
+        self.auc_hypo_tester = AUCHypothesisTester()
+        self.calib_hypo_tester = CalibHypothesisTester()
+        self.calib_alloc_frac = calib_alloc_frac
+
+    def set_test_dat(self, test_dat):
+        self.test_dat = test_dat
+        self.auc_hypo_tester.set_test_dat(test_dat)
+        self.calib_hypo_tester.set_test_dat(test_dat)
+
+    def get_influence_func(self, mdl):
+        auc_ic, auc = self.auc_hypo_tester.get_influence_func(mdl)
+        calib_ic, calib = self.calib_hypo_tester.get_influence_func(mdl)
+
+        influence_func = np.hstack([auc_ic.reshape((-1,1)), calib_ic.reshape((-1,1))])
+        estimate = np.array([auc, calib])
+
+        return influence_func, estimate
+
+    def _get_observations(self, orig_mdl, new_mdl):
+        orig_ic, orig_est = self.get_influence_func(orig_mdl)
+        new_ic, new_est = self.get_influence_func(new_mdl)
+        df = pd.DataFrame(new_ic - orig_ic, columns=["calib_score_ic", "auc_diff_ic"])
+
+        return df, orig_est, new_est
+
+    def test_null(self, alpha: float, node: Node, null_constraint: np.ndarray, prior_nodes: List = []):
+        """
+        @return the CI code this node, accounting for the previous nodes in the true
+               and spending only the alpha allocated at this node
+        """
+        estimate = node.obs.to_numpy().mean(axis=0)
+        logging.info("test set estimate %s", estimate)
+        print("ESTIMATE", node.obs, estimate)
+
+        full_df = pd.concat([prior_node.obs for prior_node in prior_nodes] + [node.obs], axis=0).to_numpy().T
+        cov_est = np.cov(full_df)/self.test_dat.size
+        if full_df.shape[0] == 1:
+            cov_est = np.array([[cov_est]])
+        logging.info("cov est %s", cov_est)
+        if np.any(np.isnan(cov_est)):
+            print(full_df)
+            raise ValueError("something wrong with cov")
+
+        num_nodes = len(prior_nodes) + 1
+        assert not np.any(np.isnan(cov_est))
+        node_weights = np.array([prior_node.weight for prior_node in prior_nodes] + [node.weight])
+        prior_bounds = [prior_node.upper_bound for prior_node in prior_nodes]
+
+        test_res = False
+        num_particles =  np.sum(1/(alpha * node_weights))
+        node_alpha_spend = alpha * node_weights[-1]
+        alpha_spend = [
+                node_alpha_spend * self.calib_alloc_frac, # alloted to calib upper
+                node_alpha_spend * (1 - self.calib_alloc_frac) # alloted to auc
+                ]
+        prev_prior_bounds = prior_bounds
+        for i in range(self.stats_dim):
+            if len(prev_prior_bounds) == 0:
+                boundary = scipy.stats.norm.ppf(1 - alpha_spend[i], scale=np.sqrt(cov_est[0,0]))
+                stat, pval = scipy.stats.ttest_1samp(node.obs.to_numpy().flatten(), popmean=null_constraint[i,1], alternative="greater")
+                logging.info("tstat %f pval %f alpha %f", stat, pval, alpha_spend[i])
+            else:
+                if i < self.stats_dim - 1:
+                    np.savetxt(self.scratch_file, cov_est[:-(self.stats_dim - i - 1), :-(self.stats_dim - i - 1)], delimiter=",")
+                else:
+                    np.savetxt(self.scratch_file, cov_est, delimiter=",")
+                prior_bound_str = " ".join(map(str, prev_prior_bounds))
+                rcmd = "Rscript R/pmvnorm.R %s %f %s" % (self.scratch_file, np.log10(alpha_spend[i]), prior_bound_str)
+                output = subprocess.check_output(
+                    rcmd,
+                    stderr=subprocess.STDOUT,
+                    shell=True,
+                    encoding='UTF-8'
+                )
+                boundary = float(output[4:])
+                logging.info(rcmd)
+                logging.info("Test bound %f, est %f, log alpha %f, prior_bound_str %s", boundary, estimate[i], np.log10(alpha_spend[i]), prior_bound_str)
+            prev_prior_bounds.append(boundary)
+            print(prev_prior_bounds)
+
+        boundaries = np.array(prev_prior_bounds[-self.stats_dim:])
+        test_res = np.all((estimate - null_constraint[:,1]) > boundaries)
+        print("bounds", boundaries)
+        print("est diff", estimate - null_constraint[:,1])
+        return test_res, boundary
 
