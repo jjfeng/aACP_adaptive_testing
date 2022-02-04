@@ -129,6 +129,8 @@ class LogLikHypothesisTester(HypothesisTester):
         return np.array(boundaries)
 
 class AUCHypothesisTester(LogLikHypothesisTester):
+    def __init__(self, scratch_file: str):
+        self.scratch_file = scratch_file
 
     def get_influence_func(self, mdl):
         pred_y = mdl.predict_log_proba(self.test_dat.x)[:,1]
@@ -203,8 +205,7 @@ class AUCHypothesisTester(LogLikHypothesisTester):
         if len(prior_nodes) == 0:
             boundary = scipy.stats.norm.ppf(1 - alpha_spend, loc=null_constraint[0,1], scale=np.sqrt(cov_est[0,0]))
         else:
-            cov_txt = "_output/scratch.txt"
-            np.savetxt(cov_txt, cov_est, delimiter=",")
+            np.savetxt(self.scratch_file, cov_est, delimiter=",")
             prior_bound_str = " ".join(map(str, prior_bounds))
             rcmd = "Rscript R/pmvnorm.R %s %f %s" % (cov_txt, np.log10(alpha_spend), prior_bound_str)
             output = subprocess.check_output(

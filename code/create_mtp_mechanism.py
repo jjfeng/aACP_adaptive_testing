@@ -20,7 +20,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="create mtp mechanism")
     parser.add_argument("--mtp-mech", type=str, default="graphical_bonf", choices=["binary_thres_mtp", "bonferroni", "graphical_bonf", "graphical_prespec", "graphical_ffs"], help="Multiple testing mechanism")
     parser.add_argument(
-        "--hypo-tester", type=str, default="sens_spec", choices=["sens_spec", "accept_accur", "log_lik", "accuracy", "auc"]
+        "--hypo-tester", type=str, default="auc", choices=["log_lik", "auc"]
     )
     parser.add_argument(
         "--prespec-ratio", type=float, default=1.0, help="parallel factor"
@@ -35,17 +35,11 @@ def parse_args():
     args = parser.parse_args()
     return args
 
-def get_hypo_tester(hypo_tester_str):
+def get_hypo_tester(hypo_tester_str, scratch_file):
     if hypo_tester_str == "log_lik":
         hypo_tester = LogLikHypothesisTester()
-    elif hypo_tester_str == "accuracy":
-        hypo_tester = AccuracyHypothesisTester()
     elif hypo_tester_str == "auc":
-        hypo_tester = AUCHypothesisTester()
-    elif hypo_tester_str == "sens_spec":
-        hypo_tester = SensSpecHypothesisTester()
-    elif hypo_tester_str == "accept_accur":
-        hypo_tester = AcceptAccurHypothesisTester()
+        hypo_tester = AUCHypothesisTester(scartch_file)
     else:
         raise NotImplementedError("dont know this hypothesis")
     return hypo_tester
@@ -54,7 +48,7 @@ def get_hypo_tester(hypo_tester_str):
 def main():
     args = parse_args()
 
-    hypo_tester = get_hypo_tester(args.hypo_tester)
+    hypo_tester = get_hypo_tester(args.hypo_tester, args.scratch_file)
 
     # Create MTP mech
     if args.mtp_mech == "binary_thres_mtp":
@@ -72,14 +66,12 @@ def main():
             success_weight=args.success_weight,
             first_pres_weight=args.first_pres_weight,
             parallel_ratio=args.prespec_ratio,
-            scratch_file=args.scratch_file,
         )
     elif args.mtp_mech == "graphical_ffs":
         mtp_mech = GraphicalFFSMTP(
             hypo_tester,
             args.alpha,
             success_weight=args.success_weight,
-            scratch_file=args.scratch_file,
         )
 
     with open(args.out_file, "wb") as f:
