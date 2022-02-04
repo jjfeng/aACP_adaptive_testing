@@ -168,7 +168,7 @@ class BinaryAdversaryModeler(LockedModeler):
                                 [0, sens_test],
                                 [0, spec_test]])
                         test_res = mtp_mechanism.get_test_res(
-                            null_constraints, orig_mdl, proposed_mdl, predef_mdl=self.predef_modeler
+                            null_constraints, orig_mdl, proposed_mdl, orig_predef_mdl=orig_mdl, predef_mdl=self.predef_modeler
                         )
                         print("perturb?", test_hist.curr_time, var_idx, update_dir, test_res)
                         if test_res:
@@ -281,7 +281,7 @@ class AdversaryLossModeler(LockedModeler):
                         null_constraints = np.array([
                                 [0, curr_diff + self.ni_margin]])
                         test_res = mtp_mechanism.get_test_res(
-                            null_constraints, orig_mdl, proposed_mdl, predef_mdl=self.predef_modeler
+                            null_constraints, orig_mdl, proposed_mdl, orig_predef_mdl=orig_mdl, predef_mdl=self.predef_modeler
                         )
                         print("perturb?", test_hist.curr_time, var_idx, update_dir, test_res)
                         if test_res:
@@ -309,7 +309,7 @@ class OnlineAdaptLossModeler(LockedModeler):
     """
     Just do online learning on a separate dataset
     """
-    def __init__(self, hypo_tester, validation_frac: float = 0.2, min_valid_dat_size: int = 200, power: float = 0.5, ni_margin: float = 0.005, predef_alpha: float = 0.1, se_factor: float = 1.96):
+    def __init__(self, hypo_tester, validation_frac: float = 0.2, min_valid_dat_size: int = 200, power: float = 0.5, ni_margin: float = 0.02, predef_alpha: float = 0.1, se_factor: float = 1.96):
         self.modeler = MyLogisticRegression(penalty="l2")
         self.hypo_tester = hypo_tester
         self.validation_frac = validation_frac
@@ -326,7 +326,7 @@ class OnlineAdaptLossModeler(LockedModeler):
         valid_dat = dat.subset(start_n=dat.size - valid_n, n=dat.size)
         return train_dat, valid_dat
 
-    def _do_power_calc_test_bound(self, orig_mdl, new_mdl, min_diff:float, valid_dat: Dataset, alpha: float, num_test: int, num_reps: int = 1000):
+    def _do_power_calc_test_bound(self, orig_mdl, new_mdl, min_diff:float, valid_dat: Dataset, alpha: float, num_test: int, num_reps: int = 100):
         """
         @param valid_dat: data for evaluating performance of model
         @param alpha: the type I error of the current test node
@@ -415,14 +415,16 @@ class OnlineAdaptLossModeler(LockedModeler):
             logging.info("adapt batch %d power %.5f", adapt_read_idx, adapt_test_power)
 
             adapt_read_idx += 1
-            if (adapt_test_power > self.power) and (adapt_test_diff >= (curr_diff + self.ni_margin)):
+            if (adapt_test_power > self.power) and (adapt_test_diff >= (curr_diff + self.ni_margin)) and not (mtp_mechanism.require_predef and len(predef_test_mdls) <= test_idx):
                 logging.info("TEST idx: %d (batch_number) %d", test_idx, adapt_read_idx)
                 logging.info("TEST (avg) diff %f", adapt_test_diff)
 
                 null_constraints = np.array([
                         [0,adapt_test_diff]])
                 test_res = mtp_mechanism.get_test_res(
-                    null_constraints, orig_mdl, predef_lr, predef_mdl=predef_test_mdls[test_idx] if mtp_mechanism.require_predef else None
+                    null_constraints, orig_mdl, predef_lr,
+                    orig_predef_mdl=orig_mdl,
+                    predef_mdl=predef_test_mdls[test_idx] if mtp_mechanism.require_predef else None
                 )
                 if test_res:
                     curr_diff = adapt_test_diff
@@ -444,6 +446,219 @@ class OnlineAdaptLossModeler(LockedModeler):
         logging.info("TEST batch numbers %s (len %d)", test_hist.batch_numbers, len(test_hist.batch_numbers))
 
         return test_hist
+
+class OnlineAdaptRestrictLossModeler(OnlineAdaptLossModeler):
+    """
+    restrict the training set size based on how many approvals
+    """
+    def _create_train_valid_dat(self, dat: Dataset, start_train: int=0, max_train: int=None):
+        train_n = min(min(max_train, dat.size - self.min_valid_dat_size), dat.size - start_train)
+        train_idxs = np.arange(start_train, start_train + train_n)
+        train_dat = dat.subset_idxs(train_idxs)
+        logging.info("train_n %d", train_idxs.size)
+        print("max train", max_train)
+        valid_idxs = np.arange(dat.size)
+        valid_idxs = valid_idxs[np.in1d(valid_idxs, train_idxs, invert=True)]
+        valid_dat = dat.subset_idxs(valid_idxs)
+        return train_dat, valid_dat
+
+    def simulate_approval_process(self, dat, mtp_mechanism, dat_stream, maxfev=10, side_dat_stream = None):
+        """
+        @param dat_stream: a list of datasets for further training the model
+        @return perf_value
+        """
+        TRAIN_INCR = 30
+        TRAIN_INIT = 50
+        max_train = TRAIN_INIT
+        start_train_idx = 0
+        train_dat, valid_dat = self._create_train_valid_dat(dat, start_train=start_train_idx, max_train=max_train)
+        self.modeler.fit(train_dat.x, train_dat.y.flatten())
+        orig_mdl = self.modeler
+
+        max_train += TRAIN_INCR
+        curr_diff= 0
+        test_hist = TestHistory(orig_mdl, res_detail=pd.DataFrame({
+                "curr_diff": [0],
+                }))
+
+
+        test_idx = 0
+        adapt_read_idx = 0
+        predef_test_mdls = []
+        while (test_idx < maxfev) and (adapt_read_idx < len(dat_stream)):
+            print("ITERATION", test_idx)
+
+            predef_dat = Dataset.merge([dat] + dat_stream[: adapt_read_idx + 1])
+            predef_train_dat, predef_valid_dat = self._create_train_valid_dat(predef_dat, max_train=(len(predef_test_mdls) + 1) * TRAIN_INCR + TRAIN_INIT)
+            predef_lr = sklearn.base.clone(self.modeler)
+            predef_lr.fit(predef_train_dat.x, predef_train_dat.y.flatten())
+
+            # calculate the threshold that we can test at such that the power of rejecting the null given Type I error at level alpha_node
+            predef_test_power, _ = self._do_power_calc_test_bound(
+                    orig_mdl,
+                    predef_lr,
+                    min_diff=len(predef_test_mdls) * self.ni_margin/4,
+                    valid_dat=predef_valid_dat,
+                    num_test=mtp_mechanism.test_set_size,
+                    alpha=self.predef_alpha)
+
+            logging.info("predef batch %d power %.5f", adapt_read_idx, predef_test_power)
+            if predef_test_power >= self.power/4:
+                # Predef will not test if power is terrible
+                predef_test_mdls.append(predef_lr)
+                logging.info("predef TEST idx %d, adapt idx %d, batch %d", len(predef_test_mdls) - 1, test_idx, adapt_read_idx)
+
+            # do the same for an adaptively decided min difference
+            adapt_dat = Dataset.merge([dat] + dat_stream[: adapt_read_idx + 1])
+            adapt_train_dat, adapt_valid_dat = self._create_train_valid_dat(adapt_dat, start_train=start_train_idx, max_train=max_train)
+            adapt_lr = sklearn.base.clone(self.modeler)
+            adapt_lr.fit(adapt_train_dat.x, adapt_train_dat.y.flatten())
+
+            adapt_test_power, adapt_test_diff = self._do_power_calc_test_bound(
+                    orig_mdl,
+                    adapt_lr,
+                    min_diff=curr_diff + self.ni_margin,
+                    valid_dat=adapt_valid_dat,
+                    num_test=mtp_mechanism.test_set_size,
+                    alpha=self.predef_alpha)
+            logging.info("adapt batch %d power %.5f", adapt_read_idx, adapt_test_power)
+
+            adapt_read_idx += 1
+            if (adapt_test_power > self.power) and (adapt_test_diff >= (curr_diff + self.ni_margin)):
+                logging.info("TEST idx: %d (batch_number) %d", test_idx, adapt_read_idx)
+                logging.info("TEST (avg) diff %f", adapt_test_diff)
+
+                null_constraints = np.array([
+                        [0,adapt_test_diff]])
+                test_res = mtp_mechanism.get_test_res(
+                    null_constraints, orig_mdl, predef_lr, predef_mdl=predef_test_mdls[test_idx] if mtp_mechanism.require_predef else None
+                )
+                if test_res:
+                    curr_diff = adapt_test_diff
+                    max_train += TRAIN_INCR
+                else:
+                    start_train_idx += TRAIN_SIZE//2
+                test_idx += 1
+                logging.info("Test res %d", test_res)
+                print("TEST RES", test_res)
+
+                test_hist.update(
+                        test_res=test_res,
+                        res_detail = pd.DataFrame({
+                            "curr_diff": [curr_diff]}),
+                        proposed_mdl=predef_lr,
+                        batch_number=adapt_read_idx,
+                    )
+            else:
+                logging.info("CONTinuing to pull data until confident in improvement %f <  %f + %f", adapt_test_diff, curr_diff, self.ni_margin)
+        logging.info("adapt read idx %d", adapt_read_idx)
+        print("adapt read", adapt_read_idx)
+        logging.info("TEST batch numbers %s (len %d)", test_hist.batch_numbers, len(test_hist.batch_numbers))
+
+        return test_hist
+
+class OnlineAdaptRestrictCompareModeler(OnlineAdaptRestrictLossModeler):
+    """
+    restrict the training set size based on how many approvals
+    """
+    def simulate_approval_process(self, dat, mtp_mechanism, dat_stream, maxfev=10, side_dat_stream = None):
+        """
+        @param dat_stream: a list of datasets for further training the model
+        @return perf_value
+        """
+        TRAIN_INCR = 60
+        TRAIN_INIT = 50
+        max_train = TRAIN_INIT
+        start_train_idx = 0
+        train_dat, valid_dat = self._create_train_valid_dat(dat, start_train=start_train_idx, max_train=max_train)
+        self.modeler.fit(train_dat.x, train_dat.y.flatten())
+        orig_mdl = self.modeler
+        prior_adapt_lr = orig_mdl
+
+        max_train += TRAIN_INCR
+        curr_diff= 0
+        test_hist = TestHistory(orig_mdl, res_detail=pd.DataFrame({
+                "curr_diff": [0],
+                }))
+
+        test_idx = 0
+        adapt_read_idx = 0
+        predef_test_mdls = []
+        while (test_idx < maxfev) and (adapt_read_idx < len(dat_stream)):
+            print("ITERATION", test_idx)
+
+            predef_dat = Dataset.merge([dat] + dat_stream[: adapt_read_idx + 1])
+            predef_train_dat, predef_valid_dat = self._create_train_valid_dat(predef_dat, max_train=(len(predef_test_mdls) + 1) * TRAIN_INCR + TRAIN_INIT)
+            predef_lr = sklearn.base.clone(self.modeler)
+            predef_lr.fit(predef_train_dat.x, predef_train_dat.y.flatten())
+
+            # calculate the threshold that we can test at such that the power of rejecting the null given Type I error at level alpha_node
+            predef_test_power, _ = self._do_power_calc_test_bound(
+                    orig_mdl,
+                    predef_lr,
+                    min_diff=0,
+                    valid_dat=predef_valid_dat,
+                    num_test=mtp_mechanism.test_set_size,
+                    alpha=self.predef_alpha)
+
+            logging.info("predef batch %d power %.5f", adapt_read_idx, predef_test_power)
+            #if predef_test_power >= self.power/10:
+            # Predef will not test if power is terrible
+            predef_test_mdls.append(predef_lr)
+            logging.info("predef TEST idx %d, adapt idx %d, batch %d", len(predef_test_mdls) - 1, test_idx, adapt_read_idx)
+
+            # do the same for an adaptively decided min difference
+            adapt_dat = Dataset.merge([dat] + dat_stream[: adapt_read_idx + 1])
+            adapt_train_dat, adapt_valid_dat = self._create_train_valid_dat(adapt_dat, start_train=start_train_idx, max_train=max_train)
+            adapt_lr = sklearn.base.clone(self.modeler)
+            adapt_lr.fit(adapt_train_dat.x, adapt_train_dat.y.flatten())
+
+            adapt_test_power, adapt_test_diff = self._do_power_calc_test_bound(
+                    prior_adapt_lr,
+                    adapt_lr,
+                    min_diff=curr_diff,
+                    valid_dat=adapt_valid_dat,
+                    num_test=mtp_mechanism.test_set_size,
+                    alpha=self.predef_alpha)
+            logging.info("adapt batch %d power %.5f", adapt_read_idx, adapt_test_power)
+
+            adapt_read_idx += 1
+            if (adapt_test_power > self.power):
+                logging.info("TEST idx: %d (batch_number) %d", test_idx, adapt_read_idx)
+                logging.info("TEST (avg) diff %f", adapt_test_diff)
+
+                null_constraints = np.array([
+                        [0,adapt_test_diff]])
+                test_res = mtp_mechanism.get_test_res(
+                    null_constraints, prior_adapt_lr, adapt_lr,
+                    orig_predef_mdl=orig_mdl,
+                    predef_mdl=predef_test_mdls[test_idx] if mtp_mechanism.require_predef else None
+                )
+                if test_res:
+                    prior_adapt_lr = adapt_lr
+                    max_train += TRAIN_INCR
+                else:
+                    start_train_idx += TRAIN_INCR
+                test_idx += 1
+                logging.info("Test res %d", test_res)
+                print("TEST RES", test_res)
+
+                test_hist.update(
+                        test_res=test_res,
+                        res_detail = pd.DataFrame({
+                            "curr_diff": [curr_diff]}),
+                        proposed_mdl=predef_lr,
+                        batch_number=adapt_read_idx,
+                    )
+            else:
+                start_train_idx = (start_train_idx + 1) % (dat.size - max_train)
+                logging.info("CONTinuing to pull data until confident in improvement %f <  %f + %f", adapt_test_diff, curr_diff, self.ni_margin)
+        logging.info("adapt read idx %d", adapt_read_idx)
+        print("adapt read", adapt_read_idx)
+        logging.info("TEST batch numbers %s (len %d)", test_hist.batch_numbers, len(test_hist.batch_numbers))
+
+        return test_hist
+
 
 class OnlineAdaptCompareModeler(OnlineAdaptLossModeler):
     """
@@ -496,6 +711,108 @@ class OnlineAdaptCompareModeler(OnlineAdaptLossModeler):
                     predef_lr,
                     min_diff=curr_diff,
                     valid_dat=predef_valid_dat,
+                    num_test=mtp_mechanism.test_set_size,
+                    alpha=self.predef_alpha)
+            logging.info("adapt batch %d power %.5f", adapt_read_idx, adapt_test_power)
+
+            adapt_read_idx += 1
+            if (adapt_test_power > self.power) and (test_hist.batch_numbers[-1] < (adapt_read_idx - lag_time)):
+                logging.info("TEST idx: %d (batch_number) %d", test_idx, adapt_read_idx)
+                logging.info("TEST (avg) diff %f", adapt_test_diff)
+
+                print("test", test_idx)
+                null_constraints = np.array([
+                        [0,0]])
+                test_res = mtp_mechanism.get_test_res(
+                    null_constraints,
+                    prev_mdl,
+                    predef_lr,
+                    orig_predef_mdl=orig_mdl,
+                    predef_mdl=predef_test_mdls[test_idx] if mtp_mechanism.require_predef else None
+                )
+                if test_res:
+                    prev_mdl = predef_lr
+                test_idx += 1
+                logging.info("Test res %d", test_res)
+                print("TEST RES", test_res)
+
+                test_hist.update(
+                        test_res=test_res,
+                        res_detail = pd.DataFrame({
+                            "curr_diff": [curr_diff]}),
+                        proposed_mdl=predef_lr,
+                        batch_number=adapt_read_idx,
+                    )
+            else:
+                logging.info("CONTinuing to pull data until confident in improvement %f <  %f + %f", adapt_test_diff, curr_diff, self.ni_margin)
+        logging.info("adapt read idx %d", adapt_read_idx)
+        print("adapt read", adapt_read_idx)
+        logging.info("TEST batch numbers %s (len %d)", test_hist.batch_numbers, len(test_hist.batch_numbers))
+
+        return test_hist
+
+class OnlineAdaptCompareSideModeler(OnlineAdaptCompareModeler):
+    """
+    Just do online learning on a separate dataset
+    """
+    def simulate_approval_process(self, dat, mtp_mechanism, dat_stream, maxfev=10, side_dat_stream = None):
+        """
+        @param dat_stream: a list of datasets for further training the model
+        @return perf_value
+        """
+        train_dat, valid_dat = self._create_train_valid_dat(dat)
+        self.modeler.fit(train_dat.x, train_dat.y.flatten())
+        orig_mdl = self.modeler
+        prev_mdl = orig_mdl
+
+        curr_diff= 0
+        test_hist = TestHistory(orig_mdl, res_detail=pd.DataFrame({
+                "curr_diff": [0],
+                }))
+        test_idx = 0
+        adapt_read_idx = 0
+        lag_time = 10
+        adapt_dat = dat
+        predef_test_mdls = []
+        while (test_idx < maxfev) and (adapt_read_idx < len(dat_stream)):
+            print("ITERATION", test_idx)
+
+            predef_dat = Dataset.merge([dat] + side_dat_stream[: adapt_read_idx + 1])
+            predef_train_dat, predef_valid_dat = self._create_train_valid_dat(predef_dat)
+            predef_lr = sklearn.base.clone(self.modeler)
+            predef_lr.fit(predef_train_dat.x, predef_train_dat.y.flatten())
+
+            # calculate the threshold that we can test at such that the power of rejecting the null given Type I error at level alpha_node
+            predef_test_power, _ = self._do_power_calc_test_bound(
+                    orig_mdl,
+                    predef_lr,
+                    min_diff=len(predef_test_mdls) * self.ni_margin,
+                    valid_dat=predef_valid_dat,
+                    num_test=mtp_mechanism.test_set_size,
+                    alpha=self.predef_alpha)
+
+            logging.info("predef batch %d power %.5f", adapt_read_idx, predef_test_power)
+            if predef_test_power >= self.power/4:
+                # Predef will not test if power is terrible
+                predef_test_mdls.append(predef_lr)
+                logging.info("predef TEST idx %d, adapt idx %d, batch %d", len(predef_test_mdls) - 1, test_idx, adapt_read_idx)
+
+            # do the same for an adaptively decided min difference
+            if (adapt_read_idx % (2**(test_hist.tot_approves + 1)) == 0):
+                print("asdkflasdkfl;aksdlf;as")
+                read_dat_batch = side_dat_stream[adapt_read_idx]
+            else:
+                print("EEEEEEEEEEEEEEEE")
+                read_dat_batch = dat_stream[adapt_read_idx]
+            adapt_dat = Dataset.merge([adapt_dat, read_dat_batch])
+            adapt_train_dat, adapt_valid_dat = self._create_train_valid_dat(predef_dat)
+            adapt_lr = sklearn.base.clone(self.modeler)
+            adapt_lr.fit(adapt_train_dat.x, adapt_train_dat.y.flatten())
+            adapt_test_power, adapt_test_diff = self._do_power_calc_test_bound(
+                    prev_mdl,
+                    adapt_lr,
+                    min_diff=curr_diff,
+                    valid_dat=adapt_valid_dat,
                     num_test=mtp_mechanism.test_set_size,
                     alpha=self.predef_alpha)
             logging.info("adapt batch %d power %.5f", adapt_read_idx, adapt_test_power)

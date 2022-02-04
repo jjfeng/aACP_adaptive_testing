@@ -4,6 +4,7 @@ All hypotheses here evaluate candidate modifications using multiple performance 
 """
 import logging
 from typing import List
+import subprocess
 
 import pandas as pd
 import numpy as np
@@ -13,7 +14,7 @@ from sklearn.metrics import roc_auc_score
 
 from node import Node
 
-MAX_PARTICLES = 100000
+MAX_PARTICLES = 50000
 MIN_PARTICLES = 5000
 
 def get_log_lik(y_true, y_pred):
@@ -98,13 +99,14 @@ class LogLikHypothesisTester(HypothesisTester):
             stat_dim: int,
             alpha_spend: np.ndarray,
             num_particles: int=5000,
+            batch_size: int= 50000
             ):
         """
         Simulates particle paths for alpha spending
         Assumes the test at each iteration is H_0: theta_i < 0 for some i (for i in stat_dim)
         """
-        good_particles = np.random.multivariate_normal(mean=np.zeros(cov.shape[0]), cov=cov, size=num_particles)
         boundaries = []
+        good_particles = np.random.multivariate_normal(mean=np.zeros(cov.shape[0]), cov=cov, size=batch_size)
         for i, alpha in enumerate(alpha_spend):
             start_idx = stat_dim * i
             keep_alpha = alpha/(1 - alpha_spend[:i].sum())
@@ -191,27 +193,45 @@ class AUCHypothesisTester(LogLikHypothesisTester):
 
         num_nodes = len(prior_nodes) + 1
         assert not np.any(np.isnan(cov_est))
-
         node_weights = np.array([prior_node.weight for prior_node in prior_nodes] + [node.weight])
+        prior_bounds = np.array([prior_node.upper_bound for prior_node in prior_nodes])
+
         test_res = False
-        if np.isfinite(np.sum(1/(alpha * node_weights))):
-            num_particles =  min(int(np.sum(1/(alpha * node_weights))), MAX_PARTICLES)
-            #assert num_particles <= MAX_PARTICLES
-            boundaries = self.generate_spending_boundaries(
-               cov_est,
-               self.stat_dim,
-               alpha * node_weights,
-               num_particles=min(max(num_particles, MIN_PARTICLES), MAX_PARTICLES)
-               )
+        num_particles =  np.sum(1/(alpha * node_weights))
+        alpha_spend = alpha * node_weights[-1]
+        test_stat = estimate
+        if len(prior_nodes) == 0:
+            # We can just calculate the p-value directly
+            boundary = scipy.stats.norm.ppf(1 - alpha_spend, loc=null_constraint[0,1], scale=np.sqrt(cov_est[0,0]))
+            #t_stat, pval = scipy.stats.ttest_1samp(full_df.flatten(), popmean=null_constraint[0,1], alternative="greater")
+        else:
+            cov_txt = "_output/scratch.txt"
+            np.savetxt(cov_txt, cov_est, delimiter=",")
+            prior_bound_str = " ".join(map(str, prior_bounds))
+            output = subprocess.check_output(
+                "Rscript R/pmvnorm.R %s %f %s" % (cov_txt, alpha_spend, prior_bound_str),
+                stderr=subprocess.STDOUT,
+                shell=True,
+                encoding='UTF-8'
+            )
+            boundary = float(output[4:])
+        #elif np.isfinite(num_particles) and num_particles <= MAX_PARTICLES:
+        #    boundaries = self.generate_spending_boundaries(
+        #       cov_est,
+        #       self.stat_dim,
+        #       alpha * node_weights,
+        #       num_particles=max(int(num_particles), MIN_PARTICLES),
+        #       )
 
-            # Need to check if it is within any of the specified bounds (but not necessarily both bounds)
-            min_norm = max(0, estimate - null_constraint[0,1])
-            test_res = min_norm > boundaries[-1]
-            print("TEST RES", test_res, min_norm, boundaries[-1])
-            logging.info("alpha level %f, bound %f", alpha * node_weights[-1], boundaries[-1])
-            logging.info("norm %f", min_norm)
-            if num_particles == MAX_PARTICLES:
-                logging.info("MAX PARTICLES REACHED")
+        #    # Need to check if it is within any of the specified bounds (but not necessarily both bounds)
+        #    min_norm = max(0, estimate - null_constraint[0,1])
+        #    test_res = min_norm > boundaries[-1]
+        #    print("TEST RES", test_res, min_norm, boundaries[-1])
+        #    logging.info("alpha level %f, bound %f", alpha * node_weights[-1], boundaries[-1])
+        #    logging.info("norm %f", min_norm)
+        #else:
+        #    logging.info("MAX PARTICLES surpassed")
 
-        return test_res
+        test_res = test_stat > boundary
+        return test_res, boundary
 

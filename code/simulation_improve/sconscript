@@ -13,8 +13,8 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 CLUSTER_STR = localenv['cluster']
 NUM_SEEDS = localenv['num_seeds']
-PERTURB_FACTOR = 1
-REUSE_ITERS = 20
+PERTURB_FACTOR = 0.2
+REUSE_ITERS = 10
 NUM_P = 100
 SPARSE_P = 6
 SPARSE_COEF_VAL = 0.75
@@ -23,7 +23,7 @@ MTP_MECH_LIST = [
     #"binary_thres_mtp",
     "bonferroni",
     "graphical_bonf",
-    #"graphical_ffs",
+    "graphical_ffs",
     "graphical_prespec",
 ]
 
@@ -35,8 +35,11 @@ nest.add(
 nest.add(
     'model_sim',
     [
-        #"online_delta",
-        "online_compare",
+        #"online_delta_restrict",
+        #"online_compare_restrict",
+        "online_delta",
+        #"online_compare",
+        #"online_compare_adapt",
     ])
 
 nest.add(
@@ -52,8 +55,8 @@ nest.add(
     'se_factor',
     [
         #0,
-        1,
-        #1.96
+        #1,
+        1.96
     ],
     label_func=lambda c: "se_factor_%.3f" % c)
 
@@ -137,7 +140,7 @@ def generate_data(env, outdir, c):
         '--p',
         NUM_P,
         '--init-train-n 80',
-        '--train-batch-n 1',
+        '--train-batch-n 5',
         '--num-batches',
         REUSE_ITERS * 30,
         '--reuse-test-n',
@@ -146,9 +149,7 @@ def generate_data(env, outdir, c):
         SPARSE_COEF_VAL,
         '--test-n 4000',
 	'--out ${TARGETS[0]}',
-	'--log-file ${TARGETS[1]}',
-            '--perturb-beta',
-            PERTURB_FACTOR]
+	'--log-file ${TARGETS[1]}']
     return env.Command(
         [
             join(outdir, 'data.pkl'),
