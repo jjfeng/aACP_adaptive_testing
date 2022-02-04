@@ -14,7 +14,7 @@ corr_mat_df = read.csv(args[1], sep=",", header = F)
 corr_mat = data.matrix(corr_mat_df)
 corr_mat = unname(corr_mat)
 corr_mat = (corr_mat + t(corr_mat))/2
-alpha_spend = as.numeric(args[2])
+alpha_spend = 10^as.numeric(args[2])
 #lower_prior = as.numeric(args[seq(3, length(args))])
 upper_prior = as.numeric(args[seq(3, length(args))])
 

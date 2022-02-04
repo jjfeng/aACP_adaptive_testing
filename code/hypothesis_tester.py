@@ -201,36 +201,21 @@ class AUCHypothesisTester(LogLikHypothesisTester):
         alpha_spend = alpha * node_weights[-1]
         test_stat = estimate
         if len(prior_nodes) == 0:
-            # We can just calculate the p-value directly
             boundary = scipy.stats.norm.ppf(1 - alpha_spend, loc=null_constraint[0,1], scale=np.sqrt(cov_est[0,0]))
-            #t_stat, pval = scipy.stats.ttest_1samp(full_df.flatten(), popmean=null_constraint[0,1], alternative="greater")
         else:
             cov_txt = "_output/scratch.txt"
             np.savetxt(cov_txt, cov_est, delimiter=",")
             prior_bound_str = " ".join(map(str, prior_bounds))
+            rcmd = "Rscript R/pmvnorm.R %s %f %s" % (cov_txt, np.log10(alpha_spend), prior_bound_str)
             output = subprocess.check_output(
-                "Rscript R/pmvnorm.R %s %f %s" % (cov_txt, alpha_spend, prior_bound_str),
+                rcmd,
                 stderr=subprocess.STDOUT,
                 shell=True,
                 encoding='UTF-8'
             )
             boundary = float(output[4:])
-        #elif np.isfinite(num_particles) and num_particles <= MAX_PARTICLES:
-        #    boundaries = self.generate_spending_boundaries(
-        #       cov_est,
-        #       self.stat_dim,
-        #       alpha * node_weights,
-        #       num_particles=max(int(num_particles), MIN_PARTICLES),
-        #       )
-
-        #    # Need to check if it is within any of the specified bounds (but not necessarily both bounds)
-        #    min_norm = max(0, estimate - null_constraint[0,1])
-        #    test_res = min_norm > boundaries[-1]
-        #    print("TEST RES", test_res, min_norm, boundaries[-1])
-        #    logging.info("alpha level %f, bound %f", alpha * node_weights[-1], boundaries[-1])
-        #    logging.info("norm %f", min_norm)
-        #else:
-        #    logging.info("MAX PARTICLES surpassed")
+            logging.info(rcmd)
+            logging.info("Test bound %f, est %f, log alpha %f, prior_bound_str %s", boundary, estimate, np.log10(alpha_spend), prior_bound_str)
 
         test_res = test_stat > boundary
         return test_res, boundary

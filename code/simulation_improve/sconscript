@@ -14,7 +14,7 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 CLUSTER_STR = localenv['cluster']
 NUM_SEEDS = localenv['num_seeds']
 PERTURB_FACTOR = 0.2
-REUSE_ITERS = 10
+REUSE_ITERS = 15
 NUM_P = 100
 SPARSE_P = 6
 SPARSE_COEF_VAL = 0.75
@@ -142,7 +142,7 @@ def generate_data(env, outdir, c):
         '--init-train-n 80',
         '--train-batch-n 5',
         '--num-batches',
-        REUSE_ITERS * 30,
+        REUSE_ITERS * 50,
         '--reuse-test-n',
         c['reuse_test_n'],
         '--sparse-beta',

@@ -86,7 +86,7 @@ class BinaryThresholdMTP:
         """
         node_obs = self.hypo_tester.get_observations(orig_mdl, new_mdl)
         self.test_tree.store_observations(node_obs)
-        test_res, _, _  = self.hypo_tester.test_null(self.alpha, self.test_tree, null_hypo, prior_nodes=[])
+        test_res, _  = self.hypo_tester.test_null(self.alpha, self.test_tree, null_hypo, prior_nodes=[])
 
         self._do_tree_update(test_res)
 
@@ -174,7 +174,7 @@ class GraphicalBonfMTP(BinaryThresholdMTP):
         """
         node_obs = self.hypo_tester.get_observations(orig_mdl, new_mdl)
         self.test_tree.store_observations(node_obs)
-        test_res = self.hypo_tester.test_null(self.alpha, self.test_tree, null_hypo, prior_nodes=[])
+        test_res, _ = self.hypo_tester.test_null(self.alpha, self.test_tree, null_hypo, prior_nodes=[])
         self._do_tree_update(test_res)
         return test_res
 

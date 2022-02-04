@@ -309,7 +309,7 @@ class OnlineAdaptLossModeler(LockedModeler):
     """
     Just do online learning on a separate dataset
     """
-    def __init__(self, hypo_tester, validation_frac: float = 0.2, min_valid_dat_size: int = 200, power: float = 0.5, ni_margin: float = 0.02, predef_alpha: float = 0.1, se_factor: float = 1.96):
+    def __init__(self, hypo_tester, validation_frac: float = 0.2, min_valid_dat_size: int = 200, power: float = 0.5, ni_margin: float = 0.01, predef_alpha: float = 0.1, se_factor: float = 1.96):
         self.modeler = MyLogisticRegression(penalty="l2")
         self.hypo_tester = hypo_tester
         self.validation_frac = validation_frac
