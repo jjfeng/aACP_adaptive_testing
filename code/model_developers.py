@@ -72,130 +72,6 @@ class LockedModeler:
     def predict_prob(self, x):
         return self.modeler.predict_proba(x)[:, 1].reshape((-1, 1))
 
-class BinaryAdversaryModeler(LockedModeler):
-    """
-    Given binary outputs, this adaptive modeler will try to propose modifications that are deleterious
-    """
-    update_dirs = [1,-1]
-
-    def __init__(
-            self, data_gen: DataGenerator, update_incr: float = 0.4, ni_margin: float = 0.01
-    ):
-        """
-        @param update_incr: how much to perturb the coefficients
-        """
-        self.modeler = MyLogisticRegression()
-        self.data_gen = data_gen
-        self.num_sparse_theta = np.max(np.where(self.data_gen.beta.flatten() != 0)[0]) + 1
-        self.update_incr = update_incr
-        self.ni_margin = ni_margin
-
-    def _get_sensitivity_specificity(self, mdl, test_size: int = 5000):
-        dataset, _ = self.data_gen.generate_data(0,0,0,0,test_size,0)
-        test_dat = dataset.test_dat
-        pred_class = mdl.predict(test_dat.x)
-        test_y = test_dat.y.flatten()
-        acc = pred_class == test_y
-        sensitivity = np.sum(acc * test_y)/np.sum(test_y)
-        specificity = np.sum(acc * (1 - test_y))/np.sum(1 - test_y)
-        #print("SENSE", sensitivity, "SPEC", specificity)
-        return sensitivity, specificity
-
-    def _set_oracle_mdl(self, mdl):
-        mdl.coef_[:] = self.data_gen.beta.flatten()
-        mdl.intercept_[:] = 0
-
-    def simulate_approval_process(self, dat, mtp_mechanism, dat_stream=None, maxfev=10):
-        """
-        @param dat_stream: ignores this
-        """
-        # Train a good initial model
-        self.modeler.fit(dat.x, dat.y.flatten())
-        self._set_oracle_mdl(self.modeler)
-        orig_coefs = self.modeler.coef_[:]
-        sens_curr, spec_curr = self._get_sensitivity_specificity(self.modeler)
-        logging.info("orig %.3f %.3f", sens_curr, spec_curr)
-        sens_test = sens_curr
-        spec_test = spec_curr
-
-        # Also have some predefined perturber for reference
-        # just so we can use the parallel procedure
-        self.predef_modeler = sklearn.base.clone(self.modeler)
-        self.predef_modeler.fit(dat.x, dat.y.flatten())
-        self.predef_modeler.coef_[:] = self.data_gen.beta.flatten()
-        self.predef_modeler.intercept_[:] = 0
-
-        # Now search in each direction and do a greedy search
-        test_hist = TestHistory(self.modeler, res_detail=pd.DataFrame({
-                "sensitivity_curr": [sens_curr],
-                "specificity_curr": [spec_curr],
-                }))
-        while test_hist.curr_time < maxfev:
-            # Test each coef (dont perturb intercept)
-            for var_idx in range(self.num_sparse_theta, self.num_sparse_theta + dat.x.shape[1]):
-                # Test update for the variable
-                for update_dir in self.update_dirs:
-                    test_res = 1
-                    scale_factor = 1
-                    while test_res == 1:
-                        if test_hist.curr_time >= maxfev:
-                            break
-                        # Generate adaptive modification
-                        curr_coef = np.concatenate(
-                            [self.modeler.intercept_, self.modeler.coef_.flatten()]
-                        )
-                        #print("prev", curr_coef)
-                        curr_coef[var_idx] += update_dir * self.update_incr * scale_factor
-                        proposed_mdl = sklearn.base.clone(self.modeler)
-                        set_model(proposed_mdl, curr_coef)
-                        actual_sens_test, actual_spec_test = self._get_sensitivity_specificity(proposed_mdl)
-                        print("PERTUB", var_idx, "ACTUAL TEST", actual_sens_test, actual_spec_test)
-                        logging.info("coef prop %s", proposed_mdl.coef_[:])
-                        logging.info("proposal %.3f %.3f", actual_sens_test, actual_spec_test)
-                        #print("curr", var_idx, curr_coef)
-
-                        # Generate predefined model
-                        self.predef_modeler.coef_[0, :] = orig_coefs
-                        predef_coef_idx = self.num_sparse_theta + (test_hist.curr_time // len(self.update_dirs))
-                        predef_update_dir = test_hist.curr_time % len(self.update_dirs)
-                        self.predef_modeler.coef_[0, predef_coef_idx] += (
-                            self.update_dirs[predef_update_dir] * self.update_incr
-                        )
-                        print(self.predef_modeler.coef_)
-
-                        # Test the performance
-                        null_constraints = np.array([
-                                [0, sens_test],
-                                [0, spec_test]])
-                        test_res = mtp_mechanism.get_test_res(
-                            null_constraints, orig_mdl, proposed_mdl, orig_predef_mdl=orig_mdl, predef_mdl=self.predef_modeler
-                        )
-                        print("perturb?", test_hist.curr_time, var_idx, update_dir, test_res)
-                        if test_res:
-                            print("TEST RES")
-                            sens_curr = sens_test
-                            spec_curr = spec_test
-                            sens_test += self.ni_margin
-                            spec_test += self.ni_margin
-                            set_model(self.modeler, curr_coef)
-                            logging.info("APPROVED %s", curr_coef)
-                            # If we found a good direction, keep walking in that direction,
-                            # be twice as aggressive
-                            scale_factor *= 2
-
-                        test_hist.update(
-                            test_res=test_res,
-                            res_detail=pd.DataFrame({
-                                "sensitivity_curr": [sens_curr],
-                                "specificity_curr": [spec_curr],
-                                }),
-                            proposed_mdl=proposed_mdl,
-                        )
-                    if test_res == 0 and scale_factor > 1:
-                        break
-
-        return test_hist
-
 class AdversaryLossModeler(LockedModeler):
     """
     Given binary outputs, this adaptive modeler will try to propose modifications that are deleterious
@@ -203,23 +79,17 @@ class AdversaryLossModeler(LockedModeler):
     update_dirs = [1,-1]
 
     def __init__(
-            self, data_gen: DataGenerator, update_incr: float = 0.6, ni_margin: float = 0.002
+            self, hypo_tester, data_gen: DataGenerator, update_incr: float = 0.6, ni_margin: float = 0.01
     ):
         """
         @param update_incr: how much to perturb the coefficients
         """
         self.modeler = MyLogisticRegression()
+        self.hypo_tester = hypo_tester
         self.data_gen = data_gen
         self.num_sparse_theta = np.max(np.where(self.data_gen.beta.flatten() != 0)[0]) + 1
         self.update_incr = update_incr
         self.ni_margin = ni_margin
-
-    #def _get_auc(self, mdl, test_size: int = 5000):
-    #    dataset, _ = self.data_gen.generate_data(0,0,0,0,test_size,0)
-    #    test_dat = dataset.test_dat
-    #    pred_y = mdl.predict_proba(test_dat.x)[:,1]
-    #    test_y = test_dat.y.flatten()
-    #    return roc_auc_score(test_y, pred_y)
 
     def _set_oracle_model(self, mdl):
         mdl.coef_[:] = self.data_gen.beta.flatten()
@@ -265,7 +135,7 @@ class AdversaryLossModeler(LockedModeler):
                         )
                         print("var idx", var_idx)
                         curr_coef[var_idx] += update_dir * self.update_incr * scale_factor
-                        print("CURR_COEF", curr_coef)
+                        logging.info("CURR_COEF %s", curr_coef)
                         proposed_mdl = sklearn.base.clone(self.modeler)
                         set_model(proposed_mdl, curr_coef)
 
@@ -279,7 +149,7 @@ class AdversaryLossModeler(LockedModeler):
 
                         # Test the performance
                         null_constraints = np.array([
-                                [0, curr_diff + self.ni_margin]])
+                                [0, curr_diff]])
                         test_res = mtp_mechanism.get_test_res(
                             null_constraints, orig_mdl, proposed_mdl, orig_predef_mdl=orig_mdl, predef_mdl=self.predef_modeler
                         )
@@ -299,6 +169,7 @@ class AdversaryLossModeler(LockedModeler):
                                 "curr_diff": [curr_diff],
                                 }),
                             proposed_mdl=proposed_mdl,
+                            batch_number=test_hist.curr_time,
                         )
                     if test_res == 0 and scale_factor > 1:
                         break

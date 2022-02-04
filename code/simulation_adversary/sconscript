@@ -14,16 +14,17 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 CLUSTER_STR = localenv['cluster']
 NUM_SEEDS = localenv['num_seeds']
 TEST_N = 5000
-REUSE_ITERS = 1 # originally 50
+REUSE_ITERS = 50 # originally 50
+NUM_P = REUSE_ITERS//2 + 1
 SPARSE_P = 1
 SPARSE_COEF_VAL = 0.8
 FWER = 0.1
 MTP_MECH_LIST = [
-    #"binary_thres_mtp",
+    "binary_thres_mtp",
     #"bonferroni",
     "graphical_bonf",
-    #"graphical_ffs",
-    #"graphical_prespec",
+    "graphical_ffs",
+    "graphical_prespec",
 ]
 
 nest.add(
@@ -34,8 +35,9 @@ nest.add(
 nest.add(
     'perf_measure',
     [
-     #'auc',
-     'log_lik'])
+     'auc',
+     #'log_lik'
+    ])
 
 @nest.add_target_with_env(localenv)
 def create_model_developer(env, outdir, c):
@@ -44,11 +46,12 @@ def create_model_developer(env, outdir, c):
         '--simulation',
         'adversary',
         '--update-incr',
-        0.2, #0.5, worked for AUC
+        #0.1, # works for log lik
+        0.2, # works for AUC
         '--sparse-p',
         SPARSE_P,
         '--p',
-        REUSE_ITERS + 1,
+        NUM_P,
         '--sparse-beta',
         SPARSE_COEF_VAL,
         '--out ${TARGETS[0]}'
@@ -68,7 +71,6 @@ nest.add(
 @nest.add_target_with_env(localenv)
 def create_mtp(env, outdir, c):
     targets = [join(outdir, 'mtp_mech.pkl')]
-    scratch_file = join("simulation_adversary", outdir, "scratch.txt")
     cmd = [
         'python create_mtp_mechanism.py',
         '--prespec-ratio 0.6' if "graphical_prespec" == c['mtp_mech'] else '',
@@ -79,7 +81,6 @@ def create_mtp(env, outdir, c):
         c['perf_measure'],
         '--mtp-mech',
         c['mtp_mech'],
-	    '--scratch %s' % scratch_file if c['mtp_mech'] in ["graphical_prespec", "graphical_ffs"] else '',
 	    '--out ${TARGETS[0]}'
     ]
     c['mtp_mech_res'][c['mtp_mech']] = targets[0]
@@ -109,7 +110,7 @@ def generate_data(env, outdir, c):
         '--sparse-p',
         SPARSE_P,
         '--p',
-        REUSE_ITERS + 1,
+        NUM_P,
         '--num-batches',
         REUSE_ITERS,
         '--init-train-n',
@@ -138,6 +139,7 @@ nest.add(
 
 @nest.add_target_with_env(localenv)
 def run_experiment(env, outdir, c):
+    scratch_file = join("simulation_adversary", outdir, "scratch.txt")
     cmd = [
         'python run_script.py',
         CLUSTER_STR,
@@ -151,6 +153,7 @@ def run_experiment(env, outdir, c):
 	'--model ${SOURCES[1]}',
 	'--mtp-mech',
     "simulation_adversary/%s" % c['mtp_mech_res'][c['mtp_mech']],
+	    '--scratch %s' % scratch_file if c['mtp_mech'] in ["graphical_prespec", "graphical_ffs"] else '',
 	'--log ${TARGETS[0]}',
 	'--out-csv ${TARGETS[1]}',
     ]

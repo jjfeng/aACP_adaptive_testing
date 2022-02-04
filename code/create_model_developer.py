@@ -49,7 +49,7 @@ def main():
         true_beta[: args.sparse_p] = args.sparse_beta
         data_generator = DataGenerator(true_beta, mean_x=0)
         #clf = BinaryAdversaryModeler(data_generator)
-        clf = AdversaryLossModeler(data_generator, update_incr=args.update_incr)
+        clf = AdversaryLossModeler(hypo_tester, data_generator, update_incr=args.update_incr)
     elif args.simulation == "online_delta":
         if args.model_type == "Logistic":
             clf = OnlineAdaptLossModeler(hypo_tester, min_valid_dat_size=args.min_valid_dat_size, predef_alpha=args.alpha, power=args.power, se_factor=args.se_factor)
