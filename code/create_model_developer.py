@@ -22,9 +22,10 @@ def parse_args():
     parser.add_argument("--alpha", type=float, default=0.1, help="assumed alpha for adaptive testing")
     parser.add_argument("--power", type=float, default=0.3, help="desired power for testing")
     parser.add_argument("--update-incr", type=float, default=0.1, help="how much the adversary perturbs things")
-    parser.add_argument("--simulation", type=str, default="online", choices=["adversary", "online_delta", "online_compare"])
+    parser.add_argument("--simulation", type=str, default="online_delta", choices=["adversary", "online_delta", "online_compare"])
     parser.add_argument("--hypo-tester", type=str, default="auc", choices=["log_lik", "auc", "accuracy"])
     parser.add_argument("--model-type", type=str, default="Logistic", choices=["Logistic", "GBT", "SelectiveLogistic"])
+    parser.add_argument("--scratch-file", type=str, default="_output/scratch.txt")
     parser.add_argument("--out-file", type=str, default="_output/model.pkl")
     # ONLY RELEVANT TO ADVERSARIAL DEVELOPER
     parser.add_argument("--sparse-p", type=int, default=4, help="number of nonzero coefficients in the true logistic regression model")
@@ -40,7 +41,7 @@ def main():
     args = parse_args()
     np.random.seed(args.seed)
 
-    hypo_tester = get_hypo_tester(args.hypo_tester)
+    hypo_tester = get_hypo_tester(args.hypo_tester, args.scratch_file)
     # Create model
     clf = None
     if args.simulation == "adversary":
@@ -58,9 +59,6 @@ def main():
     elif args.simulation == "online_compare":
         if args.model_type == "Logistic":
             clf = OnlineAdaptCompareModeler(hypo_tester, min_valid_dat_size=args.min_valid_dat_size, validation_frac=args.valid_frac, predef_alpha=args.alpha, power=args.power, se_factor=args.se_factor)
-    elif args.simulation == "online":
-        if args.model_type != "SelectiveLogistic":
-            clf = OnlineSensSpecModeler(args.model_type, min_valid_dat_size=args.min_valid_dat_size)
 
     if clf is None:
         raise NotImplementedError("modeler missing")
