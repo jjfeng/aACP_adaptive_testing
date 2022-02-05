@@ -181,14 +181,15 @@ class CalibAUCHypothesisTester(AUCHypothesisTester):
 
         return df, orig_est, new_est
 
-    def _get_boundary(self, prior_bounds, cov_est, alpha_spend: float):
-        print(prior_bounds, prior_bounds.size)
+    def _get_boundary(self, prior_bounds, cov_est, alpha_spend: float, alt_greater: bool = False):
+        print("CALL BOUNDARY", prior_bounds, prior_bounds.size, alpha_spend)
         if prior_bounds.size == 0:
-            boundary = scipy.stats.norm.ppf(alpha_spend, scale=np.sqrt(cov_est[0,0]))
+            boundary = scipy.stats.norm.ppf((1 - alpha_spend) if alt_greater else alpha_spend, scale=np.sqrt(cov_est[0,0]))
         else:
             np.savetxt(self.scratch_file_cov, cov_est, delimiter=",")
             np.savetxt(self.scratch_file_bounds, prior_bounds, delimiter=",")
-            rcmd = "Rscript R/pmvnorm.R %s %s %f" % (self.scratch_file_cov, self.scratch_file_bounds, np.log10(alpha_spend))
+            print("ALPHA", alpha_spend)
+            rcmd = "Rscript R/pmvnorm.R %s %s %f %d" % (self.scratch_file_cov, self.scratch_file_bounds, np.log10(alpha_spend), alt_greater)
             output = subprocess.check_output(
                 rcmd,
                 stderr=subprocess.STDOUT,
@@ -209,7 +210,8 @@ class CalibAUCHypothesisTester(AUCHypothesisTester):
         logging.info("test set estimate %s", estimate)
         print("ESTIMATE", node.obs, estimate)
 
-        full_df = pd.concat([prior_node.obs for prior_node in prior_nodes] + [node.obs], axis=0).to_numpy().T
+        full_df = pd.concat([prior_node.obs for prior_node in prior_nodes] + [node.obs], axis=1).to_numpy().T
+        print("FULL DF", full_df.shape)
         cov_est = np.cov(full_df)/self.test_dat.size
         if full_df.shape[0] == 1:
             cov_est = np.array([[cov_est]])
@@ -232,10 +234,11 @@ class CalibAUCHypothesisTester(AUCHypothesisTester):
                 node_alpha_spend * 0.5 * self.calib_alloc_frac, # alloted to calib upper
                 node_alpha_spend * (1 - self.calib_alloc_frac) # alloted to auc
                 ]
-        calib_lower_bound = self._get_boundary(prior_bounds, cov_est[:-1,:-1], 1 - alpha_spend[0])
-        calib_upper_bound = self._get_boundary(prior_bounds, cov_est[:-1,:-1], alpha_spend[1])
+        print("node_wei", node_weights, alpha, alpha_spend)
+        calib_lower_bound = self._get_boundary(prior_bounds, cov_est[:-1,:-1], alpha_spend[0], alt_greater=True)
+        calib_upper_bound = self._get_boundary(prior_bounds, cov_est[:-1,:-1], alpha_spend[1], alt_greater=False)
         prior_bounds = np.vstack([prior_bounds, [calib_upper_bound, calib_lower_bound]])
-        auc_lower_bound = self._get_boundary(prior_bounds, cov_est, alpha_spend[1])
+        auc_lower_bound = self._get_boundary(prior_bounds, cov_est, alpha_spend[2], alt_greater=True)
         boundaries = np.array([
             [calib_upper_bound, calib_lower_bound],
             [-np.inf, auc_lower_bound]

@@ -21,8 +21,8 @@ FWER = 0.1
 MTP_MECH_LIST = [
     #"binary_thres_mtp",
     #"bonferroni",
-    "graphical_bonf",
-    #"graphical_ffs",
+    #"graphical_bonf",
+    "graphical_ffs",
     #"graphical_prespec",
 ]
 
