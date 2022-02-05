@@ -18,7 +18,7 @@ def parse_args():
     parser.add_argument("--seed", type=int, default=1235, help="seed for determining meta-properties of the data")
     parser.add_argument("--reuse-test-n", type=int, default=300, help="how much data is in the reusable test data")
     parser.add_argument("--init-train-n", type=int, default=10, help="how much data was used to train the initial model")
-    parser.add_argument("--train-batch-n", type=int, default=100, help="how much data is observed between each iteration, in the simulated data stream")
+    parser.add_argument("--train-batch-n", type=int, default=1, help="how much data is observed between each iteration, in the simulated data stream")
     parser.add_argument("--dat-file", type=str)
     parser.add_argument("--out-file", type=str, default="_output/data.pkl")
     parser.add_argument("--log-file", type=str, default="_output/log.txt")

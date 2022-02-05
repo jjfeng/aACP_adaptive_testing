@@ -200,7 +200,7 @@ class OnlineAdaptLossModeler(LockedModeler):
     def _create_train_valid_dat(self, dat: Dataset):
         valid_n = max(self.min_valid_dat_size, int(dat.size * self.validation_frac))
         train_dat = dat.subset(dat.size - valid_n)
-        print("valid_n", valid_n, train_dat.size)
+        #print("valid_n", valid_n, train_dat.size)
         valid_dat = dat.subset(start_n=dat.size - valid_n, n=dat.size)
         return train_dat, valid_dat
 
@@ -535,7 +535,7 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
                     alpha=self.predef_alpha)
 
             logging.info("predef batch %d power %.5f", adapt_read_idx, predef_test_power)
-            if predef_test_power >= self.power/4:
+            if predef_test_power >= self.power:
                 # Predef will not test if power is terrible
                 predef_test_mdls.append(predef_lr)
                 logging.info("predef TEST idx %d, adapt idx %d, batch %d", len(predef_test_mdls) - 1, test_idx, adapt_read_idx)

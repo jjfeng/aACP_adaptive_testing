@@ -190,13 +190,13 @@ class CalibAUCHypothesisTester(AUCHypothesisTester):
         return df, orig_est, new_est
 
     def _get_boundary(self, prior_bounds, cov_est, alpha_spend: float, alt_greater: bool = False):
-        print("CALL BOUNDARY", prior_bounds, prior_bounds.size, alpha_spend)
+        #print("CALL BOUNDARY", prior_bounds, prior_bounds.size, alpha_spend)
         if prior_bounds.size == 0:
             boundary = scipy.stats.norm.ppf((1 - alpha_spend) if alt_greater else alpha_spend, scale=np.sqrt(cov_est[0,0]))
         else:
             np.savetxt(self.scratch_file_cov, cov_est, delimiter=",")
             np.savetxt(self.scratch_file_bounds, prior_bounds, delimiter=",")
-            print("ALPHA", alpha_spend)
+            #print("ALPHA", alpha_spend)
             rcmd = "Rscript R/pmvnorm.R %s %s %f %d" % (self.scratch_file_cov, self.scratch_file_bounds, np.log10(alpha_spend), alt_greater)
             output = subprocess.check_output(
                 rcmd,
