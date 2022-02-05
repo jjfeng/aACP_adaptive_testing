@@ -69,7 +69,7 @@ class LockedModeler:
         elif model_type == "RandomForest":
             self.modeler = RandomForestClassifier()
         elif model_type == "GBT":
-            self.modeler = GradientBoostingClassifier(loss="deviance", max_depth=2, n_estimators=50)
+            self.modeler = GradientBoostingClassifier(loss="deviance", max_depth=1, n_estimators=25)
         else:
             raise NotImplementedError("model type missing")
 
@@ -431,7 +431,7 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
         self.predef_alpha = predef_alpha
         self.se_factor = se_factor
 
-    def _do_power_calc_test_bound(self, orig_mdl, new_mdl, min_diff:float, valid_dat: Dataset, alpha: float, num_test: int, num_reps: int = 100):
+    def _do_power_calc_test_bound(self, orig_mdl, new_mdl, min_diff:float, valid_dat: Dataset, alpha: float, num_test: int, num_reps: int = 200):
         """
         @param valid_dat: data for evaluating performance of model
         @param alpha: the type I error of the current test node
@@ -439,23 +439,53 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
         logging.info("predef alpha %f", alpha)
         # use valid_dat to evaluate the model first
         self.hypo_tester.set_test_dat(valid_dat)
-        res_df, orig_auc, new_auc = self.hypo_tester._get_observations(orig_mdl, new_mdl)
-        res_df = res_df.to_numpy().flatten()
-        logging.info("validation: new old %f auc %f", orig_auc, new_auc)
-        mu_sim_raw = np.mean(res_df)
-        var_sim = np.var(res_df)
-        mu_sim = mu_sim_raw - np.sqrt(var_sim/valid_dat.size) * self.se_factor
-        logging.info("power calc: MU SIM lower %s", mu_sim_raw)
+        res_df, orig_est , new_est = self.hypo_tester._get_observations(orig_mdl, new_mdl)
+        res_df = res_df.to_numpy()
+        mu_sim_raw = np.mean(res_df, axis=0)
+        cov_est = np.cov(res_df.T)
+        auc_sim = mu_sim_raw[1] - np.sqrt(cov_est[1,1]/valid_dat.size) * self.se_factor
+        calib_mu_lower = mu_sim_raw[0] - np.sqrt(cov_est[0,0]/valid_dat.size) * self.se_factor
+        calib_mu_upper= mu_sim_raw[0] + np.sqrt(cov_est[0,0]/valid_dat.size) * self.se_factor
 
-        if mu_sim < 0:
-            return 0, mu_sim
+        calib_var = cov_est[0,0]
+        auc_var = cov_est[1,1]
+        logging.info("validation mu: %s", mu_sim_raw)
+        logging.info("validation var calbi %f auc %f", calib_var, auc_var)
 
-        candidate_diffs = np.arange(min_diff, mu_sim, self.ni_margin)[:1]
+        # Test calib lower
+        calib_obs_sim = np.random.normal(
+                loc=calib_mu_lower,
+                scale=np.sqrt(calib_var), size=(num_test, num_reps))
+        res = scipy.stats.ttest_1samp(calib_obs_sim, popmean=-self.calib_ni_margin)
+        candidate_power = np.mean(res.statistic > scipy.stats.norm.ppf(1 - alpha))
+        logging.info("calib power lower %f", candidate_power)
+        if candidate_power < self.power:
+            logging.info("abort calibration lower %f", candidate_power)
+            return 0, auc_sim
+
+        # Test calib upper
+        calib_obs_sim = np.random.normal(
+                loc=calib_mu_upper,
+                scale=np.sqrt(calib_var), size=(num_test, num_reps))
+        res = scipy.stats.ttest_1samp(calib_obs_sim, popmean=self.calib_ni_margin)
+        candidate_power = np.mean(res.statistic < scipy.stats.norm.ppf(alpha))
+        logging.info("calib power upper %f", candidate_power)
+        if candidate_power < self.power:
+            logging.info("abort calibration upper %f", candidate_power)
+            return 0, auc_sim
+
+        # Test AUC
+        logging.info("power calc: AUC SIM lower %s", auc_sim)
+
+        if auc_sim < 0:
+            return 0, auc_sim
+
+        candidate_diffs = np.arange(min_diff, auc_sim, self.ni_margin)[:1]
         if candidate_diffs.size == 0:
-            logging.info("abort: no candidates found %f %f", min_diff, mu_sim)
-            return 0, mu_sim
+            logging.info("abort: no candidates found %f %f", min_diff, auc_sim)
+            return 0, auc_sim
 
-        obs_sim = np.random.normal(loc=mu_sim, scale=np.sqrt(var_sim), size=(num_test, num_reps))
+        obs_sim = np.random.normal(loc=auc_sim, scale=np.sqrt(auc_var), size=(num_test, num_reps))
         res = scipy.stats.ttest_1samp(obs_sim, popmean=candidate_diffs.reshape((-1,1)))
         candidate_power = np.mean(res.statistic > scipy.stats.norm.ppf(1 - alpha), axis=1)
 

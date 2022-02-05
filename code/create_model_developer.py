@@ -56,7 +56,6 @@ def main():
         if args.hypo_tester == "auc":
             clf = OnlineAdaptLossModeler(args.model_type, hypo_tester, min_valid_dat_size=args.min_valid_dat_size, predef_alpha=args.alpha, power=args.power, se_factor=args.se_factor, ni_margin=args.ni_margin)
         elif args.hypo_tester == "calib_auc":
-            hypo_tester = get_hypo_tester('auc')
             clf = OnlineAdaptCalibAUCModeler(args.model_type, hypo_tester, min_valid_dat_size=args.min_valid_dat_size, predef_alpha=args.alpha, power=args.power, se_factor=args.se_factor, ni_margin=args.ni_margin, calib_ni_margin=args.calib_ni_margin)
     elif args.simulation == "online_compare":
         clf = OnlineAdaptCompareModeler(hypo_tester, min_valid_dat_size=args.min_valid_dat_size, validation_frac=args.valid_frac, predef_alpha=args.alpha, power=args.power, se_factor=args.se_factor)

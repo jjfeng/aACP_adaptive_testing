@@ -13,7 +13,8 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 CLUSTER_STR = localenv['cluster']
 NUM_SEEDS = localenv['num_seeds']
-REUSE_ITERS = 5
+REUSE_ITERS = 15
+NUM_BATCHES = REUSE_ITERS * 20
 NUM_P = 100
 SPARSE_P = 6
 SPARSE_COEF_VAL = 0.75
@@ -23,7 +24,7 @@ MTP_MECH_LIST = [
     #"bonferroni",
     "graphical_bonf",
     #"graphical_ffs",
-    #"graphical_prespec",
+    "graphical_prespec",
 ]
 
 nest.add(
@@ -58,7 +59,8 @@ nest.add(
 nest.add(
     'se_factor',
     [
-        1.96,
+        1,
+        #1.96,
     ],
     label_func=lambda c: "se_factor_%.3f" % c)
 
@@ -136,7 +138,7 @@ def generate_data(env, outdir, c):
         CLUSTER_STR,
         '${TARGETS[0]}',
         'generate_data.py',
-        '--meta-seed 1',
+        '--meta-seed 0',
         '--data-seed',
         c['seed'],
         '--sparse-p',
@@ -144,9 +146,9 @@ def generate_data(env, outdir, c):
         '--p',
         NUM_P,
         '--init-train-n 80',
-        '--train-batch-n 15',
+        '--train-batch-n 5',
         '--num-batches',
-        REUSE_ITERS * 60,
+        NUM_BATCHES,
         '--reuse-test-n',
         c['reuse_test_n'],
         '--sparse-beta',
@@ -208,7 +210,7 @@ def plot_avg(env, outdir, c):
 	'--results',
         ",".join(["simulation_calib_auc/%s" % r for r in c['summary_res']]),
 	'--max-batch',
-        REUSE_ITERS * 30,
+        NUM_BATCHES,
 	'--plot-file ${TARGETS[0]}',
     ]
     return env.Command(
