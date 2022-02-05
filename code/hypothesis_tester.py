@@ -166,11 +166,11 @@ class CalibAUCHypothesisTester(AUCHypothesisTester):
         self.calib_hypo_tester.set_test_dat(test_dat)
 
     def get_influence_func(self, mdl):
-        auc_ic, auc = self.auc_hypo_tester.get_influence_func(mdl)
+        auc_ic, auc_diff = self.auc_hypo_tester.get_influence_func(mdl)
         calib_ic, calib = self.calib_hypo_tester.get_influence_func(mdl)
 
-        influence_func = np.hstack([auc_ic.reshape((-1,1)), calib_ic.reshape((-1,1))])
-        estimate = np.array([auc, calib])
+        influence_func = np.hstack([calib_ic.reshape((-1,1)), auc_ic.reshape((-1,1))])
+        estimate = np.array([calib, auc_diff])
 
         return influence_func, estimate
 
@@ -247,12 +247,11 @@ class CalibAUCHypothesisTester(AUCHypothesisTester):
         test_res1 = (estimate[0] - null_constraint[0,0]) > calib_lower_bound
         test_res2 = (estimate[0] - null_constraint[0,1]) < calib_upper_bound
         test_res3 = (estimate[1] - null_constraint[1,1]) > auc_lower_bound
+        logging.info("estimate %s", estimate)
+        logging.info("null_constraint %s", null_constraint)
+        logging.info("boundaires %f %f %f", calib_lower_bound, calib_upper_bound, auc_lower_bound)
         test_res = test_res1 and test_res2 and test_res3
-        print("bounds", boundaries)
-        print("est diff", estimate - null_constraint[:,1])
-        print(test_res1, test_res2, test_res3)
         logging.info("TEST REST %d %d %d", test_res1, test_res2, test_res3)
-        print(test_res)
         logging.info("final TEST REST %d", test_res)
         return test_res, boundaries
 
