@@ -152,6 +152,9 @@ class CalibHypothesisTester(AUCHypothesisTester):
 class CalibAUCHypothesisTester(AUCHypothesisTester):
     stats_dim = 2
     def __init__(self, calib_alloc_frac: float=0.1):
+        """
+        @param calib_alloc_frac: how much of the alpha to allocate to checking calibration
+        """
         self.auc_hypo_tester = AUCHypothesisTester()
         self.calib_hypo_tester = CalibHypothesisTester()
         self.calib_alloc_frac = calib_alloc_frac
