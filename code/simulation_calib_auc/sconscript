@@ -13,14 +13,14 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 CLUSTER_STR = localenv['cluster']
 NUM_SEEDS = localenv['num_seeds']
-PERTURB_FACTOR = 0.2
-REUSE_ITERS = 15
+REUSE_ITERS = 5
 NUM_P = 100
 SPARSE_P = 6
 SPARSE_COEF_VAL = 0.75
 FWER = 0.1
 MTP_MECH_LIST = [
-    "bonferroni",
+    #"binary_thres_mtp",
+    #"bonferroni",
     "graphical_bonf",
     #"graphical_ffs",
     "graphical_prespec",
@@ -40,7 +40,7 @@ nest.add(
 
 nest.add(
     'perf_measure',
-    ['auc'])
+    ['calib_auc'])
 
 nest.add(
     'power',
@@ -50,9 +50,7 @@ nest.add(
 nest.add(
     'se_factor',
     [
-        #0,
-        #1,
-        1.96
+        1.96,
     ],
     label_func=lambda c: "se_factor_%.3f" % c)
 
@@ -68,6 +66,10 @@ def create_model_developer(env, outdir, c):
         c['se_factor'],
         '--power',
         c['power'],
+        '--ni-margin',
+        0.02,
+        '--calib-ni-margin',
+        0.2,
         '--alpha',
         0.1,
         '--model-type',
@@ -134,7 +136,7 @@ def generate_data(env, outdir, c):
         '--p',
         NUM_P,
         '--init-train-n 80',
-        '--train-batch-n 5',
+        '--train-batch-n 15',
         '--num-batches',
         REUSE_ITERS * 60,
         '--reuse-test-n',
@@ -157,7 +159,7 @@ nest.add(
 
 @nest.add_target_with_env(localenv)
 def run_experiment(env, outdir, c):
-    scratch_file = join("simulation_improve", outdir, "scratch.txt")
+    scratch_file = join("simulation_calib_auc", outdir, "scratch.txt")
     cmd = [
         'python run_script.py',
         CLUSTER_STR,
@@ -170,7 +172,7 @@ def run_experiment(env, outdir, c):
 	'--data ${SOURCES[0]}',
 	'--model ${SOURCES[1]}',
 	'--mtp-mech',
-    "simulation_improve/%s" % c['mtp_mech_res'][c['mtp_mech']],
+    "simulation_calib_auc/%s" % c['mtp_mech_res'][c['mtp_mech']],
 	    '--scratch %s' % scratch_file if c['mtp_mech'] in ["graphical_prespec", "graphical_ffs"] else '',
 	'--log ${TARGETS[0]}',
 	'--out-csv ${TARGETS[1]}',
@@ -196,7 +198,7 @@ def plot_avg(env, outdir, c):
     cmd = [
         'python plot_simulation_improve.py',
 	'--results',
-        ",".join(["simulation_improve/%s" % r for r in c['summary_res']]),
+        ",".join(["simulation_calib_auc/%s" % r for r in c['summary_res']]),
 	'--max-batch',
         REUSE_ITERS * 30,
 	'--plot-file ${TARGETS[0]}',

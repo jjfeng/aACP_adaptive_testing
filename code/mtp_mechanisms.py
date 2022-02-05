@@ -190,7 +190,7 @@ class GraphicalFFSMTP(GraphicalBonfMTP):
         self.test_tree.store_observations(node_obs)
         prior_nodes = self.test_tree.parent.children[:(self.parent_child_idx)]
         test_res, bound = self.hypo_tester.test_null(self.alpha, self.test_tree, null_hypo, prior_nodes=prior_nodes)
-        self.test_tree.upper_bound = bound
+        self.test_tree.bounds = bound
 
         self._do_tree_update(test_res)
 
@@ -287,15 +287,15 @@ class GraphicalParallelMTP(GraphicalFFSMTP):
         parallel_node = self.parallel_tree_nodes[self.num_queries]
         parallel_node_obs = self.hypo_tester.get_observations(orig_predef_mdl, predef_mdl)
         parallel_node.store_observations(parallel_node_obs)
-        _, parallel_node_upper = self.hypo_tester.test_null(self.alpha, parallel_node, null_hypo, prior_nodes=self.parallel_tree_nodes[:self.num_queries])
-        parallel_node.upper_bound = parallel_node_upper
+        _, parallel_node_bounds = self.hypo_tester.test_null(self.alpha, parallel_node, null_hypo, prior_nodes=self.parallel_tree_nodes[:self.num_queries])
+        parallel_node.bounds = parallel_node_bounds
 
         node_obs = self.hypo_tester.get_observations(orig_mdl, new_mdl)
         self.test_tree.store_observations(node_obs)
         prior_nodes = self.parallel_tree_nodes[:(self.num_queries + 1)]
         print("HIST", self.test_tree.history)
-        test_res, upper_bound = self.hypo_tester.test_null(self.alpha, self.test_tree, null_hypo, prior_nodes=prior_nodes)
-        self.test_tree.upper_bound = upper_bound
+        test_res, node_bounds = self.hypo_tester.test_null(self.alpha, self.test_tree, null_hypo, prior_nodes=prior_nodes)
+        self.test_tree.bounds = node_bounds
 
         self._do_tree_update(test_res)
 

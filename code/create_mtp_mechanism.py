@@ -20,7 +20,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="create mtp mechanism")
     parser.add_argument("--mtp-mech", type=str, default="graphical_bonf", choices=["binary_thres_mtp", "bonferroni", "graphical_bonf", "graphical_prespec", "graphical_ffs"], help="Multiple testing mechanism")
     parser.add_argument(
-        "--hypo-tester", type=str, default="auc", choices=["log_lik", "auc"]
+        "--hypo-tester", type=str, default="auc", choices=["log_lik", "auc", "calib_auc"]
     )
     parser.add_argument(
         "--prespec-ratio", type=float, default=1.0, help="parallel factor"
@@ -39,6 +39,8 @@ def get_hypo_tester(hypo_tester_str):
         hypo_tester = LogLikHypothesisTester()
     elif hypo_tester_str == "auc":
         hypo_tester = AUCHypothesisTester()
+    elif hypo_tester_str == "calib_auc":
+        hypo_tester = CalibAUCHypothesisTester()
     else:
         raise NotImplementedError("dont know this hypothesis")
     return hypo_tester
