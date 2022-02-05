@@ -69,7 +69,7 @@ class LockedModeler:
         elif model_type == "RandomForest":
             self.modeler = RandomForestClassifier()
         elif model_type == "GBT":
-            self.modeler = GradientBoostingClassifier()
+            self.modeler = GradientBoostingClassifier(loss="deviance", max_depth=2, n_estimators=50)
         else:
             raise NotImplementedError("model type missing")
 
