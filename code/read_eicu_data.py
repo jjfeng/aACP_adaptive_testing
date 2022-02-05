@@ -19,7 +19,6 @@ def parse_args():
     parser.add_argument("--reuse-test-n", type=int, default=300, help="how much data is in the reusable test data")
     parser.add_argument("--init-train-n", type=int, default=10, help="how much data was used to train the initial model")
     parser.add_argument("--train-batch-n", type=int, default=100, help="how much data is observed between each iteration, in the simulated data stream")
-    #parser.add_argument("--test-n", type=int, default=2000, help="number of samples in the completely held out test dataset")
     parser.add_argument("--dat-file", type=str)
     parser.add_argument("--out-file", type=str, default="_output/data.pkl")
     parser.add_argument("--log-file", type=str, default="_output/log.txt")
@@ -65,11 +64,7 @@ def main():
     init_train_dat = _get_data(dat, patient_stay_ids, init_train_idxs, max_random_pick=5)
     start_idx = args.init_train_n
     reuse_test_idxs = rand_ids[start_idx: start_idx + args.reuse_test_n]
-    reuse_test_dat = _get_data(dat, patient_stay_ids, reuse_test_idxs, max_random_pick=5)
-    #start_idx += args.reuse_test_n
-    #test_idxs = rand_ids[start_idx: start_idx + args.test_n]
-    #test_dat = _get_data(dat, patient_stay_ids, test_idxs, max_random_pick=True)
-    #start_idx += args.test_n
+    reuse_test_dat = _get_data(dat, patient_stay_ids, reuse_test_idxs, max_random_pick=10)
 
     # Split data
     init_train_dat = Dataset(
@@ -81,11 +76,6 @@ def main():
             y=reuse_test_dat[:,-1:],
             )
     print("OUTCOME RATE", reuse_test_dat.y.mean())
-    #test_dat = Dataset(
-    #        x=test_dat[:,:-1],
-    #        y=test_dat[:,-1:],
-    #        )
-    #start_idx += args.test_n
     iid_train_dats = []
     for batch_start_idx in range(start_idx, rand_ids.size, args.train_batch_n):
         #batch_start_idx = start_idx + batch_idx * args.train_batch_n

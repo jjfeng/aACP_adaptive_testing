@@ -13,15 +13,15 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 CLUSTER_STR = localenv['cluster']
 NUM_SEEDS = localenv['num_seeds']
-REUSE_ITERS = 2
+REUSE_ITERS = 10
 FWER = 0.1
 EICU_DATA = "../data/eicu_hypotension_data.csv"
 MTP_MECH_LIST = [
     #"binary_thres_mtp",
     #"bonferroni",
-    "graphical_bonf",
+    #"graphical_bonf",
     #"graphical_ffs",
-    #"graphical_prespec",
+    "graphical_prespec",
 ]
 
 nest.add(
@@ -39,9 +39,9 @@ nest.add(
 nest.add(
     'model_type',
     [
-        #"GBT",
+        "GBT",
         #"RandomForest",
-        "Logistic",
+        #"Logistic", # hard to show improvement because performance maxes out too quickly
     ])
 
 nest.add(
@@ -57,7 +57,6 @@ nest.add(
     'se_factor',
     [
         1,
-        #1.96,
     ],
     label_func=lambda c: "se_factor_%.3f" % c)
 
@@ -135,7 +134,7 @@ def generate_data(env, outdir, c):
         '--seed 0',
         '--dat-file',
         EICU_DATA,
-        '--init-train-n 80',
+        '--init-train-n 75',
         '--train-batch-n 4',
         '--reuse-test-n',
         c['reuse_test_n'],
@@ -193,6 +192,7 @@ nest.pop("seed")
 @nest.add_target_with_env(localenv)
 def plot_avg(env, outdir, c):
     cmd = [
+        # TODO make its own plotting script
         'python plot_simulation_improve.py',
 	'--results',
         ",".join(["experiment_eicu/%s" % r for r in c['summary_res']]),
