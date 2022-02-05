@@ -140,9 +140,10 @@ def main():
     conclusions_hist = full_hist.get_perf_hist()
     conclusions_hist["dataset"] = "reuse_test"
     reuse_res = get_deployed_scores(mtp_mech, full_hist, data.reuse_test_dat, args.max_iter)
-    test_res = get_deployed_scores(mtp_mech, full_hist, data.test_dat, args.max_iter)
     reuse_res["dataset"] = "reuse_test"
-    test_res["dataset"] = "test"
+    if data.test_dat:
+        test_res = get_deployed_scores(mtp_mech, full_hist, data.test_dat, args.max_iter)
+        test_res["dataset"] = "test"
     #good_approvals, bad_approvals, prop_good_approvals = get_good_bad_approved(full_hist, data.test_dat, args.max_iter)
     num_approvals = np.array(
         [
@@ -165,7 +166,9 @@ def main():
     approve_df = pd.DataFrame({"value": num_approvals > 0, "time": times})
     approve_df["dataset"] = "test"
     approve_df["variable"] = "did_approval"
-    df = pd.concat([reuse_res, test_res, approve_df, count_df, conclusions_hist])
+    df = pd.concat(
+            [reuse_res, approve_df, count_df, conclusions_hist]
+            + ([test_res] if data.test_dat else []))
     df["procedure"] = mtp_mech.name
 
     # Plot

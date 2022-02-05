@@ -17,10 +17,15 @@ eicu_hypotension_data$`unified.map_16-predict` < 65
 eicu_hypotension_data$`heartrate_1-obs`
 eicu_hypotension_data$`respiration_1-obs`
 eicu_hypotension_data$admissionheight
+eicu_hypotension_data$window_offset[eicu_hypotension_data$patientunitstayid == 1001397]
+eicu_hypotension_data
 ```
+
 
 ```{r}
 eicu_hypotension_new <- data.frame(
+  patientunitstayid = eicu_hypotension_data$patientunitstayid,
+  window_offset = eicu_hypotension_data$window_offset,
   eicu_hypotension_data$male,
   eicu_hypotension_data$age,
   eicu_hypotension_data$admissionheight,
@@ -39,9 +44,19 @@ eicu_hypotension_new <- data.frame(
   #eicu_hypotension_data$`unified.map_8-obs`,
   #eicu_hypotension_data$`unified.map_9-obs`,
   #eicu_hypotension_data$`unified.map_10-obs`,
-  as.numeric(eicu_hypotension_data$`unified.map_16-predict` < 65)
+  y=as.numeric(eicu_hypotension_data$`unified.map_16-predict` < 65)
 )
-eicu_hypotension_new = eicu_hypotension_new[complete.cases(eicu_hypotension_new),]
+eicu_hypotension_new <- eicu_hypotension_new[complete.cases(eicu_hypotension_new),]
+
+eicu_hypotension_new <- eicu_hypotension_new[eicu_hypotension_new$window_offset <= 24 * 60,]
+
+eicu_hypotension_new <- eicu_hypotension_new[order(eicu_hypotension_new$patientunitstayid, eicu_hypotension_new$window_offset),]
+
+```
+
+```{r}
+# nrow(eicu_hypotension_new)
+length(unique(eicu_hypotension_new$patientunitstayid))
 write.csv(eicu_hypotension_new, "../../data/eicu_hypotension_data.csv", row.names = F)
 ```
 
@@ -51,12 +66,23 @@ train_dat <- eicu_hypotension_data[train_idx,]
 test_dat <- eicu_hypotension_data[-train_idx,]
 ```
 
-
 ```{r}
-rf_res <- ranger(y ~ x1, train_dat, probability = T)
+danger_stays = unique(eicu_hypotension_new$patientunitstayid[eicu_hypotension_new$y == 1])
+length(danger_stays)
+eicu_hypotension_new$y[eicu_hypotension_new$patientunitstayid == danger_stays[30]]
+
+stay_id = danger_stays[30]
+train_dat <- eicu_hypotension_new[eicu_hypotension_new$patientunitstayid != stay_id,seq(3,ncol(eicu_hypotension_new))]
+test_dat <- eicu_hypotension_new[eicu_hypotension_new$patientunitstayid == stay_id,seq(3,ncol(eicu_hypotension_new))]
 ```
 
 ```{r}
+library(ranger)
+rf_res <- ranger(y ~ ., train_dat, probability = T)
+```
+
+```{r}
+library(ROCit)
 rf_pred <- predict(rf_res, test_dat)$prediction
 roc_res <- rocit(score = rf_pred[,2], class = test_dat$y)
 summary(roc_res)

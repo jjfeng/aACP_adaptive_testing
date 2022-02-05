@@ -29,6 +29,10 @@ class HypothesisTester:
     def get_auc(self, test_y, score_y):
         score_y0 = score_y[test_y == 0]
         score_y1 = score_y[test_y == 1]
+
+        #assert np.all(np.isfinite(score_y0))
+        #assert np.all(np.isfinite(score_y1))
+
         all_ranks = score_y0.reshape((1,-1)) < score_y1.reshape((-1,1))
         return np.mean(all_ranks)
 
@@ -58,13 +62,14 @@ class AUCHypothesisTester(HypothesisTester):
         auc = self.get_auc(test_y, pred_y)
 
         # Note that this can actually be quite different!
-        sklearn_auc = roc_auc_score(test_y, pred_y)
-        logging.info("AUC %f SKLEARN %f", auc, sklearn_auc)
+        logging.info("AUC %f", auc)
+        #sklearn_auc = roc_auc_score(test_y, pred_y)
+        #logging.info("AUC %f SKLEARN %f", auc, sklearn_auc)
 
         influence_func = mask_y1/prob_y1 * cdf_score_y0 + mask_y0/prob_y0 * cdf_score_y1 - (mask_y0/prob_y0 + mask_y1/prob_y1) * auc + auc
 
-        if np.abs(auc - sklearn_auc) > 0.2:
-            raise ValueError("WEIRD AUC")
+        #if np.abs(auc - sklearn_auc) > 0.2:
+        #    raise ValueError("WEIRD AUC")
 
         return influence_func, auc
 

@@ -517,10 +517,11 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
         adapt_read_idx = 0
         predef_test_mdls = []
         while (test_idx < maxfev) and (adapt_read_idx < len(dat_stream)):
-            print("ITERATION", test_idx)
+            logging.info("ITERATION %d %d", test_idx, adapt_read_idx)
 
             predef_dat = Dataset.merge([dat] + dat_stream[: adapt_read_idx + 1])
             predef_train_dat, predef_valid_dat = self._create_train_valid_dat(predef_dat)
+            logging.info("TRAIN SIZE %d", predef_train_dat.size)
             predef_lr = sklearn.base.clone(self.modeler)
             predef_lr.fit(predef_train_dat.x, predef_train_dat.y.flatten())
 
