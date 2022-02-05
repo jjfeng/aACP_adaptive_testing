@@ -5,8 +5,10 @@ import numpy as np
 import pandas as pd
 import scipy.optimize
 import sklearn.base
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import GradientBoostingClassifier
 
-from models import *
 from dataset import Dataset, DataGenerator
 from hypothesis_tester import get_log_lik
 
@@ -61,13 +63,18 @@ class LockedModeler:
     """
     This modeler does not suggest any new model
     """
-    def __init__(self, model_type:str = "Logistic", seed:int = 0):
+    def _init_modeler(self, model_type: str):
         if model_type == "Logistic":
-            self.modeler = MyLogisticRegression(penalty="none")
-        elif model_type == "SelectiveLogistic":
-            self.modeler = SelectiveLogisticRegression(penalty="none", target_acc=0.7)
+            self.modeler = LogisticRegression(penalty="l2")
+        elif model_type == "RandomForest":
+            self.modeler = RandomForestClassifier()
+        elif model_type == "GBT":
+            self.modeler = GradientBoostingClassifier()
         else:
             raise NotImplementedError("model type missing")
+
+    def __init__(self, model_type:str, seed:int = 0):
+        self._init_modeler(model_type)
 
     def predict_prob(self, x):
         return self.modeler.predict_proba(x)[:, 1].reshape((-1, 1))
@@ -84,7 +91,7 @@ class AdversaryLossModeler(LockedModeler):
         """
         @param update_incr: how much to perturb the coefficients
         """
-        self.modeler = MyLogisticRegression()
+        self.modeler = LogisticRegression(penalty="none")
         self.hypo_tester = hypo_tester
         self.data_gen = data_gen
         self.num_sparse_theta = np.max(np.where(self.data_gen.beta.flatten() != 0)[0]) + 1
@@ -180,8 +187,8 @@ class OnlineAdaptLossModeler(LockedModeler):
     """
     Just do online learning on a separate dataset
     """
-    def __init__(self, hypo_tester, validation_frac: float = 0.2, min_valid_dat_size: int = 200, power: float = 0.5, ni_margin: float = 0.01, predef_alpha: float = 0.1, se_factor: float = 1.96):
-        self.modeler = MyLogisticRegression(penalty="l2")
+    def __init__(self, model_type: str, hypo_tester, validation_frac: float = 0.2, min_valid_dat_size: int = 200, power: float = 0.5, ni_margin: float = 0.01, predef_alpha: float = 0.1, se_factor: float = 1.96):
+        self._init_modeler(model_type)
         self.hypo_tester = hypo_tester
         self.validation_frac = validation_frac
         self.min_valid_dat_size = min_valid_dat_size
@@ -413,8 +420,8 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
     """
     Just do online learning on a separate dataset
     """
-    def __init__(self, hypo_tester, validation_frac: float = 0.2, min_valid_dat_size: int = 200, power: float = 0.5, ni_margin: float = 0.01, calib_ni_margin: float = 0.2, predef_alpha: float = 0.1, se_factor: float = 1.96):
-        self.modeler = MyLogisticRegression(penalty="l2")
+    def __init__(self, model_type:str, hypo_tester, validation_frac: float = 0.2, min_valid_dat_size: int = 200, power: float = 0.5, ni_margin: float = 0.01, calib_ni_margin: float = 0.2, predef_alpha: float = 0.1, se_factor: float = 1.96):
+        self._init_modeler(model_type)
         self.hypo_tester = hypo_tester
         self.validation_frac = validation_frac
         self.min_valid_dat_size = min_valid_dat_size

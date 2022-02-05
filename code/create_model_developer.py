@@ -26,7 +26,7 @@ def parse_args():
     parser.add_argument("--update-incr", type=float, default=0.1, help="how much the adversary perturbs things")
     parser.add_argument("--simulation", type=str, default="online_delta", choices=["adversary", "online_delta", "online_compare"])
     parser.add_argument("--hypo-tester", type=str, default="auc", choices=["log_lik", "auc", "calib_auc"])
-    parser.add_argument("--model-type", type=str, default="Logistic", choices=["Logistic", "GBT", "SelectiveLogistic"])
+    parser.add_argument("--model-type", type=str, default="Logistic", choices=["Logistic", "GBT", "RandomForest"])
     parser.add_argument("--out-file", type=str, default="_output/model.pkl")
     # ONLY RELEVANT TO ADVERSARIAL DEVELOPER
     parser.add_argument("--sparse-p", type=int, default=4, help="number of nonzero coefficients in the true logistic regression model")
@@ -54,10 +54,10 @@ def main():
         clf = AdversaryLossModeler(hypo_tester, data_generator, update_incr=args.update_incr)
     elif args.simulation == "online_delta":
         if args.hypo_tester == "auc":
-            clf = OnlineAdaptLossModeler(hypo_tester, min_valid_dat_size=args.min_valid_dat_size, predef_alpha=args.alpha, power=args.power, se_factor=args.se_factor, ni_margin=args.ni_margin)
+            clf = OnlineAdaptLossModeler(args.model_type, hypo_tester, min_valid_dat_size=args.min_valid_dat_size, predef_alpha=args.alpha, power=args.power, se_factor=args.se_factor, ni_margin=args.ni_margin)
         elif args.hypo_tester == "calib_auc":
             hypo_tester = get_hypo_tester('auc')
-            clf = OnlineAdaptCalibAUCModeler(hypo_tester, min_valid_dat_size=args.min_valid_dat_size, predef_alpha=args.alpha, power=args.power, se_factor=args.se_factor, ni_margin=args.ni_margin, calib_ni_margin=args.calib_ni_margin)
+            clf = OnlineAdaptCalibAUCModeler(args.model_type, hypo_tester, min_valid_dat_size=args.min_valid_dat_size, predef_alpha=args.alpha, power=args.power, se_factor=args.se_factor, ni_margin=args.ni_margin, calib_ni_margin=args.calib_ni_margin)
     elif args.simulation == "online_compare":
         clf = OnlineAdaptCompareModeler(hypo_tester, min_valid_dat_size=args.min_valid_dat_size, validation_frac=args.valid_frac, predef_alpha=args.alpha, power=args.power, se_factor=args.se_factor)
 

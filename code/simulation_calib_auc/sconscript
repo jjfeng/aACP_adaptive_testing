@@ -23,7 +23,7 @@ MTP_MECH_LIST = [
     #"bonferroni",
     "graphical_bonf",
     #"graphical_ffs",
-    "graphical_prespec",
+    #"graphical_prespec",
 ]
 
 nest.add(
@@ -36,6 +36,14 @@ nest.add(
     [
         "online_delta",
         #"online_compare",
+    ])
+
+nest.add(
+    'model_type',
+    [
+        "GBT",
+        #"RandomForest",
+        "Logistic",
     ])
 
 nest.add(
@@ -69,11 +77,11 @@ def create_model_developer(env, outdir, c):
         '--ni-margin',
         0.02,
         '--calib-ni-margin',
-        0.2,
+        0.1,
         '--alpha',
         0.1,
         '--model-type',
-        'Logistic',
+        c['model_type'],
         '--hypo-tester',
         c['perf_measure'],
         '--valid-frac',

@@ -53,9 +53,6 @@ def get_deployed_scores(mtp_mech, test_hist, test_dat, max_iter):
         sensitivity = np.sum((pred_y == test_y) * (test_y))/np.sum(test_y)
         specificity = np.sum((pred_y == test_y) * (1 - test_y))/np.sum(1 - test_y)
 
-        decisions = mdl.get_decision(test_dat.x)
-        accept = np.mean(decisions)
-        accuracy = np.sum(pred_y == test_y)/np.sum(decisions)
         next_approve_time = (
             test_hist.approval_times[approve_idx + 1]
             if test_hist.tot_approves > (approve_idx + 1)
@@ -67,8 +64,6 @@ def get_deployed_scores(mtp_mech, test_hist, test_dat, max_iter):
                 "nll": nll,
                 "sensitivity": sensitivity,
                 "specificity": specificity,
-                "accuracy": accuracy,
-                "accept": accept,
                 "time": idx
                 })
     scores = pd.DataFrame(scores)
