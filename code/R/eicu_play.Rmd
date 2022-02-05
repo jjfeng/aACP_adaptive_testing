@@ -13,12 +13,36 @@ head(eicu_hypotension_data)
 ```
 
 ```{r}
-eicu_hypotension_data$y <- eicu_hypotension_data$`unified.map_16-predict` < 65
-eicu_hypotension_data$x1 <- eicu_hypotension_data$`unified.map_1-obs`
+eicu_hypotension_data$`unified.map_16-predict` < 65
+eicu_hypotension_data$`heartrate_1-obs`
+eicu_hypotension_data$`respiration_1-obs`
+eicu_hypotension_data$admissionheight
 ```
 
 ```{r}
-write.csv(eicu_hypotension_data, "~/Downloads/eicu_hypotension_data.csv", row.names = F)
+eicu_hypotension_new <- data.frame(
+  eicu_hypotension_data$male,
+  eicu_hypotension_data$age,
+  eicu_hypotension_data$admissionheight,
+  eicu_hypotension_data$admissionweight,
+  eicu_hypotension_data$`unified.map_1-obs`,
+  eicu_hypotension_data$`unified.map_2-obs`,
+  eicu_hypotension_data$`heartrate_1-obs`,
+  eicu_hypotension_data$`heartrate_2-obs`,
+  eicu_hypotension_data$`respiration_1-obs`,
+  eicu_hypotension_data$`respiration_2-obs`,
+  # eicu_hypotension_data$`unified.map_3-obs`,
+  # eicu_hypotension_data$`unified.map_4-obs`,
+  # eicu_hypotension_data$`unified.map_5-obs`,
+  # #eicu_hypotension_data$`unified.map_6-obs`,
+  #eicu_hypotension_data$`unified.map_7-obs`,
+  #eicu_hypotension_data$`unified.map_8-obs`,
+  #eicu_hypotension_data$`unified.map_9-obs`,
+  #eicu_hypotension_data$`unified.map_10-obs`,
+  as.numeric(eicu_hypotension_data$`unified.map_16-predict` < 65)
+)
+eicu_hypotension_new = eicu_hypotension_new[complete.cases(eicu_hypotension_new),]
+write.csv(eicu_hypotension_new, "../../data/eicu_hypotension_data.csv", row.names = F)
 ```
 
 ```{r}
