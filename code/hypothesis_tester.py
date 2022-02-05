@@ -156,6 +156,10 @@ class CalibAUCHypothesisTester(AUCHypothesisTester):
         self.calib_hypo_tester = CalibHypothesisTester()
         self.calib_alloc_frac = calib_alloc_frac
 
+    def make_scratch(self, scratch_file: str):
+        self.scratch_file_cov = scratch_file.replace(".txt", "_cov.txt")
+        self.scratch_file_bounds = scratch_file.replace(".txt", "_bounds.txt")
+
     def set_test_dat(self, test_dat):
         self.test_dat = test_dat
         self.auc_hypo_tester.set_test_dat(test_dat)
@@ -176,6 +180,25 @@ class CalibAUCHypothesisTester(AUCHypothesisTester):
         df = pd.DataFrame(new_ic - orig_ic, columns=["calib_score_ic", "auc_diff_ic"])
 
         return df, orig_est, new_est
+
+    def _get_boundary(self, prior_bounds, cov_est, alpha_spend: float):
+        print(prior_bounds, prior_bounds.size)
+        if prior_bounds.size == 0:
+            boundary = scipy.stats.norm.ppf(alpha_spend, scale=np.sqrt(cov_est[0,0]))
+        else:
+            np.savetxt(self.scratch_file_cov, cov_est, delimiter=",")
+            np.savetxt(self.scratch_file_bounds, prior_bounds, delimiter=",")
+            rcmd = "Rscript R/pmvnorm.R %s %s %f" % (self.scratch_file_cov, self.scratch_file_bounds, np.log10(alpha_spend))
+            output = subprocess.check_output(
+                rcmd,
+                stderr=subprocess.STDOUT,
+                shell=True,
+                encoding='UTF-8'
+            )
+            boundary = float(output[4:])
+            logging.info(rcmd)
+            logging.info("Test bound %f, log alpha %f", boundary, np.log10(alpha_spend))
+        return boundary
 
     def test_null(self, alpha: float, node: Node, null_constraint: np.ndarray, prior_nodes: List = []):
         """
@@ -198,43 +221,35 @@ class CalibAUCHypothesisTester(AUCHypothesisTester):
         num_nodes = len(prior_nodes) + 1
         assert not np.any(np.isnan(cov_est))
         node_weights = np.array([prior_node.weight for prior_node in prior_nodes] + [node.weight])
-        prior_bounds = [prior_node.upper_bound for prior_node in prior_nodes]
+        prior_bounds = np.array([prior_node.bounds for prior_node in prior_nodes]).reshape((-1,2))
+        print("PRIOR BOUNDS", prior_bounds.shape)
 
         test_res = False
         num_particles =  np.sum(1/(alpha * node_weights))
         node_alpha_spend = alpha * node_weights[-1]
         alpha_spend = [
-                node_alpha_spend * self.calib_alloc_frac, # alloted to calib upper
+                node_alpha_spend * 0.5 * self.calib_alloc_frac, # alloted to calib upper
+                node_alpha_spend * 0.5 * self.calib_alloc_frac, # alloted to calib upper
                 node_alpha_spend * (1 - self.calib_alloc_frac) # alloted to auc
                 ]
-        prev_prior_bounds = prior_bounds
-        for i in range(self.stats_dim):
-            if len(prev_prior_bounds) == 0:
-                boundary = scipy.stats.norm.ppf(1 - alpha_spend[i], scale=np.sqrt(cov_est[0,0]))
-                stat, pval = scipy.stats.ttest_1samp(node.obs.to_numpy().flatten(), popmean=null_constraint[i,1], alternative="greater")
-                logging.info("tstat %f pval %f alpha %f", stat, pval, alpha_spend[i])
-            else:
-                if i < self.stats_dim - 1:
-                    np.savetxt(self.scratch_file, cov_est[:-(self.stats_dim - i - 1), :-(self.stats_dim - i - 1)], delimiter=",")
-                else:
-                    np.savetxt(self.scratch_file, cov_est, delimiter=",")
-                prior_bound_str = " ".join(map(str, prev_prior_bounds))
-                rcmd = "Rscript R/pmvnorm.R %s %f %s" % (self.scratch_file, np.log10(alpha_spend[i]), prior_bound_str)
-                output = subprocess.check_output(
-                    rcmd,
-                    stderr=subprocess.STDOUT,
-                    shell=True,
-                    encoding='UTF-8'
-                )
-                boundary = float(output[4:])
-                logging.info(rcmd)
-                logging.info("Test bound %f, est %f, log alpha %f, prior_bound_str %s", boundary, estimate[i], np.log10(alpha_spend[i]), prior_bound_str)
-            prev_prior_bounds.append(boundary)
-            print(prev_prior_bounds)
+        calib_lower_bound = self._get_boundary(prior_bounds, cov_est[:-1,:-1], 1 - alpha_spend[0])
+        calib_upper_bound = self._get_boundary(prior_bounds, cov_est[:-1,:-1], alpha_spend[1])
+        prior_bounds = np.vstack([prior_bounds, [calib_upper_bound, calib_lower_bound]])
+        auc_lower_bound = self._get_boundary(prior_bounds, cov_est, alpha_spend[1])
+        boundaries = np.array([
+            [calib_upper_bound, calib_lower_bound],
+            [-np.inf, auc_lower_bound]
+            ])
 
-        boundaries = np.array(prev_prior_bounds[-self.stats_dim:])
-        test_res = np.all((estimate - null_constraint[:,1]) > boundaries)
+        test_res1 = (estimate[0] - null_constraint[0,0]) > calib_lower_bound
+        test_res2 = (estimate[0] - null_constraint[0,1]) < calib_upper_bound
+        test_res3 = (estimate[1] - null_constraint[1,1]) > auc_lower_bound
+        test_res = test_res1 and test_res2 and test_res3
         print("bounds", boundaries)
         print("est diff", estimate - null_constraint[:,1])
-        return test_res, boundary
+        print(test_res1, test_res2, test_res3)
+        logging.info("TEST REST %d %d %d", test_res1, test_res2, test_res3)
+        print(test_res)
+        logging.info("final TEST REST %d", test_res)
+        return test_res, boundaries
 

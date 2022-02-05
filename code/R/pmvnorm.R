@@ -14,21 +14,23 @@ corr_mat_df = read.csv(args[1], sep=",", header = F)
 corr_mat = data.matrix(corr_mat_df)
 corr_mat = unname(corr_mat)
 corr_mat = (corr_mat + t(corr_mat))/2
-alpha_spend = 10^as.numeric(args[2])
-upper_prior = as.numeric(args[seq(3, length(args))])
+
+bounds_df = read.csv(args[2], sep=",", header = F)
+bounds_mat = data.matrix(bounds_df)
+
+alpha_spend = 10^as.numeric(args[3])
 
 get_sequential_spend <- function(thres) {
-  lower_all = c(rep(-Inf, length(upper_prior)), thres)
-  upper_all = c(upper_prior, Inf)
+  lower_all = c(bounds_df[,1], thres)
+  upper_all = c(bounds_df[,2], Inf)
   res = pmvnorm(lower=lower_all, upper = upper_all, sigma=corr_mat, maxpts=50000, abseps =0.00001)
   res
 }
-
 
 get_sequential_spend_diff <- function(thres) {
   reject_prob = get_sequential_spend(thres)
   reject_prob - alpha_spend
 }
 
-res = uniroot(get_sequential_spend_diff, c(0, max(upper_prior) + 100))
+res = uniroot(get_sequential_spend_diff, c(0, max(bounds_df[,2]) + 100))
 print(res$root)

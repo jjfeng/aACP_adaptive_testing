@@ -50,7 +50,7 @@ nest.add(
 nest.add(
     'se_factor',
     [
-        1,
+        1.96,
     ],
     label_func=lambda c: "se_factor_%.3f" % c)
 
@@ -192,7 +192,7 @@ nest.pop("seed")
 @nest.add_target_with_env(localenv)
 def plot_avg(env, outdir, c):
     cmd = [
-        'python plot_simulation_calib_auc.py',
+        'python plot_simulation_improve.py',
 	'--results',
         ",".join(["simulation_calib_auc/%s" % r for r in c['summary_res']]),
 	'--max-batch',

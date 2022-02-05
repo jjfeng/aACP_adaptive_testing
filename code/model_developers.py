@@ -413,6 +413,17 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
     """
     Just do online learning on a separate dataset
     """
+    def __init__(self, hypo_tester, validation_frac: float = 0.2, min_valid_dat_size: int = 200, power: float = 0.5, ni_margin: float = 0.01, calib_ni_margin: float = 0.2, predef_alpha: float = 0.1, se_factor: float = 1.96):
+        self.modeler = MyLogisticRegression(penalty="l2")
+        self.hypo_tester = hypo_tester
+        self.validation_frac = validation_frac
+        self.min_valid_dat_size = min_valid_dat_size
+        self.ni_margin = ni_margin
+        self.calib_ni_margin = calib_ni_margin
+        self.power = power
+        self.predef_alpha = predef_alpha
+        self.se_factor = se_factor
+
     def _do_power_calc_test_bound(self, orig_mdl, new_mdl, min_diff:float, valid_dat: Dataset, alpha: float, num_test: int, num_reps: int = 100):
         """
         @param valid_dat: data for evaluating performance of model
@@ -507,7 +518,7 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
                 logging.info("TEST (avg) diff %f", adapt_test_diff)
 
                 null_constraints = np.array([
-                        [0,-0.1],
+                        [-self.calib_ni_margin, self.calib_ni_margin],
                         [0,adapt_test_diff],
                         ])
                 test_res = mtp_mechanism.get_test_res(
