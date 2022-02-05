@@ -23,7 +23,7 @@ MTP_MECH_LIST = [
     #"bonferroni",
     "graphical_bonf",
     #"graphical_ffs",
-    #"graphical_prespec",
+    "graphical_prespec",
 ]
 
 nest.add(
@@ -66,6 +66,10 @@ def create_model_developer(env, outdir, c):
         c['se_factor'],
         '--power',
         c['power'],
+        '--ni-margin',
+        0.02,
+        '--calib-ni-margin',
+        0.2,
         '--alpha',
         0.1,
         '--model-type',
