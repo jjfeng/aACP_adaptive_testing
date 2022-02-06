@@ -204,8 +204,7 @@ nest.pop("seed")
 @nest.add_target_with_env(localenv)
 def plot_avg(env, outdir, c):
     cmd = [
-        # TODO make its own plotting script
-        'python plot_simulation_improve.py',
+        'python plot_experiment_eicu.py',
 	'--results',
         ",".join(["experiment_eicu/%s" % r for r in c['summary_res']]),
 	'--max-batch',

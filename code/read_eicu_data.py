@@ -54,10 +54,10 @@ def main():
     patient_stay_ids = dat[:,0]
     window_offsets = dat[:,1]
     dat = dat[:,2:]
-    print(patient_stay_ids)
 
     # Shuffle patient ids
     num_uniq_ids = np.unique(patient_stay_ids).size
+    logging.info("uniq patient ids %d, train %d", num_uniq_ids, args.init_train_n)
     rand_ids = np.random.choice(np.unique(patient_stay_ids), num_uniq_ids, replace=False)
     print("RAND", rand_ids, num_uniq_ids)
     init_train_idxs = rand_ids[:args.init_train_n]
@@ -86,13 +86,14 @@ def main():
                     x=dat_slice[:,:-1],
                     y=dat_slice[:,-1:],
             ))
+    logging.info("train batches %d", len(iid_train_dats))
     assert iid_train_dats
     full_dat = FullDataset(
             init_train_dat,
             iid_train_dats,
             reuse_test_dat,
             None)
-    print(init_train_dat.size, iid_train_dats[0].size, reuse_test_dat.size)
+    logging.info("init train dat %d, reuse test dat size %d", init_train_dat.size, reuse_test_dat.size)
 
     with open(args.out_file, "wb") as f:
         pickle.dump(

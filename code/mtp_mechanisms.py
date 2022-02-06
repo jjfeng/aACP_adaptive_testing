@@ -240,7 +240,7 @@ class GraphicalParallelMTP(GraphicalFFSMTP):
                 (1 - self.first_pres_weight)/num_adapt_queries * self.parallel_ratio
                 if i < num_adapt_queries
                 else 0
-            )
+                )
             self.parallel_tree_nodes.append(Node(
                 weight,
                 history=[None] * i,
