@@ -277,7 +277,7 @@ class OnlineAdaptLossModeler(LockedModeler):
                     alpha=self.predef_alpha)
 
             logging.info("predef batch %d power %.5f", adapt_read_idx, predef_test_power)
-            if predef_test_power >= self.power/4:
+            if predef_test_power >= self.power:
                 # Predef will not test if power is terrible
                 predef_test_mdls.append(predef_lr)
                 logging.info("predef TEST idx %d, adapt idx %d, batch %d", len(predef_test_mdls) - 1, test_idx, adapt_read_idx)
@@ -477,7 +477,7 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
         # Test AUC
         logging.info("power calc: AUC SIM lower %s", auc_sim)
 
-        if auc_sim < 0:
+        if (auc_sim < 0) or not np.isfinite(auc_sim):
             return 0, auc_sim
 
         candidate_diffs = np.arange(min_diff, auc_sim, self.ni_margin)[:1]

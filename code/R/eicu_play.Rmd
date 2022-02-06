@@ -18,7 +18,7 @@ eicu_hypotension_data$`heartrate_1-obs`
 eicu_hypotension_data$`respiration_1-obs`
 eicu_hypotension_data$admissionheight
 eicu_hypotension_data$window_offset[eicu_hypotension_data$patientunitstayid == 1001397]
-eicu_hypotension_data
+icu_hypotension_data
 ```
 
 
@@ -70,6 +70,8 @@ test_dat <- eicu_hypotension_data[-train_idx,]
 danger_stays = unique(eicu_hypotension_new$patientunitstayid[eicu_hypotension_new$y == 1])
 length(danger_stays)
 eicu_hypotension_new$y[eicu_hypotension_new$patientunitstayid == danger_stays[30]]
+
+table(eicu_hypotension_new$patientunitstayid)
 
 stay_id = danger_stays[30]
 train_dat <- eicu_hypotension_new[eicu_hypotension_new$patientunitstayid != stay_id,seq(3,ncol(eicu_hypotension_new))]
