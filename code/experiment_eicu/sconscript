@@ -13,6 +13,7 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 CLUSTER_STR = localenv['cluster']
 NUM_SEEDS = localenv['num_seeds']
+INIT_TRAIN = 60
 FWER = 0.1
 EICU_DATA = "../data/eicu_hypotension_data.csv"
 MTP_MECH_LIST = [
@@ -84,7 +85,7 @@ def create_model_developer(env, outdir, c):
         '--valid-frac',
         0.5,
         '--min-valid-dat-size',
-        100,
+        200,
         '--out ${TARGETS[0]}'
     ]
     return env.Command(
@@ -126,12 +127,18 @@ nest.add(
         1,
     ],
     label_func=lambda c: "train_batch_%d" % c)
+
 nest.add(
     'reuse_iters',
     [
         15,
     ],
     label_func=lambda c: "reuse_iters_%d" % c)
+
+nest.add(
+    'random_pick_n',
+    [10],
+    label_func=lambda c: "random_pick_%d" % c)
 
 nest.add_aggregate("summary_res", list)
 nest.add(
@@ -147,11 +154,14 @@ def generate_data(env, outdir, c):
         c['seed'],
         '--dat-file',
         EICU_DATA,
-        '--init-train-n 75',
+        '--init-train-n',
+        INIT_TRAIN,
         '--train-batch-n',
         c['train_batch_n'],
         '--reuse-test-n',
         c['reuse_test_n'],
+        '--random-pick-n',
+        c['random_pick_n'],
         '--out ${TARGETS[0]}',
         '--log-file ${TARGETS[1]}']
     return env.Command(
@@ -208,7 +218,7 @@ def plot_avg(env, outdir, c):
 	'--results',
         ",".join(["experiment_eicu/%s" % r for r in c['summary_res']]),
 	'--max-batch',
-        600//c['train_batch_n'],
+        (1000 - INIT_TRAIN)//c['train_batch_n'],
 	'--plot-file ${TARGETS[0]}',
     ]
     return env.Command(

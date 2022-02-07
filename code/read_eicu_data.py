@@ -19,6 +19,7 @@ def parse_args():
     parser.add_argument("--reuse-test-n", type=int, default=300, help="how much data is in the reusable test data")
     parser.add_argument("--init-train-n", type=int, default=10, help="how much data was used to train the initial model")
     parser.add_argument("--train-batch-n", type=int, default=1, help="how much data is observed between each iteration, in the simulated data stream")
+    parser.add_argument("--random-pick-n", type=int, default=1, help="how many observations to randomly pick within a subject")
     parser.add_argument("--dat-file", type=str)
     parser.add_argument("--out-file", type=str, default="_output/data.pkl")
     parser.add_argument("--log-file", type=str, default="_output/log.txt")
@@ -61,10 +62,10 @@ def main():
     rand_ids = np.random.choice(np.unique(patient_stay_ids), num_uniq_ids, replace=False)
     print("RAND", rand_ids, num_uniq_ids)
     init_train_idxs = rand_ids[:args.init_train_n]
-    init_train_dat = _get_data(dat, patient_stay_ids, init_train_idxs, max_random_pick=5)
+    init_train_dat = _get_data(dat, patient_stay_ids, init_train_idxs, max_random_pick=args.random_pick_n)
     start_idx = args.init_train_n
     reuse_test_idxs = rand_ids[start_idx: start_idx + args.reuse_test_n]
-    reuse_test_dat = _get_data(dat, patient_stay_ids, reuse_test_idxs, max_random_pick=10)
+    reuse_test_dat = _get_data(dat, patient_stay_ids, reuse_test_idxs, max_random_pick=args.random_pick_n)
 
     # Split data
     init_train_dat = Dataset(
@@ -80,7 +81,7 @@ def main():
     for batch_start_idx in range(start_idx, rand_ids.size, args.train_batch_n):
         #batch_start_idx = start_idx + batch_idx * args.train_batch_n
         batch_ids = rand_ids[batch_start_idx: batch_start_idx + args.train_batch_n]
-        dat_slice = _get_data(dat, patient_stay_ids, batch_ids, max_random_pick=5)
+        dat_slice = _get_data(dat, patient_stay_ids, batch_ids, max_random_pick=args.random_pick_n)
         iid_train_dats.append(
                 Dataset(
                     x=dat_slice[:,:-1],

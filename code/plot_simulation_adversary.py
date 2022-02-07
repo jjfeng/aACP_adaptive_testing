@@ -72,7 +72,8 @@ def main():
         kind="line",
         style="Procedure",
         facet_kws={"sharey": False, "sharex": True},
-        linewidth=3
+        linewidth=3,
+        ci="sd",
     )
     rel_plt.set_titles('{row_name}' ' | ' '{col_name}')
     print(rel_plt.axes_dict.keys())
