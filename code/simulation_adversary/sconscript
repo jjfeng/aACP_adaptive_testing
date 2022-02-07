@@ -47,7 +47,7 @@ def create_model_developer(env, outdir, c):
         'adversary',
         '--update-incr',
         #0.1, # works for log lik
-        0.2 # works for AUC
+        0.4, # works for AUC
         '--sparse-p',
         SPARSE_P,
         '--p',
