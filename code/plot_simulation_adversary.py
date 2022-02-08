@@ -39,13 +39,12 @@ def main():
     measure_dict = {
             'curr_diff': 'curr_diff',
             'auc': 'auc',
-            #'nll': 'nll',
             'did_approval': 'did_approval'
             }
     data_dict = {'test':'Test', 'reuse_test': 'Reusable Test'}
     mtp_dict = {
             'binary_thres': 'BinaryThres',
-            'bonferroni': 'bonf_std',
+            'bonferroni': 'Bonferroni',
             'graphical_bonf_thres': 'bonfSRGP',
             'graphical_ffs': 'fsSRGP',
             'graphical_par': "presSRGP"
@@ -58,6 +57,8 @@ def main():
     all_res["Procedure"] = all_res.procedure.map(mtp_dict)
     all_res["Dataset"] = all_res.dataset.map(data_dict)
     all_res = all_res.reset_index()
+    #all_res[all_res.Measure == "did_approval", "Dataset"] = "Reusable Test"
+    all_res.Dataset[all_res.Measure == "did_approval"] = "Reusable Test"
     max_iter = all_res.Iteration.max()
     print(all_res[(all_res.variable == "did_approval") & (all_res.Iteration == max_iter)].mean())
 
@@ -67,21 +68,21 @@ def main():
         x="Iteration",
         y="Value",
         hue="Procedure",
-        row="Dataset",
+        #row="Dataset",
         col="Measure",
         kind="line",
-        style="Procedure",
+        style="Dataset",
         facet_kws={"sharey": False, "sharex": True},
         linewidth=3,
         ci="sd",
     )
-    rel_plt.set_titles('{row_name}' ' | ' '{col_name}')
+    #rel_plt.set_titles('{row_name}' ' | ' '{col_name}')
     print(rel_plt.axes_dict.keys())
     #plt.delaxes(rel_plt.axes_dict[('Reusable Test', 'did_approval')])
-    num_approve_ax = rel_plt.axes_dict[('Test', 'did_approval')]
-    num_approve_ax.axhline(y=0.1, color='dimgray', linestyle='--')
-    num_approve_ax.set_title("Error rate")
-    num_approve_ax.set_ylim(-0.05,1)
+    #num_approve_ax = rel_plt.axes_dict[('Test', 'did_approval')]
+    #num_approve_ax.axhline(y=0.1, color='dimgray', linestyle='--')
+    #num_approve_ax.set_title("Error rate")
+    #num_approve_ax.set_ylim(-0.05,1)
     plt.savefig(args.plot_file)
     print("Fig", args.plot_file)
 

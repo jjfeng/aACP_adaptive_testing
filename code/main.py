@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from matplotlib import pyplot as plt
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score, plot_roc_curve, roc_curve, log_loss
 
 from dataset import *
@@ -49,9 +50,11 @@ def get_deployed_scores(mtp_mech, test_hist, test_dat, max_iter):
         auc = mtp_mech.hypo_tester.get_auc(test_dat.y, pred_prob)
         nll = log_loss(test_dat.y, pred_prob)
 
-        pred_y = mdl.predict(test_dat.x)
-        sensitivity = np.sum((pred_y == test_y) * (test_y))/np.sum(test_y)
-        specificity = np.sum((pred_y == test_y) * (1 - test_y))/np.sum(1 - test_y)
+        # calibration
+        lr_calib = LogisticRegression()
+        lr_calib.fit(np.log(pred_prob/(1 - pred_prob)), test_dat.y)
+        calib_slope = lr_calib.coef_[0,0]
+        calib_intercept = lr_calib.intercept_[0]
 
         next_approve_time = (
             test_hist.approval_times[approve_idx + 1]
@@ -62,8 +65,8 @@ def get_deployed_scores(mtp_mech, test_hist, test_dat, max_iter):
             scores.append({
                 "auc": auc,
                 "nll": nll,
-                "sensitivity": sensitivity,
-                "specificity": specificity,
+                "calib_slope": calib_slope,
+                "calib_intercept": calib_intercept,
                 "time": idx
                 })
     scores = pd.DataFrame(scores)
