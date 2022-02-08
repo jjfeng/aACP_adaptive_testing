@@ -75,7 +75,7 @@ def create_model_developer(env, outdir, c):
         '--ni-margin',
         0.01,
         '--calib-ni-margin',
-        0.1,
+        0.02,
         '--alpha',
         0.1,
         '--model-type',
@@ -131,7 +131,7 @@ nest.add(
 nest.add(
     'reuse_iters',
     [
-        15,
+        15
     ],
     label_func=lambda c: "reuse_iters_%d" % c)
 

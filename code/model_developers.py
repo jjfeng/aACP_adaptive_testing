@@ -69,7 +69,7 @@ class LockedModeler:
         elif model_type == "RandomForest":
             self.modeler = RandomForestClassifier()
         elif model_type == "GBT":
-            self.modeler = GradientBoostingClassifier(loss="deviance", max_depth=1, n_estimators=25)
+            self.modeler = GradientBoostingClassifier(loss="deviance", max_depth=1, n_estimators=50)
         else:
             raise NotImplementedError("model type missing")
 
@@ -431,27 +431,7 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
         self.predef_alpha = predef_alpha
         self.se_factor = se_factor
 
-    def _do_power_calc_test_bound(self, orig_mdl, new_mdl, min_diff:float, valid_dat: Dataset, alpha: float, num_test: int, num_reps: int = 200):
-        """
-        @param valid_dat: data for evaluating performance of model
-        @param alpha: the type I error of the current test node
-        """
-        logging.info("predef alpha %f", alpha)
-        # use valid_dat to evaluate the model first
-        self.hypo_tester.set_test_dat(valid_dat)
-        res_df, orig_est , new_est = self.hypo_tester._get_observations(orig_mdl, new_mdl)
-        res_df = res_df.to_numpy()
-        mu_sim_raw = np.mean(res_df, axis=0)
-        cov_est = np.cov(res_df.T)
-        auc_sim = mu_sim_raw[1] - np.sqrt(cov_est[1,1]/valid_dat.size) * self.se_factor
-        calib_mu_lower = mu_sim_raw[0] - np.sqrt(cov_est[0,0]/valid_dat.size) * self.se_factor
-        calib_mu_upper= mu_sim_raw[0] + np.sqrt(cov_est[0,0]/valid_dat.size) * self.se_factor
-
-        calib_var = cov_est[0,0]
-        auc_var = cov_est[1,1]
-        logging.info("validation mu: %s", mu_sim_raw)
-        logging.info("validation var calbi %f auc %f", calib_var, auc_var)
-
+    def _do_calib_power_test(self, calib_mu_lower, calib_mu_upper, calib_var, alpha, num_test, num_reps):
         # Test calib lower
         calib_obs_sim = np.random.normal(
                 loc=calib_mu_lower,
@@ -461,7 +441,7 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
         logging.info("calib power lower %f", candidate_power)
         if candidate_power < self.power:
             logging.info("abort calibration lower %f", candidate_power)
-            return 0, auc_sim
+            return False
 
         # Test calib upper
         calib_obs_sim = np.random.normal(
@@ -472,6 +452,37 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
         logging.info("calib power upper %f", candidate_power)
         if candidate_power < self.power:
             logging.info("abort calibration upper %f", candidate_power)
+            return False
+        return True
+
+    def _do_power_calc_test_bound(self, orig_mdl, new_mdl, min_diff:float, valid_dat: Dataset, alpha: float, num_test: int, num_reps: int = 200):
+        """
+        @param valid_dat: data for evaluating performance of model
+        @param alpha: the type I error of the current test node
+        """
+        logging.info("predef alpha %f", alpha)
+        # use valid_dat to evaluate the model first
+        self.hypo_tester.set_test_dat(valid_dat)
+        res_df, orig_est, new_est = self.hypo_tester._get_observations(orig_mdl, new_mdl)
+        res_df = res_df.to_numpy()
+        mu_sim_raw = np.mean(res_df, axis=0)
+        cov_est = np.cov(res_df.T)
+        auc_sim = mu_sim_raw[2] - np.sqrt(cov_est[2,2]/valid_dat.size) * self.se_factor
+        calib_slope_lower = mu_sim_raw[0] - np.sqrt(cov_est[0,0]/valid_dat.size) * self.se_factor
+        calib_slope_upper= mu_sim_raw[0] + np.sqrt(cov_est[0,0]/valid_dat.size) * self.se_factor
+        calib_intercept_lower = mu_sim_raw[1] - np.sqrt(cov_est[1,1]/valid_dat.size) * self.se_factor
+        calib_intercept_upper= mu_sim_raw[1] + np.sqrt(cov_est[1,1]/valid_dat.size) * self.se_factor
+
+        calib_slope_var = cov_est[0,0]
+        calib_intercept_var = cov_est[1,1]
+        auc_var = cov_est[2,2]
+        logging.info("validation mu: %s", mu_sim_raw)
+        logging.info("validation var calbi %f %f auc %f", calib_slope_var, calib_intercept_var, auc_var)
+
+        # Test calib lower
+        is_slope_good = self._do_calib_power_test(calib_slope_lower, calib_slope_upper, calib_slope_var, alpha, num_test, num_reps)
+        is_intercept_good = self._do_calib_power_test(calib_intercept_lower, calib_intercept_upper, calib_intercept_var, alpha, num_test, num_reps)
+        if not is_slope_good or not is_intercept_good:
             return 0, auc_sim
 
         # Test AUC
@@ -556,6 +567,7 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
                 logging.info("TEST (avg) diff %f", adapt_test_diff)
 
                 null_constraints = np.array([
+                        [-self.calib_ni_margin, self.calib_ni_margin],
                         [-self.calib_ni_margin, self.calib_ni_margin],
                         [0,adapt_test_diff],
                         ])

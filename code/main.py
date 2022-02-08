@@ -51,8 +51,8 @@ def get_deployed_scores(mtp_mech, test_hist, test_dat, max_iter):
         nll = log_loss(test_dat.y, pred_prob)
 
         # calibration
-        lr_calib = LogisticRegression()
-        lr_calib.fit(np.log(pred_prob/(1 - pred_prob)), test_dat.y)
+        lr_calib = LogisticRegression(penalty="none")
+        lr_calib.fit(np.log(pred_prob/(1 - pred_prob)).reshape((-1,1)), test_dat.y)
         calib_slope = lr_calib.coef_[0,0]
         calib_intercept = lr_calib.intercept_[0]
 

@@ -153,9 +153,11 @@ class LogLikHypothesisTester(AUCHypothesisTester):
 
 class CalibHypothesisTester(AUCHypothesisTester):
     def get_influence_func(self, mdl):
-        pred_y = mdl.predict_proba(self.test_dat.x)[:,1]
+        pred_y = mdl.predict_proba(self.test_dat.x)[:,1:]
+        pred_y_aug1 = np.concatenate([pred_y, np.ones(pred_y.shape)], axis=1).T
         test_y = self.test_dat.y.flatten()
-        influence_func = (pred_y - test_y) * pred_y
+        influence_func = (pred_y.flatten() - test_y) * pred_y_aug1
+        influence_func = influence_func.T
         return influence_func, influence_func.mean(axis=0)
 
 class CalibAUCHypothesisTester(AUCHypothesisTester):
@@ -177,15 +179,15 @@ class CalibAUCHypothesisTester(AUCHypothesisTester):
         auc_ic, auc_diff = self.auc_hypo_tester.get_influence_func(mdl)
         calib_ic, calib = self.calib_hypo_tester.get_influence_func(mdl)
 
-        influence_func = np.hstack([calib_ic.reshape((-1,1)), auc_ic.reshape((-1,1))])
-        estimate = np.array([calib, auc_diff])
+        influence_func = np.hstack([calib_ic, auc_ic.reshape((-1,1))])
+        estimate = np.concatenate([calib, [auc_diff]])
 
         return influence_func, estimate
 
     def _get_observations(self, orig_mdl, new_mdl):
         orig_ic, orig_est = self.get_influence_func(orig_mdl)
         new_ic, new_est = self.get_influence_func(new_mdl)
-        df = pd.DataFrame(new_ic - orig_ic, columns=["calib_score_ic", "auc_diff_ic"])
+        df = pd.DataFrame(new_ic - orig_ic, columns=["calib_slope_ic", "calib_intercept_ic", "auc_diff_ic"])
 
         return df, orig_est, new_est
 
@@ -238,28 +240,38 @@ class CalibAUCHypothesisTester(AUCHypothesisTester):
         num_particles =  np.sum(1/(alpha * node_weights))
         node_alpha_spend = alpha * node_weights[-1]
         alpha_spend = [
-                node_alpha_spend * 0.5 * self.calib_alloc_frac, # alloted to calib upper
-                node_alpha_spend * 0.5 * self.calib_alloc_frac, # alloted to calib upper
+                node_alpha_spend * 0.25 * self.calib_alloc_frac, # alloted to calib upper
+                node_alpha_spend * 0.25 * self.calib_alloc_frac, # alloted to calib upper
+                node_alpha_spend * 0.25 * self.calib_alloc_frac, # alloted to calib upper
+                node_alpha_spend * 0.25 * self.calib_alloc_frac, # alloted to calib upper
                 node_alpha_spend * (1 - self.calib_alloc_frac) # alloted to auc
                 ]
         print("node_wei", node_weights, alpha, alpha_spend)
-        calib_lower_bound = self._get_boundary(prior_bounds, cov_est[:-1,:-1], alpha_spend[0], alt_greater=True)
-        calib_upper_bound = self._get_boundary(prior_bounds, cov_est[:-1,:-1], alpha_spend[1], alt_greater=False)
-        prior_bounds = np.vstack([prior_bounds, [calib_upper_bound, calib_lower_bound]])
-        auc_lower_bound = self._get_boundary(prior_bounds, cov_est, alpha_spend[2], alt_greater=True)
+        calib_slope_lower_bound = self._get_boundary(prior_bounds, cov_est[:-2,:-2], alpha_spend[0], alt_greater=True)
+        calib_slope_upper_bound = self._get_boundary(prior_bounds, cov_est[:-2,:-2], alpha_spend[1], alt_greater=False)
+        prior_bounds = np.vstack([prior_bounds, [calib_slope_upper_bound, calib_slope_lower_bound]])
+        calib_intercept_lower_bound = self._get_boundary(prior_bounds, cov_est[:-1,:-1], alpha_spend[2], alt_greater=True)
+        calib_intercept_upper_bound = self._get_boundary(prior_bounds, cov_est[:-1,:-1], alpha_spend[3], alt_greater=False)
+        prior_bounds = np.vstack([prior_bounds, [calib_intercept_upper_bound, calib_intercept_lower_bound]])
+        auc_lower_bound = self._get_boundary(prior_bounds, cov_est, alpha_spend[4], alt_greater=True)
         boundaries = np.array([
-            [calib_upper_bound, calib_lower_bound],
+            [calib_slope_upper_bound, calib_slope_lower_bound],
+            [calib_intercept_upper_bound, calib_intercept_lower_bound],
             [-np.inf, auc_lower_bound]
             ])
 
-        test_res1 = (estimate[0] - null_constraint[0,0]) > calib_lower_bound
-        test_res2 = (estimate[0] - null_constraint[0,1]) < calib_upper_bound
-        test_res3 = (estimate[1] - null_constraint[1,1]) > auc_lower_bound
+        test_res = [
+                (estimate[0] - null_constraint[0,0]) > calib_slope_lower_bound,
+                (estimate[0] - null_constraint[0,1]) < calib_slope_upper_bound,
+                (estimate[1] - null_constraint[1,0]) > calib_intercept_lower_bound,
+                (estimate[1] - null_constraint[1,1]) < calib_intercept_upper_bound,
+                (estimate[2] - null_constraint[2,1]) > auc_lower_bound,
+                ]
         logging.info("estimate %s", estimate)
         logging.info("null_constraint %s", null_constraint)
-        logging.info("boundaires %f %f %f", calib_lower_bound, calib_upper_bound, auc_lower_bound)
-        test_res = test_res1 and test_res2 and test_res3
-        logging.info("TEST REST %d %d %d", test_res1, test_res2, test_res3)
+        logging.info("auc boundaires %f", auc_lower_bound)
+        logging.info("TEST REST %s", test_res)
+        test_res = all(test_res)
         logging.info("final TEST REST %d", test_res)
         return test_res, boundaries
 
