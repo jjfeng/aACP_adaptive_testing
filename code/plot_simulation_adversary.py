@@ -37,9 +37,9 @@ def main():
 
     # Rename all the things for prettier figures
     measure_dict = {
-            'curr_diff': 'curr_diff',
-            'auc': 'auc',
-            'did_approval': 'did_approval'
+            'curr_diff': 'Detected improvement',
+            'auc': 'AUC',
+            'did_approval': 'Error rate'
             }
     data_dict = {'test':'Test', 'reuse_test': 'Reusable Test'}
     mtp_dict = {
@@ -76,7 +76,7 @@ def main():
         linewidth=3,
         ci="sd",
     )
-    #rel_plt.set_titles('{row_name}' ' | ' '{col_name}')
+    rel_plt.set_titles('{col_name}')
     print(rel_plt.axes_dict.keys())
     #plt.delaxes(rel_plt.axes_dict[('Reusable Test', 'did_approval')])
     #num_approve_ax = rel_plt.axes_dict[('Test', 'did_approval')]
