@@ -22,9 +22,9 @@ FWER = 0.1
 MTP_MECH_LIST = [
     "binary_thres_mtp",
     #"bonferroni",
-    #"graphical_bonf",
-    #"graphical_ffs",
-    #"graphical_prespec",
+    "graphical_bonf",
+    "graphical_ffs",
+    "graphical_prespec",
 ]
 
 nest.add(
@@ -47,7 +47,7 @@ def create_model_developer(env, outdir, c):
         'adversary',
         '--update-incr',
         #0.1, # works for log lik
-        0.4, # works for AUC
+        0.6, # works for AUC
         '--sparse-p',
         SPARSE_P,
         '--p',

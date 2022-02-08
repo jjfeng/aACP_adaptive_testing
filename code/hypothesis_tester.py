@@ -24,7 +24,8 @@ def get_log_lik(y_true, y_pred):
 
 class HypothesisTester:
     def make_scratch(self, scratch_file: str):
-        self.scratch_file = scratch_file
+        self.scratch_file_cov = scratch_file.replace(".txt", "_cov.txt")
+        self.scratch_file_bounds = scratch_file.replace(".txt", "_bounds.txt")
 
     def get_auc(self, test_y, score_y):
         score_y0 = score_y[test_y == 0]
@@ -105,7 +106,7 @@ class AUCHypothesisTester(HypothesisTester):
         num_nodes = len(prior_nodes) + 1
         assert not np.any(np.isnan(cov_est))
         node_weights = np.array([prior_node.weight for prior_node in prior_nodes] + [node.weight])
-        prior_bounds = np.array([prior_node.upper_bound for prior_node in prior_nodes])
+        prior_bounds = np.concatenate([prior_node.bounds for prior_node in prior_nodes]) if prior_nodes else None
 
         test_res = False
         num_particles =  np.sum(1/(alpha * node_weights))
@@ -116,9 +117,9 @@ class AUCHypothesisTester(HypothesisTester):
             stat, pval = scipy.stats.ttest_1samp(node.obs.to_numpy().flatten(), popmean=null_constraint[0,1], alternative="greater")
             logging.info("tstat %f pval %f alpha %f", stat, pval, alpha_spend)
         else:
-            np.savetxt(self.scratch_file, cov_est, delimiter=",")
-            prior_bound_str = " ".join(map(str, prior_bounds))
-            rcmd = "Rscript R/pmvnorm.R %s %f %s" % (self.scratch_file, np.log10(alpha_spend), prior_bound_str)
+            np.savetxt(self.scratch_file_cov, cov_est, delimiter=",")
+            np.savetxt(self.scratch_file_bounds, prior_bounds, delimiter=",")
+            rcmd = "Rscript R/pmvnorm.R %s %s %f %d" % (self.scratch_file_cov, self.scratch_file_bounds, np.log10(alpha_spend), True)
             output = subprocess.check_output(
                 rcmd,
                 stderr=subprocess.STDOUT,
@@ -127,10 +128,13 @@ class AUCHypothesisTester(HypothesisTester):
             )
             boundary = float(output[4:])
             logging.info(rcmd)
-            logging.info("Test bound %f, est %f, log alpha %f, prior_bound_str %s", boundary, estimate, np.log10(alpha_spend), prior_bound_str)
+            logging.info("Test bound %f, est %f, log alpha %f", boundary, estimate, np.log10(alpha_spend))
 
         test_res = (test_stat - null_constraint[0,1]) > boundary
-        return test_res, boundary
+        boundaries = np.array([
+            [-np.inf, boundary]
+            ])
+        return test_res, boundaries
 
 class LogLikHypothesisTester(AUCHypothesisTester):
     def _get_observations(self, orig_mdl, new_mdl):
@@ -163,10 +167,6 @@ class CalibAUCHypothesisTester(AUCHypothesisTester):
         self.auc_hypo_tester = AUCHypothesisTester()
         self.calib_hypo_tester = CalibHypothesisTester()
         self.calib_alloc_frac = calib_alloc_frac
-
-    def make_scratch(self, scratch_file: str):
-        self.scratch_file_cov = scratch_file.replace(".txt", "_cov.txt")
-        self.scratch_file_bounds = scratch_file.replace(".txt", "_bounds.txt")
 
     def set_test_dat(self, test_dat):
         self.test_dat = test_dat
