@@ -58,14 +58,13 @@ def main():
 
     # Rename all the things for prettier figures
     measure_dict = {
-            'curr_diff': 'curr_diff',
-            'num_approvals': 'num_approvals',
-            'auc': 'auc',
+            'curr_diff': 'Detected improvement',
+            'num_approvals': 'Number of approvals',
+            'auc': 'AUC',
             }
-    data_dict = {'test':'Test', 'reuse_test': 'Reusable Test'}
     mtp_dict = {
             'binary_thres': 'BinaryThres',
-            'bonferroni': 'bonf_std',
+            'bonferroni': 'Bonferroni',
             'graphical_bonf_thres': 'bonfSRGP',
             'graphical_ffs': 'fsSRGP',
             'graphical_par': "presSRGP"
@@ -76,8 +75,9 @@ def main():
         }, axis=1)
     all_res["Measure"] = all_res.variable.map(measure_dict)
     all_res["Procedure"] = all_res.procedure.map(mtp_dict)
-    all_res["Dataset"] = all_res.dataset.map(data_dict)
+    all_res["Dataset"] = all_res.dataset
     all_res = all_res.reset_index()
+    all_res = all_res[(all_res.Measure != "AUC") | (all_res.dataset == "test")]
     max_iter = all_res.Iteration.max()
     print("NUM APPROVALS")
     print(all_res[
@@ -91,13 +91,12 @@ def main():
         x="batch_number",
         y="Value",
         hue="Procedure",
-        row="Dataset",
         col="Measure",
         kind="line",
         style="Procedure",
         facet_kws={"sharey": False, "sharex": True},
     )
-    rel_plt.set_titles('{row_name}' ' | ' '{col_name}')
+    rel_plt.set_titles('{col_name}')
     plt.savefig(args.plot_file)
     print("Fig", args.plot_file)
 
