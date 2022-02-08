@@ -60,7 +60,8 @@ def main():
     #all_res[all_res.Measure == "did_approval", "Dataset"] = "Reusable Test"
     all_res.Dataset[all_res.Measure == "did_approval"] = "Reusable Test"
     max_iter = all_res.Iteration.max()
-    print(all_res[(all_res.variable == "did_approval") & (all_res.Iteration == max_iter)].mean())
+    print(all_res[(all_res.variable == "did_approval") & (all_res.Iteration ==
+        max_iter)].groupby("Procedure").mean())
 
     sns.set_context("paper", font_scale=2.5)
     rel_plt = sns.relplot(
@@ -74,7 +75,7 @@ def main():
         style="Dataset",
         facet_kws={"sharey": False, "sharex": True},
         linewidth=3,
-        ci="sd",
+        #ci="sd",
     )
     rel_plt.set_titles('{col_name}')
     print(rel_plt.axes_dict.keys())
