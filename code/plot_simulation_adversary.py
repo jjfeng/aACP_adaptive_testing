@@ -57,8 +57,7 @@ def main():
     all_res["Procedure"] = all_res.procedure.map(mtp_dict)
     all_res["Dataset"] = all_res.dataset.map(data_dict)
     all_res = all_res.reset_index()
-    #all_res[all_res.Measure == "did_approval", "Dataset"] = "Reusable Test"
-    all_res.Dataset[all_res.Measure == "did_approval"] = "Reusable Test"
+    all_res.Dataset[all_res.Measure == "Error rate"] = "Reusable Test"
     max_iter = all_res.Iteration.max()
     print(all_res[(all_res.variable == "did_approval") & (all_res.Iteration ==
         max_iter)].groupby("Procedure").mean())
