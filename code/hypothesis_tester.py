@@ -114,8 +114,8 @@ class AUCHypothesisTester(HypothesisTester):
         test_stat = estimate
         if len(prior_nodes) == 0:
             boundary = scipy.stats.norm.ppf(1 - alpha_spend, scale=np.sqrt(cov_est[0,0]))
-            stat, pval = scipy.stats.ttest_1samp(node.obs.to_numpy().flatten(), popmean=null_constraint[0,1], alternative="greater")
-            logging.info("tstat %f pval %f alpha %f", stat, pval, alpha_spend)
+            #stat, pval = scipy.stats.ttest_1samp(node.obs.to_numpy().flatten(), popmean=null_constraint[0,1], alternative="greater")
+            #logging.info("tstat %f pval %f alpha %f", stat, pval, alpha_spend)
         else:
             np.savetxt(self.scratch_file_cov, cov_est, delimiter=",")
             np.savetxt(self.scratch_file_bounds, prior_bounds, delimiter=",")
