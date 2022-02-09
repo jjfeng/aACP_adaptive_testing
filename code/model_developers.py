@@ -67,7 +67,7 @@ class LockedModeler:
         if model_type == "Logistic":
             self.modeler = LogisticRegression(penalty="none", max_iter=10000)
         elif model_type == "RandomForest":
-            self.modeler = RandomForestClassifier(n_estimators=300, min_samples_leaf=100)
+            self.modeler = RandomForestClassifier(n_estimators=300, min_samples_leaf=100, criterion="entropy")
         elif model_type == "GBT":
             self.modeler = GradientBoostingClassifier(loss="deviance", max_depth=1, n_estimators=50)
         else:
@@ -200,7 +200,7 @@ class OnlineAdaptLossModeler(LockedModeler):
     def _create_train_valid_dat(self, dat: Dataset):
         valid_n = max(self.min_valid_dat_size, int(dat.size * self.validation_frac))
         train_dat = dat.subset(dat.size - valid_n)
-        #print("valid_n", valid_n, train_dat.size)
+        #print("valid_n", valid_n, train_dat.size, dat.size, self.validation_frac)
         valid_dat = dat.subset(start_n=dat.size - valid_n, n=dat.size)
         return train_dat, valid_dat
 
@@ -420,21 +420,20 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
     """
     Just do online learning on a separate dataset
     """
-    def __init__(self, model_type:str, hypo_tester, validation_frac: float = 0.2, min_valid_dat_size: int = 200, power: float = 0.5, ni_margin: float = 0.01, calib_ni_margin: float = 0.2, predef_alpha: float = 0.1, se_factor: float = 1.96):
+    def __init__(self, model_type:str, hypo_tester, validation_frac: float = 0.2, min_valid_dat_size: int = 200, power: float = 0.5, ni_margin: float = 0.01, calib_slope_ni_margin: float = 0.1, calib_intercept_ni_margin: float = 0.2, predef_alpha: float = 0.1, se_factor: float = 1.96):
         self._init_modeler(model_type)
         self.hypo_tester = hypo_tester
         self.validation_frac = validation_frac
         self.min_valid_dat_size = min_valid_dat_size
         self.ni_margin = ni_margin
-        self.calib_intercept_ni_margin = [-calib_ni_margin, calib_ni_margin]
-        self.calib_slope_ni_margin = [1 - calib_ni_margin, 1 + calib_ni_margin]
+        self.calib_intercept_ni_margin = [-calib_intercept_ni_margin, calib_intercept_ni_margin]
+        self.calib_slope_ni_margin = [1 - calib_slope_ni_margin, 1 + calib_slope_ni_margin]
         self.power = power
         self.predef_alpha = predef_alpha
         self.se_factor = se_factor
 
     def _do_calib_power_test(self, calib_mu_lower, calib_mu_upper, calib_var, alpha, num_test, num_reps, is_slope=False):
         calib_bounds = self.calib_slope_ni_margin if is_slope else self.calib_intercept_ni_margin
-        print("calib bounds", calib_bounds, is_slope)
 
         # Test calib lower
         calib_obs_sim = np.random.normal(
@@ -442,10 +441,9 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
                 scale=np.sqrt(calib_var), size=(num_test, num_reps))
         res = scipy.stats.ttest_1samp(calib_obs_sim, popmean=calib_bounds[0])
         candidate_power = np.mean(res.statistic > scipy.stats.norm.ppf(1 - alpha))
-        print("lower test", res.statistic.shape, candidate_power, res.statistic.mean())
-        1/0
+
         if candidate_power < self.power:
-            logging.info("abort calibration lower %f", candidate_power)
+            logging.info("abort calibration lower %f (bound %f)", candidate_power, calib_bounds[0])
             return False
 
         # Test calib upper
@@ -453,7 +451,6 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
                 loc=calib_mu_upper,
                 scale=np.sqrt(calib_var), size=(num_test, num_reps))
         res = scipy.stats.ttest_1samp(calib_obs_sim, popmean=calib_bounds[1])
-        print("upper test", res)
         candidate_power = np.mean(res.statistic < scipy.stats.norm.ppf(alpha))
         if candidate_power < self.power:
             logging.info("abort calibration upper %f", candidate_power)
@@ -482,7 +479,10 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
         calib_intercept_var = cov_est[1,1]
         auc_var = cov_est[2,2]
         logging.info("validation mu: %s", mu_sim_raw)
-        logging.info("validation var calbi %f %f auc %f", calib_slope_var, calib_intercept_var, auc_var)
+        logging.info("power sim mu: %f %f %f", auc_sim, calib_slope_lower, calib_intercept_lower)
+        #print("MU SIM", mu_sim_raw)
+        #print("MU bound", calib_slope_lower, calib_intercept_lower)
+        logging.info("validation var calbi %f %f auc %f", calib_slope_var/valid_dat.size, calib_intercept_var/valid_dat.size, auc_var/valid_dat.size)
 
         # Test calib lower
         is_slope_good = self._do_calib_power_test(calib_slope_lower, calib_slope_upper, calib_slope_var, alpha, num_test, num_reps, is_slope=True)
@@ -514,7 +514,6 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
 
         selected_thres = candidate_diffs[selected_idx]
         test_power = candidate_power[selected_idx]
-        1/0
         return test_power, selected_thres
 
 

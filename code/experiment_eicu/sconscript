@@ -13,7 +13,7 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 
 CLUSTER_STR = localenv['cluster']
 NUM_SEEDS = localenv['num_seeds']
-INIT_TRAIN = 550
+INIT_TRAIN = 80
 FWER = 0.1
 EICU_DATA = "../data/eicu_hypotension_data.csv"
 MTP_MECH_LIST = [
@@ -26,7 +26,7 @@ MTP_MECH_LIST = [
 
 nest.add(
     'reuse_test_n',
-    [500],
+    [400],
     label_func=lambda c: "test_%d" % c)
 
 nest.add(
@@ -39,8 +39,8 @@ nest.add(
 nest.add(
     'model_type',
     [
-        #"GBT",
-        "RandomForest",
+        "GBT",
+        #"RandomForest",
         #"Logistic", # hard to show improvement because performance maxes out too quickly
     ])
 
@@ -74,8 +74,10 @@ def create_model_developer(env, outdir, c):
         c['power'],
         '--ni-margin',
         0.01,
-        '--calib-ni-margin',
-        0.1,
+        '--calib-slope-ni-margin',
+        0.5,
+        '--calib-intercept-ni-margin',
+        1,
         '--alpha',
         0.1,
         '--model-type',

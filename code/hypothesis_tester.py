@@ -154,17 +154,23 @@ class LogLikHypothesisTester(AUCHypothesisTester):
 
 class CalibHypothesisTester(AUCHypothesisTester):
     def get_influence_func(self, mdl):
-        pred_y = mdl.predict_proba(self.test_dat.x)[:,1:]
+        pred_y = mdl.predict_proba(self.test_dat.x)[:,1]
+        #mask = np.where((pred_y < 0.1) & (pred_y > 0.05))[0]
+        mask = np.where(pred_y >0)[0]
+        restricted_test = self.test_dat.subset_idxs(mask)
+        pred_y = mdl.predict_proba(restricted_test.x)[:,1:]
+
+        #print("pred prob dist", np.quantile(pred_y.flatten(), [0.1,0.2,0.3,0.5,0.6,0.7,0.8,0.9]))
         calib_inputs = np.concatenate([np.log(pred_y/(1 - pred_y)), np.ones(pred_y.shape)], axis=1)
 
         calib_lr = LogisticRegression(penalty="none", verbose=0, max_iter=10000)
-        calib_lr.fit(calib_inputs[:,:1], self.test_dat.y.flatten())
+        calib_lr.fit(calib_inputs[:,:1], restricted_test.y.flatten())
         calib_slope = calib_lr.coef_[0,0]
         calib_intercept = calib_lr.intercept_[0]
         calib_pred_prob = calib_lr.predict_proba(calib_inputs[:,:1])[:,1]
         logging.info("recalib slope %f intercept %f", calib_slope, calib_intercept)
 
-        test_y = self.test_dat.y.flatten()
+        test_y = restricted_test.y.flatten()
         raw_influence_func = (calib_pred_prob - test_y) * calib_inputs.T
         cov_mat = np.cov(raw_influence_func)
 
