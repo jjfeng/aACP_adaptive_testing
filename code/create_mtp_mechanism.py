@@ -40,7 +40,7 @@ def get_hypo_tester(hypo_tester_str):
     elif hypo_tester_str == "auc":
         hypo_tester = AUCHypothesisTester()
     elif hypo_tester_str == "calib_auc":
-        hypo_tester = CalibAUCHypothesisTester()
+        hypo_tester = CalibZAUCHypothesisTester()
     else:
         raise NotImplementedError("dont know this hypothesis")
     return hypo_tester

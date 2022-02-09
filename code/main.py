@@ -51,10 +51,8 @@ def get_deployed_scores(mtp_mech, test_hist, test_dat, max_iter):
         nll = log_loss(test_dat.y, pred_prob)
 
         # calibration
-        lr_calib = LogisticRegression(penalty="none")
-        lr_calib.fit(np.log(pred_prob/(1 - pred_prob)).reshape((-1,1)), test_dat.y)
-        calib_slope = lr_calib.coef_[0,0]
-        calib_intercept = lr_calib.intercept_[0]
+        print("OUTCOME RATE", test_dat.y.mean())
+        calib_z = np.mean(test_dat.y - pred_prob)
 
         next_approve_time = (
             test_hist.approval_times[approve_idx + 1]
@@ -65,8 +63,7 @@ def get_deployed_scores(mtp_mech, test_hist, test_dat, max_iter):
             scores.append({
                 "auc": auc,
                 "nll": nll,
-                "calib_slope": calib_slope,
-                "calib_intercept": calib_intercept,
+                "calib": calib_z,
                 "time": idx
                 })
     scores = pd.DataFrame(scores)

@@ -69,7 +69,7 @@ class LockedModeler:
         elif model_type == "RandomForest":
             self.modeler = RandomForestClassifier(n_estimators=300, min_samples_leaf=50, criterion="entropy")
         elif model_type == "GBT":
-            self.modeler = GradientBoostingClassifier(loss="deviance", max_depth=1, n_estimators=50)
+            self.modeler = GradientBoostingClassifier(loss="deviance", max_depth=1, n_estimators=40)
         else:
             raise NotImplementedError("model type missing")
 
@@ -469,26 +469,21 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
         res_df = res_df.to_numpy()
         mu_sim_raw = np.mean(res_df, axis=0)
         cov_est = np.cov(res_df.T)
-        auc_sim = mu_sim_raw[2] - np.sqrt(cov_est[2,2]/valid_dat.size) * self.se_factor
-        calib_slope_lower = mu_sim_raw[0] - np.sqrt(cov_est[0,0]/valid_dat.size) * self.se_factor
-        calib_slope_upper= mu_sim_raw[0] + np.sqrt(cov_est[0,0]/valid_dat.size) * self.se_factor
-        calib_intercept_lower = mu_sim_raw[1] - np.sqrt(cov_est[1,1]/valid_dat.size) * self.se_factor
-        calib_intercept_upper= mu_sim_raw[1] + np.sqrt(cov_est[1,1]/valid_dat.size) * self.se_factor
+        auc_sim = mu_sim_raw[1] - np.sqrt(cov_est[1,1]/valid_dat.size) * self.se_factor
+        calib_intercept_lower = mu_sim_raw[0] - np.sqrt(cov_est[0,0]/valid_dat.size) * self.se_factor
+        calib_intercept_upper= mu_sim_raw[0] + np.sqrt(cov_est[0,0]/valid_dat.size) * self.se_factor
 
-        calib_slope_var = cov_est[0,0]
-        calib_intercept_var = cov_est[1,1]
-        auc_var = cov_est[2,2]
+        calib_intercept_var = cov_est[0,0]
+        auc_var = cov_est[1,1]
         logging.info("validation mu: %s", mu_sim_raw)
-        logging.info("power sim mu: %f %f %f", auc_sim, calib_slope_lower, calib_intercept_lower)
+        logging.info("power sim mu: %f %f %f", auc_sim, calib_intercept_lower, calib_intercept_upper)
         #print("MU SIM", mu_sim_raw)
         #print("MU bound", calib_slope_lower, calib_intercept_lower)
-        logging.info("validation var calbi %f %f auc %f", calib_slope_var/valid_dat.size, calib_intercept_var/valid_dat.size, auc_var/valid_dat.size)
+        logging.info("validation var calbi %f auc %f", calib_intercept_var/valid_dat.size, auc_var/valid_dat.size)
 
-        # Test calib lower
-        is_slope_good = self._do_calib_power_test(calib_slope_lower, calib_slope_upper, calib_slope_var, alpha, num_test, num_reps, is_slope=True)
         is_intercept_good = self._do_calib_power_test(calib_intercept_lower, calib_intercept_upper, calib_intercept_var, alpha, num_test, num_reps)
-        if not is_slope_good or not is_intercept_good:
-            logging.info("abort slope good?: %d intercept good?: %d", is_slope_good, is_intercept_good)
+        if not is_intercept_good:
+            logging.info("abort intercept good?: %d", is_intercept_good)
             return 0, auc_sim
 
         # Test AUC
@@ -549,7 +544,7 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
             predef_test_power, _ = self._do_power_calc_test_bound(
                     orig_mdl,
                     predef_lr,
-                    min_diff=len(predef_test_mdls) * self.ni_margin/4,
+                    min_diff=len(predef_test_mdls) * self.ni_margin/2,
                     valid_dat=predef_valid_dat,
                     num_test=mtp_mechanism.test_set_size,
                     alpha=self.predef_alpha)
@@ -576,7 +571,7 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
                 logging.info("TEST (avg) diff %f", adapt_test_diff)
 
                 null_constraints = np.array([
-                        self.calib_slope_ni_margin,
+                        #self.calib_slope_ni_margin,
                         self.calib_intercept_ni_margin,
                         [0,adapt_test_diff],
                         ])
