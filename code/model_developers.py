@@ -65,9 +65,9 @@ class LockedModeler:
     """
     def _init_modeler(self, model_type: str):
         if model_type == "Logistic":
-            self.modeler = LogisticRegression(penalty="l2")
+            self.modeler = LogisticRegression(penalty="none", max_iter=10000)
         elif model_type == "RandomForest":
-            self.modeler = RandomForestClassifier()
+            self.modeler = RandomForestClassifier(n_estimators=300, min_samples_leaf=100)
         elif model_type == "GBT":
             self.modeler = GradientBoostingClassifier(loss="deviance", max_depth=1, n_estimators=50)
         else:
@@ -426,19 +426,24 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
         self.validation_frac = validation_frac
         self.min_valid_dat_size = min_valid_dat_size
         self.ni_margin = ni_margin
-        self.calib_ni_margin = calib_ni_margin
+        self.calib_intercept_ni_margin = [-calib_ni_margin, calib_ni_margin]
+        self.calib_slope_ni_margin = [1 - calib_ni_margin, 1 + calib_ni_margin]
         self.power = power
         self.predef_alpha = predef_alpha
         self.se_factor = se_factor
 
-    def _do_calib_power_test(self, calib_mu_lower, calib_mu_upper, calib_var, alpha, num_test, num_reps):
+    def _do_calib_power_test(self, calib_mu_lower, calib_mu_upper, calib_var, alpha, num_test, num_reps, is_slope=False):
+        calib_bounds = self.calib_slope_ni_margin if is_slope else self.calib_intercept_ni_margin
+        print("calib bounds", calib_bounds, is_slope)
+
         # Test calib lower
         calib_obs_sim = np.random.normal(
                 loc=calib_mu_lower,
                 scale=np.sqrt(calib_var), size=(num_test, num_reps))
-        res = scipy.stats.ttest_1samp(calib_obs_sim, popmean=-self.calib_ni_margin)
+        res = scipy.stats.ttest_1samp(calib_obs_sim, popmean=calib_bounds[0])
         candidate_power = np.mean(res.statistic > scipy.stats.norm.ppf(1 - alpha))
-        logging.info("calib power lower %f", candidate_power)
+        print("lower test", res.statistic.shape, candidate_power, res.statistic.mean())
+        1/0
         if candidate_power < self.power:
             logging.info("abort calibration lower %f", candidate_power)
             return False
@@ -447,9 +452,9 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
         calib_obs_sim = np.random.normal(
                 loc=calib_mu_upper,
                 scale=np.sqrt(calib_var), size=(num_test, num_reps))
-        res = scipy.stats.ttest_1samp(calib_obs_sim, popmean=self.calib_ni_margin)
+        res = scipy.stats.ttest_1samp(calib_obs_sim, popmean=calib_bounds[1])
+        print("upper test", res)
         candidate_power = np.mean(res.statistic < scipy.stats.norm.ppf(alpha))
-        logging.info("calib power upper %f", candidate_power)
         if candidate_power < self.power:
             logging.info("abort calibration upper %f", candidate_power)
             return False
@@ -480,9 +485,10 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
         logging.info("validation var calbi %f %f auc %f", calib_slope_var, calib_intercept_var, auc_var)
 
         # Test calib lower
-        is_slope_good = self._do_calib_power_test(calib_slope_lower, calib_slope_upper, calib_slope_var, alpha, num_test, num_reps)
+        is_slope_good = self._do_calib_power_test(calib_slope_lower, calib_slope_upper, calib_slope_var, alpha, num_test, num_reps, is_slope=True)
         is_intercept_good = self._do_calib_power_test(calib_intercept_lower, calib_intercept_upper, calib_intercept_var, alpha, num_test, num_reps)
         if not is_slope_good or not is_intercept_good:
+            logging.info("abort slope good?: %d intercept good?: %d", is_slope_good, is_intercept_good)
             return 0, auc_sim
 
         # Test AUC
@@ -508,6 +514,7 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
 
         selected_thres = candidate_diffs[selected_idx]
         test_power = candidate_power[selected_idx]
+        1/0
         return test_power, selected_thres
 
 
@@ -535,6 +542,9 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
             logging.info("TRAIN SIZE %d", predef_train_dat.size)
             predef_lr = sklearn.base.clone(self.modeler)
             predef_lr.fit(predef_train_dat.x, predef_train_dat.y.flatten())
+            #print("num pos cases", predef_train_dat.y.sum())
+            #print(predef_lr.coef_, predef_lr.intercept_)
+            #print("model refit", predef_train_dat.x.shape)
 
             # calculate the threshold that we can test at such that the power of rejecting the null given Type I error at level alpha_node
             predef_test_power, _ = self._do_power_calc_test_bound(
@@ -567,8 +577,8 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
                 logging.info("TEST (avg) diff %f", adapt_test_diff)
 
                 null_constraints = np.array([
-                        [-self.calib_ni_margin, self.calib_ni_margin],
-                        [-self.calib_ni_margin, self.calib_ni_margin],
+                        self.calib_slope_ni_margin,
+                        self.calib_intercept_ni_margin,
                         [0,adapt_test_diff],
                         ])
                 test_res = mtp_mechanism.get_test_res(

@@ -11,6 +11,7 @@ import numpy as np
 import scipy
 import sklearn
 from sklearn.metrics import roc_auc_score
+from sklearn.linear_model import LogisticRegression
 
 from node import Node
 
@@ -154,11 +155,25 @@ class LogLikHypothesisTester(AUCHypothesisTester):
 class CalibHypothesisTester(AUCHypothesisTester):
     def get_influence_func(self, mdl):
         pred_y = mdl.predict_proba(self.test_dat.x)[:,1:]
-        pred_y_aug1 = np.concatenate([pred_y, np.ones(pred_y.shape)], axis=1).T
+        calib_inputs = np.concatenate([np.log(pred_y/(1 - pred_y)), np.ones(pred_y.shape)], axis=1)
+
+        calib_lr = LogisticRegression(penalty="none", verbose=0, max_iter=10000)
+        calib_lr.fit(calib_inputs[:,:1], self.test_dat.y.flatten())
+        calib_slope = calib_lr.coef_[0,0]
+        calib_intercept = calib_lr.intercept_[0]
+        calib_pred_prob = calib_lr.predict_proba(calib_inputs[:,:1])[:,1]
+        logging.info("recalib slope %f intercept %f", calib_slope, calib_intercept)
+
         test_y = self.test_dat.y.flatten()
-        influence_func = (pred_y.flatten() - test_y) * pred_y_aug1
-        influence_func = influence_func.T
-        return influence_func, influence_func.mean(axis=0)
+        raw_influence_func = (calib_pred_prob - test_y) * calib_inputs.T
+        cov_mat = np.cov(raw_influence_func)
+
+        meat_mat = np.linalg.inv(cov_mat)
+        inf_func = np.matmul(meat_mat, raw_influence_func).T
+
+        inf_func += np.array([calib_slope, calib_intercept]).reshape((1,2))
+
+        return inf_func, inf_func.mean(axis=0)
 
 class CalibAUCHypothesisTester(AUCHypothesisTester):
     stats_dim = 2
@@ -187,7 +202,11 @@ class CalibAUCHypothesisTester(AUCHypothesisTester):
     def _get_observations(self, orig_mdl, new_mdl):
         orig_ic, orig_est = self.get_influence_func(orig_mdl)
         new_ic, new_est = self.get_influence_func(new_mdl)
-        df = pd.DataFrame(new_ic - orig_ic, columns=["calib_slope_ic", "calib_intercept_ic", "auc_diff_ic"])
+        df = pd.DataFrame({
+                "calib_slope_ic": new_ic[:,0],
+                "calib_intercept_ic": new_ic[:,1],
+                "auc_diff_ic": new_ic[:,2] - orig_ic[:,2]
+                })
 
         return df, orig_est, new_est
 
@@ -260,18 +279,18 @@ class CalibAUCHypothesisTester(AUCHypothesisTester):
             [-np.inf, auc_lower_bound]
             ])
 
-        test_res = [
+        test_res = np.array([
                 (estimate[0] - null_constraint[0,0]) > calib_slope_lower_bound,
                 (estimate[0] - null_constraint[0,1]) < calib_slope_upper_bound,
                 (estimate[1] - null_constraint[1,0]) > calib_intercept_lower_bound,
                 (estimate[1] - null_constraint[1,1]) < calib_intercept_upper_bound,
                 (estimate[2] - null_constraint[2,1]) > auc_lower_bound,
-                ]
+                ], dtype=int)
         logging.info("estimate %s", estimate)
         logging.info("null_constraint %s", null_constraint)
         logging.info("auc boundaires %f", auc_lower_bound)
         logging.info("TEST REST %s", test_res)
-        test_res = all(test_res)
+        test_res = np.all(test_res)
         logging.info("final TEST REST %d", test_res)
         return test_res, boundaries
 

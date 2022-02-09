@@ -65,6 +65,8 @@ def main():
     init_train_dat = _get_data(dat, patient_stay_ids, init_train_idxs, max_random_pick=args.random_pick_n)
     start_idx = args.init_train_n
     reuse_test_idxs = rand_ids[start_idx: start_idx + args.reuse_test_n]
+    logging.info("num reuse %d", reuse_test_idxs.size)
+    assert reuse_test_idxs.size == args.reuse_test_n
     reuse_test_dat = _get_data(dat, patient_stay_ids, reuse_test_idxs, max_random_pick=args.random_pick_n)
 
     # Split data
