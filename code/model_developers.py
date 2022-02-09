@@ -67,7 +67,7 @@ class LockedModeler:
         if model_type == "Logistic":
             self.modeler = LogisticRegression(penalty="none", max_iter=10000)
         elif model_type == "RandomForest":
-            self.modeler = RandomForestClassifier(n_estimators=300, min_samples_leaf=100, criterion="entropy")
+            self.modeler = RandomForestClassifier(n_estimators=300, min_samples_leaf=50, criterion="entropy")
         elif model_type == "GBT":
             self.modeler = GradientBoostingClassifier(loss="deviance", max_depth=1, n_estimators=50)
         else:

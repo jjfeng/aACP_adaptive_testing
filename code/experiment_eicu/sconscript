@@ -39,8 +39,8 @@ nest.add(
 nest.add(
     'model_type',
     [
-        "GBT",
-        #"RandomForest",
+        #"GBT",
+        "RandomForest",
         #"Logistic", # hard to show improvement because performance maxes out too quickly
     ])
 

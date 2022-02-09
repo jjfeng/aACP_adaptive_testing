@@ -11,7 +11,7 @@ import numpy as np
 import scipy
 import sklearn
 from sklearn.metrics import roc_auc_score
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, LinearRegression
 
 from node import Node
 
@@ -152,21 +152,19 @@ class LogLikHypothesisTester(AUCHypothesisTester):
 
         return df, orig_loglik, new_loglik
 
-class CalibHypothesisTester(AUCHypothesisTester):
+class CalibCoxHypothesisTester(AUCHypothesisTester):
     def get_influence_func(self, mdl):
-        pred_y = mdl.predict_proba(self.test_dat.x)[:,1]
-        #mask = np.where((pred_y < 0.1) & (pred_y > 0.05))[0]
-        mask = np.where(pred_y >0)[0]
-        restricted_test = self.test_dat.subset_idxs(mask)
+        restricted_test = self.test_dat
         pred_y = mdl.predict_proba(restricted_test.x)[:,1:]
 
-        #print("pred prob dist", np.quantile(pred_y.flatten(), [0.1,0.2,0.3,0.5,0.6,0.7,0.8,0.9]))
+        print("pred prob dist", np.quantile(pred_y.flatten(), [0.1,0.2,0.3,0.5,0.6,0.7,0.8,0.9]))
         calib_inputs = np.concatenate([np.log(pred_y/(1 - pred_y)), np.ones(pred_y.shape)], axis=1)
 
         calib_lr = LogisticRegression(penalty="none", verbose=0, max_iter=10000)
         calib_lr.fit(calib_inputs[:,:1], restricted_test.y.flatten())
-        calib_slope = calib_lr.coef_[0,0]
-        calib_intercept = calib_lr.intercept_[0]
+        calib_slope = calib_lr.coef_[0]
+        calib_intercept = calib_lr.intercept_
+        print("calib", calib_slope, calib_intercept)
         calib_pred_prob = calib_lr.predict_proba(calib_inputs[:,:1])[:,1]
         logging.info("recalib slope %f intercept %f", calib_slope, calib_intercept)
 
@@ -181,6 +179,15 @@ class CalibHypothesisTester(AUCHypothesisTester):
 
         return inf_func, inf_func.mean(axis=0)
 
+class CalibZHypothesisTester(AUCHypothesisTester):
+    def get_influence_func(self, mdl):
+        pred_y = mdl.predict_proba(self.test_dat.x)[:,1]
+        test_y = restricted_test.y.flatten()
+        variance = np.mean(np.power(1 - pred_y, 2) * pred_y * (1 - pred_y))
+        inf_func = (pred_y - test_y) * (1 - pred_y)/variance
+
+        return inf_func, inf_func.mean(axis=0)
+
 class CalibAUCHypothesisTester(AUCHypothesisTester):
     stats_dim = 2
     def __init__(self, calib_alloc_frac: float=0.1):
@@ -188,7 +195,7 @@ class CalibAUCHypothesisTester(AUCHypothesisTester):
         @param calib_alloc_frac: how much of the alpha to allocate to checking calibration
         """
         self.auc_hypo_tester = AUCHypothesisTester()
-        self.calib_hypo_tester = CalibHypothesisTester()
+        self.calib_hypo_tester = CalibZHypothesisTester()
         self.calib_alloc_frac = calib_alloc_frac
 
     def set_test_dat(self, test_dat):
