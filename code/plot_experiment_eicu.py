@@ -33,6 +33,7 @@ def main():
             batch_df = pd.DataFrame({
                 "batch_number": batch_dict.value,
                 "time": batch_dict.time}).drop_duplicates()
+            batch_df = batch_df[batch_df.batch_number < args.max_batch]
 
             res = res.merge(batch_df, on="time")
             for i in range(batch_df.shape[0]):
@@ -61,6 +62,7 @@ def main():
             'curr_diff': 'Detected improvement',
             'num_approvals': 'Number of approvals',
             'auc': 'AUC',
+            'calib': 'Calibration-in-the-large',
             }
     mtp_dict = {
             'binary_thres': 'BinaryThres',
@@ -76,9 +78,7 @@ def main():
         }, axis=1)
     all_res["Measure"] = all_res.variable.map(measure_dict)
     all_res["Procedure"] = all_res.procedure.map(mtp_dict)
-    all_res["Dataset"] = all_res.dataset
     all_res = all_res.reset_index()
-    all_res = all_res[(all_res.Measure != "AUC") | (all_res.dataset == "test")]
     max_iter = all_res.Iteration.max()
     print("NUM APPROVALS")
     print(all_res[
@@ -97,6 +97,7 @@ def main():
         style="Procedure",
         facet_kws={"sharey": False, "sharex": True},
         linewidth=3,
+        col_wrap=2
     )
     rel_plt.set_titles('{col_name}')
     plt.savefig(args.plot_file)

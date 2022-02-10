@@ -65,11 +65,11 @@ class LockedModeler:
     """
     def _init_modeler(self, model_type: str):
         if model_type == "Logistic":
-            self.modeler = LogisticRegression(penalty="l2")
+            self.modeler = LogisticRegression(penalty="none", max_iter=10000)
         elif model_type == "RandomForest":
-            self.modeler = RandomForestClassifier()
+            self.modeler = RandomForestClassifier(n_estimators=300, min_samples_leaf=50, criterion="entropy")
         elif model_type == "GBT":
-            self.modeler = GradientBoostingClassifier(loss="deviance", max_depth=1, n_estimators=25)
+            self.modeler = GradientBoostingClassifier(loss="deviance", max_depth=1, n_estimators=40)
         else:
             raise NotImplementedError("model type missing")
 
@@ -200,7 +200,7 @@ class OnlineAdaptLossModeler(LockedModeler):
     def _create_train_valid_dat(self, dat: Dataset):
         valid_n = max(self.min_valid_dat_size, int(dat.size * self.validation_frac))
         train_dat = dat.subset(dat.size - valid_n)
-        #print("valid_n", valid_n, train_dat.size)
+        #print("valid_n", valid_n, train_dat.size, dat.size, self.validation_frac)
         valid_dat = dat.subset(start_n=dat.size - valid_n, n=dat.size)
         return train_dat, valid_dat
 
@@ -420,16 +420,39 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
     """
     Just do online learning on a separate dataset
     """
-    def __init__(self, model_type:str, hypo_tester, validation_frac: float = 0.2, min_valid_dat_size: int = 200, power: float = 0.5, ni_margin: float = 0.01, calib_ni_margin: float = 0.2, predef_alpha: float = 0.1, se_factor: float = 1.96):
+    def __init__(self, model_type:str, hypo_tester, validation_frac: float = 0.2, min_valid_dat_size: int = 200, power: float = 0.5, ni_margin: float = 0.01, calib_ni_margin: float = 0.1, predef_alpha: float = 0.1, se_factor: float = 1.96):
         self._init_modeler(model_type)
         self.hypo_tester = hypo_tester
         self.validation_frac = validation_frac
         self.min_valid_dat_size = min_valid_dat_size
         self.ni_margin = ni_margin
-        self.calib_ni_margin = calib_ni_margin
+        self.calib_bounds = [-calib_ni_margin, calib_ni_margin]
         self.power = power
         self.predef_alpha = predef_alpha
         self.se_factor = se_factor
+
+    def _do_calib_power_test(self, calib_mu_lower, calib_mu_upper, calib_var, alpha, num_test, num_reps):
+        # Test calib lower
+        calib_obs_sim = np.random.normal(
+                loc=calib_mu_lower,
+                scale=np.sqrt(calib_var), size=(num_test, num_reps))
+        res = scipy.stats.ttest_1samp(calib_obs_sim, popmean=self.calib_bounds[0])
+        candidate_power = np.mean(res.statistic > scipy.stats.norm.ppf(1 - alpha))
+
+        if candidate_power < self.power:
+            logging.info("abort calibration lower %f (bound %f)", candidate_power, self.calib_bounds[0])
+            return False
+
+        # Test calib upper
+        calib_obs_sim = np.random.normal(
+                loc=calib_mu_upper,
+                scale=np.sqrt(calib_var), size=(num_test, num_reps))
+        res = scipy.stats.ttest_1samp(calib_obs_sim, popmean=self.calib_bounds[1])
+        candidate_power = np.mean(res.statistic < scipy.stats.norm.ppf(alpha))
+        if candidate_power < self.power:
+            logging.info("abort calibration upper %f", candidate_power)
+            return False
+        return True
 
     def _do_power_calc_test_bound(self, orig_mdl, new_mdl, min_diff:float, valid_dat: Dataset, alpha: float, num_test: int, num_reps: int = 200):
         """
@@ -439,39 +462,26 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
         logging.info("predef alpha %f", alpha)
         # use valid_dat to evaluate the model first
         self.hypo_tester.set_test_dat(valid_dat)
-        res_df, orig_est , new_est = self.hypo_tester._get_observations(orig_mdl, new_mdl)
+        res_df, orig_est, new_est = self.hypo_tester._get_observations(orig_mdl, new_mdl)
         res_df = res_df.to_numpy()
+
+        # Get performance characteristics
         mu_sim_raw = np.mean(res_df, axis=0)
-        cov_est = np.cov(res_df.T)
-        auc_sim = mu_sim_raw[1] - np.sqrt(cov_est[1,1]/valid_dat.size) * self.se_factor
-        calib_mu_lower = mu_sim_raw[0] - np.sqrt(cov_est[0,0]/valid_dat.size) * self.se_factor
-        calib_mu_upper= mu_sim_raw[0] + np.sqrt(cov_est[0,0]/valid_dat.size) * self.se_factor
+        calib_var = np.var(res_df[:,0])
+        auc_var = np.var(red_df[:,1])
 
-        calib_var = cov_est[0,0]
-        auc_var = cov_est[1,1]
+        # Run simulation with these assumed performance characteristics (using CI lower bound)
+        auc_sim = mu_sim_raw[1] - np.sqrt(auc_var/valid_dat.size) * self.se_factor
+        calib_lower = mu_sim_raw[0] - np.sqrt(calib_var/valid_dat.size) * self.se_factor
+        calib_upper= mu_sim_raw[0] + np.sqrt(calib_var/valid_dat.size) * self.se_factor
+
         logging.info("validation mu: %s", mu_sim_raw)
-        logging.info("validation var calbi %f auc %f", calib_var, auc_var)
+        logging.info("power sim mu: %f %f %f", auc_sim, calib_lower, calib_upper)
+        logging.info("validation var calbi %f auc %f", calib_var/valid_dat.size, auc_var/valid_dat.size)
 
-        # Test calib lower
-        calib_obs_sim = np.random.normal(
-                loc=calib_mu_lower,
-                scale=np.sqrt(calib_var), size=(num_test, num_reps))
-        res = scipy.stats.ttest_1samp(calib_obs_sim, popmean=-self.calib_ni_margin)
-        candidate_power = np.mean(res.statistic > scipy.stats.norm.ppf(1 - alpha))
-        logging.info("calib power lower %f", candidate_power)
-        if candidate_power < self.power:
-            logging.info("abort calibration lower %f", candidate_power)
-            return 0, auc_sim
-
-        # Test calib upper
-        calib_obs_sim = np.random.normal(
-                loc=calib_mu_upper,
-                scale=np.sqrt(calib_var), size=(num_test, num_reps))
-        res = scipy.stats.ttest_1samp(calib_obs_sim, popmean=self.calib_ni_margin)
-        candidate_power = np.mean(res.statistic < scipy.stats.norm.ppf(alpha))
-        logging.info("calib power upper %f", candidate_power)
-        if candidate_power < self.power:
-            logging.info("abort calibration upper %f", candidate_power)
+        is_calib_good = self._do_calib_power_test(calib_lower, calib_upper, calib_var, alpha, num_test, num_reps)
+        if not is_calib_good:
+            logging.info("abort calib-in-the-larg")
             return 0, auc_sim
 
         # Test AUC
@@ -529,7 +539,7 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
             predef_test_power, _ = self._do_power_calc_test_bound(
                     orig_mdl,
                     predef_lr,
-                    min_diff=len(predef_test_mdls) * self.ni_margin/4,
+                    min_diff=len(predef_test_mdls) * self.ni_margin/2,
                     valid_dat=predef_valid_dat,
                     num_test=mtp_mechanism.test_set_size,
                     alpha=self.predef_alpha)
@@ -556,7 +566,7 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
                 logging.info("TEST (avg) diff %f", adapt_test_diff)
 
                 null_constraints = np.array([
-                        [-self.calib_ni_margin, self.calib_ni_margin],
+                        self.calib_bounds,
                         [0,adapt_test_diff],
                         ])
                 test_res = mtp_mechanism.get_test_res(

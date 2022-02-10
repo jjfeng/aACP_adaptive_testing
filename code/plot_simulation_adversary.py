@@ -74,15 +74,9 @@ def main():
         style="Dataset",
         facet_kws={"sharey": False, "sharex": True},
         linewidth=3,
-        #ci="sd",
     )
     rel_plt.set_titles('{col_name}')
     print(rel_plt.axes_dict.keys())
-    #plt.delaxes(rel_plt.axes_dict[('Reusable Test', 'did_approval')])
-    #num_approve_ax = rel_plt.axes_dict[('Test', 'did_approval')]
-    #num_approve_ax.axhline(y=0.1, color='dimgray', linestyle='--')
-    #num_approve_ax.set_title("Error rate")
-    #num_approve_ax.set_ylim(-0.05,1)
     plt.savefig(args.plot_file)
     print("Fig", args.plot_file)
 

@@ -11,6 +11,7 @@ import numpy as np
 import scipy
 import sklearn
 from sklearn.metrics import roc_auc_score
+from sklearn.linear_model import LogisticRegression, LinearRegression
 
 from node import Node
 
@@ -151,41 +152,30 @@ class LogLikHypothesisTester(AUCHypothesisTester):
 
         return df, orig_loglik, new_loglik
 
-class CalibHypothesisTester(AUCHypothesisTester):
+class CalibZHypothesisTester(AUCHypothesisTester):
     def get_influence_func(self, mdl):
-        pred_y = mdl.predict_proba(self.test_dat.x)[:,1]
-        test_y = self.test_dat.y.flatten()
-        influence_func = (pred_y - test_y) * pred_y
-        return influence_func, influence_func.mean(axis=0)
+        pred_y = mdl.predict_proba(self.test_dat.x)[:,1:]
+        test_y = self.test_dat.y
+        inf_func = pred_y - test_y
 
-class CalibAUCHypothesisTester(AUCHypothesisTester):
-    stats_dim = 2
+        return inf_func, inf_func.mean(axis=0)
+
+class CalibZAUCHypothesisTester(CalibCoxAUCHypothesisTester):
     def __init__(self, calib_alloc_frac: float=0.1):
         """
         @param calib_alloc_frac: how much of the alpha to allocate to checking calibration
         """
         self.auc_hypo_tester = AUCHypothesisTester()
-        self.calib_hypo_tester = CalibHypothesisTester()
+        self.calib_hypo_tester = CalibZHypothesisTester()
         self.calib_alloc_frac = calib_alloc_frac
-
-    def set_test_dat(self, test_dat):
-        self.test_dat = test_dat
-        self.auc_hypo_tester.set_test_dat(test_dat)
-        self.calib_hypo_tester.set_test_dat(test_dat)
-
-    def get_influence_func(self, mdl):
-        auc_ic, auc_diff = self.auc_hypo_tester.get_influence_func(mdl)
-        calib_ic, calib = self.calib_hypo_tester.get_influence_func(mdl)
-
-        influence_func = np.hstack([calib_ic.reshape((-1,1)), auc_ic.reshape((-1,1))])
-        estimate = np.array([calib, auc_diff])
-
-        return influence_func, estimate
 
     def _get_observations(self, orig_mdl, new_mdl):
         orig_ic, orig_est = self.get_influence_func(orig_mdl)
         new_ic, new_est = self.get_influence_func(new_mdl)
-        df = pd.DataFrame(new_ic - orig_ic, columns=["calib_score_ic", "auc_diff_ic"])
+        df = pd.DataFrame({
+                "calib_ic": new_ic[:,0],
+                "auc_diff_ic": new_ic[:,1] - orig_ic[:,1]
+                })
 
         return df, orig_est, new_est
 
@@ -243,23 +233,25 @@ class CalibAUCHypothesisTester(AUCHypothesisTester):
                 node_alpha_spend * (1 - self.calib_alloc_frac) # alloted to auc
                 ]
         print("node_wei", node_weights, alpha, alpha_spend)
-        calib_lower_bound = self._get_boundary(prior_bounds, cov_est[:-1,:-1], alpha_spend[0], alt_greater=True)
-        calib_upper_bound = self._get_boundary(prior_bounds, cov_est[:-1,:-1], alpha_spend[1], alt_greater=False)
-        prior_bounds = np.vstack([prior_bounds, [calib_upper_bound, calib_lower_bound]])
+        calib_intercept_lower_bound = self._get_boundary(prior_bounds, cov_est[:-1,:-1], alpha_spend[0], alt_greater=True)
+        calib_intercept_upper_bound = self._get_boundary(prior_bounds, cov_est[:-1,:-1], alpha_spend[1], alt_greater=False)
+        prior_bounds = np.vstack([prior_bounds, [calib_intercept_upper_bound, calib_intercept_lower_bound]])
         auc_lower_bound = self._get_boundary(prior_bounds, cov_est, alpha_spend[2], alt_greater=True)
         boundaries = np.array([
-            [calib_upper_bound, calib_lower_bound],
+            [calib_intercept_upper_bound, calib_intercept_lower_bound],
             [-np.inf, auc_lower_bound]
             ])
 
-        test_res1 = (estimate[0] - null_constraint[0,0]) > calib_lower_bound
-        test_res2 = (estimate[0] - null_constraint[0,1]) < calib_upper_bound
-        test_res3 = (estimate[1] - null_constraint[1,1]) > auc_lower_bound
+        test_res = np.array([
+                (estimate[0] - null_constraint[0,0]) > calib_intercept_lower_bound,
+                (estimate[0] - null_constraint[0,1]) < calib_intercept_upper_bound,
+                (estimate[1] - null_constraint[1,1]) > auc_lower_bound,
+                ], dtype=int)
         logging.info("estimate %s", estimate)
         logging.info("null_constraint %s", null_constraint)
-        logging.info("boundaires %f %f %f", calib_lower_bound, calib_upper_bound, auc_lower_bound)
-        test_res = test_res1 and test_res2 and test_res3
-        logging.info("TEST REST %d %d %d", test_res1, test_res2, test_res3)
+        logging.info("auc boundaires %f", auc_lower_bound)
+        logging.info("TEST REST %s", test_res)
+        test_res = np.all(test_res)
         logging.info("final TEST REST %d", test_res)
         return test_res, boundaries
 
