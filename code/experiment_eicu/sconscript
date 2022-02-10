@@ -18,9 +18,9 @@ FWER = 0.1
 EICU_DATA = "../data/eicu_hypotension_data.csv"
 MTP_MECH_LIST = [
     #"binary_thres_mtp",
-    #"bonferroni",
+    "bonferroni",
     "graphical_bonf",
-    #"graphical_ffs",
+    "graphical_ffs",
     "graphical_prespec",
 ]
 
@@ -56,7 +56,7 @@ nest.add(
 nest.add(
     'se_factor',
     [
-        1.96,
+        1,
     ],
     label_func=lambda c: "se_factor_%.3f" % c)
 
