@@ -160,7 +160,7 @@ class CalibZHypothesisTester(AUCHypothesisTester):
 
         return inf_func, inf_func.mean(axis=0)
 
-class CalibZAUCHypothesisTester(CalibCoxAUCHypothesisTester):
+class CalibZAUCHypothesisTester(AUCHypothesisTester):
     def __init__(self, calib_alloc_frac: float=0.1):
         """
         @param calib_alloc_frac: how much of the alpha to allocate to checking calibration
@@ -168,6 +168,20 @@ class CalibZAUCHypothesisTester(CalibCoxAUCHypothesisTester):
         self.auc_hypo_tester = AUCHypothesisTester()
         self.calib_hypo_tester = CalibZHypothesisTester()
         self.calib_alloc_frac = calib_alloc_frac
+
+    def set_test_dat(self, test_dat):
+        self.test_dat = test_dat
+        self.auc_hypo_tester.set_test_dat(test_dat)
+        self.calib_hypo_tester.set_test_dat(test_dat)
+
+    def get_influence_func(self, mdl):
+        auc_ic, auc_diff = self.auc_hypo_tester.get_influence_func(mdl)
+        calib_ic, calib = self.calib_hypo_tester.get_influence_func(mdl)
+
+        influence_func = np.hstack([calib_ic, auc_ic.reshape((-1,1))])
+        estimate = np.concatenate([calib, [auc_diff]])
+
+        return influence_func, estimate
 
     def _get_observations(self, orig_mdl, new_mdl):
         orig_ic, orig_est = self.get_influence_func(orig_mdl)
@@ -180,7 +194,6 @@ class CalibZAUCHypothesisTester(CalibCoxAUCHypothesisTester):
         return df, orig_est, new_est
 
     def _get_boundary(self, prior_bounds, cov_est, alpha_spend: float, alt_greater: bool = False):
-        #print("CALL BOUNDARY", prior_bounds, prior_bounds.size, alpha_spend)
         if prior_bounds.size == 0:
             boundary = scipy.stats.norm.ppf((1 - alpha_spend) if alt_greater else alpha_spend, scale=np.sqrt(cov_est[0,0]))
         else:

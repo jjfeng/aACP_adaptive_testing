@@ -143,9 +143,10 @@ class GraphicalBonfMTP(BinaryThresholdMTP):
             parent=node,
             ) for i in range(self.num_adapt_queries - query_idx - 1)]
         node.children = children
-        node.children_weights = [
-            self.success_weight *  np.power(1 - self.success_weight, i)
-            for i in range(0, self.num_adapt_queries - query_idx - 1)]
+        node.children_weights = []
+        for i in range(0, self.num_adapt_queries - query_idx - 1):
+            spent_weight = sum(node.children_weights)
+            node.children_weights.append((1 - spent_weight) * self.success_weight)
         if children:
             node.children_weights[-1] = 1 - np.sum(node.children_weights[:-1])
 
