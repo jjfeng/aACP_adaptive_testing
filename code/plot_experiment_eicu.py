@@ -59,12 +59,11 @@ def main():
 
     # Rename all the things for prettier figures
     measure_dict = {
-            'curr_diff': 'curr_diff',
-            'num_approvals': 'num_approvals',
-            'auc': 'auc',
-            'calib': 'calib',
+            'curr_diff': 'Detected AUC Improvement',
+            'num_approvals': 'Num approvals',
+            'auc': 'AUC',
+            'calib': 'Calibration-in-the-large',
             }
-    data_dict = {'test':'Test', 'reuse_test': 'Reusable Test'}
     mtp_dict = {
             'binary_thres': 'BinaryThres',
             'bonferroni': 'bonf_std',
@@ -78,7 +77,6 @@ def main():
         }, axis=1)
     all_res["Measure"] = all_res.variable.map(measure_dict)
     all_res["Procedure"] = all_res.procedure.map(mtp_dict)
-    all_res["Dataset"] = all_res.dataset.map(data_dict)
     all_res = all_res.reset_index()
     max_iter = all_res.Iteration.max()
     print("NUM APPROVALS")
@@ -93,13 +91,13 @@ def main():
         x="batch_number",
         y="Value",
         hue="Procedure",
-        row="Dataset",
         col="Measure",
         kind="line",
         style="Procedure",
         facet_kws={"sharey": False, "sharex": True},
+        linewidth=3,
     )
-    rel_plt.set_titles('{row_name}' ' | ' '{col_name}')
+    rel_plt.set_titles('{col_name}')
     plt.savefig(args.plot_file)
     print("Fig", args.plot_file)
 
