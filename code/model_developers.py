@@ -420,37 +420,34 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
     """
     Just do online learning on a separate dataset
     """
-    def __init__(self, model_type:str, hypo_tester, validation_frac: float = 0.2, min_valid_dat_size: int = 200, power: float = 0.5, ni_margin: float = 0.01, calib_slope_ni_margin: float = 0.1, calib_intercept_ni_margin: float = 0.2, predef_alpha: float = 0.1, se_factor: float = 1.96):
+    def __init__(self, model_type:str, hypo_tester, validation_frac: float = 0.2, min_valid_dat_size: int = 200, power: float = 0.5, ni_margin: float = 0.01, calib_ni_margin: float = 0.1, predef_alpha: float = 0.1, se_factor: float = 1.96):
         self._init_modeler(model_type)
         self.hypo_tester = hypo_tester
         self.validation_frac = validation_frac
         self.min_valid_dat_size = min_valid_dat_size
         self.ni_margin = ni_margin
-        self.calib_intercept_ni_margin = [-calib_intercept_ni_margin, calib_intercept_ni_margin]
-        self.calib_slope_ni_margin = [1 - calib_slope_ni_margin, 1 + calib_slope_ni_margin]
+        self.calib_bounds = [-calib_ni_margin, calib_ni_margin]
         self.power = power
         self.predef_alpha = predef_alpha
         self.se_factor = se_factor
 
-    def _do_calib_power_test(self, calib_mu_lower, calib_mu_upper, calib_var, alpha, num_test, num_reps, is_slope=False):
-        calib_bounds = self.calib_slope_ni_margin if is_slope else self.calib_intercept_ni_margin
-
+    def _do_calib_power_test(self, calib_mu_lower, calib_mu_upper, calib_var, alpha, num_test, num_reps):
         # Test calib lower
         calib_obs_sim = np.random.normal(
                 loc=calib_mu_lower,
                 scale=np.sqrt(calib_var), size=(num_test, num_reps))
-        res = scipy.stats.ttest_1samp(calib_obs_sim, popmean=calib_bounds[0])
+        res = scipy.stats.ttest_1samp(calib_obs_sim, popmean=self.calib_bounds[0])
         candidate_power = np.mean(res.statistic > scipy.stats.norm.ppf(1 - alpha))
 
         if candidate_power < self.power:
-            logging.info("abort calibration lower %f (bound %f)", candidate_power, calib_bounds[0])
+            logging.info("abort calibration lower %f (bound %f)", candidate_power, self.calib_bounds[0])
             return False
 
         # Test calib upper
         calib_obs_sim = np.random.normal(
                 loc=calib_mu_upper,
                 scale=np.sqrt(calib_var), size=(num_test, num_reps))
-        res = scipy.stats.ttest_1samp(calib_obs_sim, popmean=calib_bounds[1])
+        res = scipy.stats.ttest_1samp(calib_obs_sim, popmean=self.calib_bounds[1])
         candidate_power = np.mean(res.statistic < scipy.stats.norm.ppf(alpha))
         if candidate_power < self.power:
             logging.info("abort calibration upper %f", candidate_power)
@@ -467,23 +464,24 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
         self.hypo_tester.set_test_dat(valid_dat)
         res_df, orig_est, new_est = self.hypo_tester._get_observations(orig_mdl, new_mdl)
         res_df = res_df.to_numpy()
+
+        # Get performance characteristics
         mu_sim_raw = np.mean(res_df, axis=0)
-        cov_est = np.cov(res_df.T)
-        auc_sim = mu_sim_raw[1] - np.sqrt(cov_est[1,1]/valid_dat.size) * self.se_factor
-        calib_intercept_lower = mu_sim_raw[0] - np.sqrt(cov_est[0,0]/valid_dat.size) * self.se_factor
-        calib_intercept_upper= mu_sim_raw[0] + np.sqrt(cov_est[0,0]/valid_dat.size) * self.se_factor
+        calib_var = np.var(res_df[:,0])
+        auc_var = np.var(red_df[:,1])
 
-        calib_intercept_var = cov_est[0,0]
-        auc_var = cov_est[1,1]
+        # Run simulation with these assumed performance characteristics (using CI lower bound)
+        auc_sim = mu_sim_raw[1] - np.sqrt(auc_var/valid_dat.size) * self.se_factor
+        calib_lower = mu_sim_raw[0] - np.sqrt(calib_var/valid_dat.size) * self.se_factor
+        calib_upper= mu_sim_raw[0] + np.sqrt(calib_var/valid_dat.size) * self.se_factor
+
         logging.info("validation mu: %s", mu_sim_raw)
-        logging.info("power sim mu: %f %f %f", auc_sim, calib_intercept_lower, calib_intercept_upper)
-        #print("MU SIM", mu_sim_raw)
-        #print("MU bound", calib_slope_lower, calib_intercept_lower)
-        logging.info("validation var calbi %f auc %f", calib_intercept_var/valid_dat.size, auc_var/valid_dat.size)
+        logging.info("power sim mu: %f %f %f", auc_sim, calib_lower, calib_upper)
+        logging.info("validation var calbi %f auc %f", calib_var/valid_dat.size, auc_var/valid_dat.size)
 
-        is_intercept_good = self._do_calib_power_test(calib_intercept_lower, calib_intercept_upper, calib_intercept_var, alpha, num_test, num_reps)
-        if not is_intercept_good:
-            logging.info("abort intercept good?: %d", is_intercept_good)
+        is_calib_good = self._do_calib_power_test(calib_lower, calib_upper, calib_var, alpha, num_test, num_reps)
+        if not is_calib_good:
+            logging.info("abort calib-in-the-larg")
             return 0, auc_sim
 
         # Test AUC
@@ -536,9 +534,6 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
             logging.info("TRAIN SIZE %d", predef_train_dat.size)
             predef_lr = sklearn.base.clone(self.modeler)
             predef_lr.fit(predef_train_dat.x, predef_train_dat.y.flatten())
-            #print("num pos cases", predef_train_dat.y.sum())
-            #print(predef_lr.coef_, predef_lr.intercept_)
-            #print("model refit", predef_train_dat.x.shape)
 
             # calculate the threshold that we can test at such that the power of rejecting the null given Type I error at level alpha_node
             predef_test_power, _ = self._do_power_calc_test_bound(
@@ -571,8 +566,7 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
                 logging.info("TEST (avg) diff %f", adapt_test_diff)
 
                 null_constraints = np.array([
-                        #self.calib_slope_ni_margin,
-                        self.calib_intercept_ni_margin,
+                        self.calib_bounds,
                         [0,adapt_test_diff],
                         ])
                 test_res = mtp_mechanism.get_test_res(

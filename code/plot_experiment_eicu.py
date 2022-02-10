@@ -59,8 +59,8 @@ def main():
 
     # Rename all the things for prettier figures
     measure_dict = {
-            'curr_diff': 'Detected AUC Improvement',
-            'num_approvals': 'Num approvals',
+            'curr_diff': 'Detected improvement',
+            'num_approvals': 'Number of approvals',
             'auc': 'AUC',
             'calib': 'Calibration-in-the-large',
             }
