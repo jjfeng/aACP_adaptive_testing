@@ -95,6 +95,7 @@ def main():
         kind="line",
         style="Procedure",
         facet_kws={"sharey": False, "sharex": True},
+        linewidth=3,
     )
     rel_plt.set_titles('{col_name}')
     plt.savefig(args.plot_file)
