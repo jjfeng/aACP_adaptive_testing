@@ -74,7 +74,7 @@ def create_model_developer(env, outdir, c):
         c['power'],
         '--ni-margin',
         0.01,
-        '--calib-intercept-ni-margin',
+        '--calib-ni-margin',
         0.05,
         '--alpha',
         0.1,
