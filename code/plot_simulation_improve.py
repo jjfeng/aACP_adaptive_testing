@@ -72,6 +72,7 @@ def main():
     all_res = all_res.rename({
         "value": "Value",
         "time": "Iteration",
+        "batch_number": "Time",
         }, axis=1)
     all_res["Measure"] = all_res.variable.map(measure_dict)
     all_res["Procedure"] = all_res.procedure.map(mtp_dict)
@@ -88,7 +89,7 @@ def main():
     sns.set_context("paper", font_scale=2.5)
     rel_plt = sns.relplot(
         data=all_res[all_res.variable.isin(list(measure_dict.keys()))],
-        x="batch_number",
+        x="Time",
         y="Value",
         hue="Procedure",
         col="Measure",
