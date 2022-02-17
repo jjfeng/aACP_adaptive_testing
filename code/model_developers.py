@@ -468,7 +468,7 @@ class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
         # Get performance characteristics
         mu_sim_raw = np.mean(res_df, axis=0)
         calib_var = np.var(res_df[:,0])
-        auc_var = np.var(red_df[:,1])
+        auc_var = np.var(res_df[:,1])
 
         # Run simulation with these assumed performance characteristics (using CI lower bound)
         auc_sim = mu_sim_raw[1] - np.sqrt(auc_var/valid_dat.size) * self.se_factor

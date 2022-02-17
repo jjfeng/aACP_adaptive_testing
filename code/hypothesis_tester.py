@@ -161,13 +161,11 @@ class CalibZHypothesisTester(AUCHypothesisTester):
         return inf_func, inf_func.mean(axis=0)
 
 class CalibZAUCHypothesisTester(AUCHypothesisTester):
-    def __init__(self, calib_alloc_frac: float=0.1):
+    def __init__(self):
         """
-        @param calib_alloc_frac: how much of the alpha to allocate to checking calibration
         """
         self.auc_hypo_tester = AUCHypothesisTester()
         self.calib_hypo_tester = CalibZHypothesisTester()
-        self.calib_alloc_frac = calib_alloc_frac
 
     def set_test_dat(self, test_dat):
         self.test_dat = test_dat
@@ -240,16 +238,11 @@ class CalibZAUCHypothesisTester(AUCHypothesisTester):
         test_res = False
         num_particles =  np.sum(1/(alpha * node_weights))
         node_alpha_spend = alpha * node_weights[-1]
-        alpha_spend = [
-                node_alpha_spend * 0.5 * self.calib_alloc_frac, # alloted to calib upper
-                node_alpha_spend * 0.5 * self.calib_alloc_frac, # alloted to calib upper
-                node_alpha_spend * (1 - self.calib_alloc_frac) # alloted to auc
-                ]
-        print("node_wei", node_weights, alpha, alpha_spend)
-        calib_intercept_lower_bound = self._get_boundary(prior_bounds, cov_est[:-1,:-1], alpha_spend[0], alt_greater=True)
-        calib_intercept_upper_bound = self._get_boundary(prior_bounds, cov_est[:-1,:-1], alpha_spend[1], alt_greater=False)
+        print("node_wei", node_weights, alpha)
+        calib_intercept_lower_bound = self._get_boundary(prior_bounds, cov_est[:-1,:-1], node_alpha_spend, alt_greater=True)
+        calib_intercept_upper_bound = self._get_boundary(prior_bounds, cov_est[:-1,:-1], node_alpha_spend, alt_greater=False)
         prior_bounds = np.vstack([prior_bounds, [calib_intercept_upper_bound, calib_intercept_lower_bound]])
-        auc_lower_bound = self._get_boundary(prior_bounds, cov_est, alpha_spend[2], alt_greater=True)
+        auc_lower_bound = self._get_boundary(prior_bounds, cov_est, node_alpha_spend, alt_greater=True)
         boundaries = np.array([
             [calib_intercept_upper_bound, calib_intercept_lower_bound],
             [-np.inf, auc_lower_bound]
