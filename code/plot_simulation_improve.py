@@ -92,7 +92,7 @@ def main():
     print("MAX bATCH", max_batch)
 
     # PERFORM paired t-test
-    METHODS = ["presSRGP", "fsSRGP", "bonfSRGP"]
+    METHODS = ["Bonferroni", "presSRGP", "fsSRGP", "bonfSRGP"]
     final_method_values = all_res[(all_res.Time == max_batch) &
             (all_res.Measure == "AUC") & (all_res.Dataset == "test")]
     print(final_method_values)

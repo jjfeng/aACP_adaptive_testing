@@ -217,10 +217,12 @@ def plot_avg(env, outdir, c):
 	'--max-batch',
         (1129 - INIT_TRAIN - c['reuse_test_n'])//c['train_batch_n'],
 	'--plot-file ${TARGETS[0]}',
+	'--log-file ${TARGETS[1]}',
     ]
     return env.Command(
         [
             join(outdir, 'res_summary.png'),
+            join(outdir, 'res_log.txt'),
         ],
         c["summary_res"],
         ' '.join(map(str, cmd)))

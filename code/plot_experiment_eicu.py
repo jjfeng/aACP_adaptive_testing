@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-
+import re
 import sys, os
 import argparse
 import pickle
+import logging
 
+import scipy.stats
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -17,6 +19,7 @@ def parse_args():
     parser.add_argument("--max-batch", type=int, default=0, help="max batch")
     parser.add_argument("--results", type=str)
     parser.add_argument("--plot-file", type=str, default="_output/plot.png")
+    parser.add_argument("--log-file", type=str, default="_output/log.txt")
     args = parser.parse_args()
     args.results = args.results.split(",")
     return args
@@ -24,11 +27,16 @@ def parse_args():
 
 def main():
     args = parse_args()
+    logging.basicConfig(
+        format="%(message)s", filename=args.log_file, level=logging.INFO
+    )
 
     all_res = []
     for idx, res_file in enumerate(args.results):
         if os.path.exists(res_file):
             res = pd.read_csv(res_file)
+            seed = int(re.findall(r'seed_\d+', res_file)[0].split("_")[1])
+            res["seed"] = seed
             batch_dict = res[res.variable == "batch_number"][["time", "value"]]
             batch_df = pd.DataFrame({
                 "batch_number": batch_dict.value,
@@ -85,6 +93,35 @@ def main():
         (all_res.variable == "num_approvals")
         & (all_res.Iteration == max_iter)
         ])
+
+    # PERFORM paired t-test
+    METHODS = ["presSRGP", "fsSRGP", "bonfSRGP", "Bonferroni"]
+    final_method_values = all_res[(all_res.Time == (args.max_batch - 1)) &
+            (all_res.Measure == "AUC")]
+    print(final_method_values)
+    for idx1, method1 in enumerate(METHODS):
+        for idx2, method2 in enumerate(METHODS):
+            if idx1 >= idx2:
+                continue
+
+            logging.info("METHODS %s vs %s", method1, method2)
+            print(method1, method2)
+            method_compare_df = final_method_values[final_method_values.Procedure.isin([method1, method2])]
+            seeds = method_compare_df.seed.unique()
+            method_compare_df = method_compare_df[method_compare_df.seed.isin(seeds)].sort_values("seed")
+            print(method_compare_df)
+            method1_values = method_compare_df.Value[method_compare_df.Procedure ==
+                method1]
+            print(method1_values)
+            method2_values = method_compare_df.Value[method_compare_df.Procedure ==
+                method2]
+            print(method2_values)
+            ttest_res = scipy.stats.ttest_1samp(method1_values.to_numpy() -
+                    method2_values.to_numpy(), popmean=0)
+            logging.info(ttest_res)
+            print(method1, method2)
+            print(ttest_res)
+    1/0
 
     sns.set_context("paper", font_scale=2.5)
     rel_plt = sns.relplot(
