@@ -33,15 +33,12 @@ nest.add(
     'model_sim',
     [
         "online_delta",
-        #"online_compare",
     ])
 
 nest.add(
     'model_type',
     [
         "GBT",
-        #"RandomForest",
-        #"Logistic", # hard to show improvement because performance maxes out too quickly
     ])
 
 nest.add(

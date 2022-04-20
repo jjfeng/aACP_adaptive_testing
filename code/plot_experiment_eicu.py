@@ -62,7 +62,7 @@ def main():
             'curr_diff': 'Detected improvement',
             'num_approvals': 'Number of approvals',
             'auc': 'AUC',
-            'calib': 'Calibration-in-the-large',
+            'calib': 'Calibration-error-in-the-large',
             }
     mtp_dict = {
             'binary_thres': 'BinaryThres',
