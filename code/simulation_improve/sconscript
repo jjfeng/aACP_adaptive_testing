@@ -21,7 +21,7 @@ SPARSE_P = 6
 SPARSE_COEF_VAL = 0.75
 FWER = 0.1
 MTP_MECH_LIST = [
-    #"bonferroni",
+    "bonferroni",
     "graphical_bonf",
     "graphical_ffs",
     "graphical_prespec",
@@ -45,7 +45,10 @@ nest.add(
 
 nest.add(
     'power',
-    [0.5],
+    [
+        #0.5,
+        0.8,
+    ],
     label_func=lambda c: "power_%d" % int(c * 100))
 
 nest.add(

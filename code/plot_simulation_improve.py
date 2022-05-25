@@ -92,7 +92,7 @@ def main():
     print("MAX bATCH", max_batch)
 
     # PERFORM paired t-test
-    METHODS = ["presSRGP", "fsSRGP", "bonfSRGP"]
+    METHODS = ["presSRGP", "fsSRGP", "bonfSRGP", "Bonferroni"]
     final_method_values = all_res[(all_res.Time == max_batch) &
             (all_res.Measure == "AUC") & (all_res.Dataset == "test")]
     print(final_method_values)
@@ -118,7 +118,6 @@ def main():
             logging.info(ttest_res)
             print(method1, method2)
             print(ttest_res)
-    1/0
 
     sns.set_context("paper", font_scale=2.5)
     rel_plt = sns.relplot(
