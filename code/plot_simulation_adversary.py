@@ -4,7 +4,9 @@
 import sys, os
 import argparse
 import pickle
+import logging
 
+import scipy.stats
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -28,6 +30,7 @@ def main():
     for idx, res_file in enumerate(args.results):
         if os.path.exists(res_file):
             res = pd.read_csv(res_file)
+            res["seed"] = idx
             all_res.append(res)
         else:
             print("file missing", res_file)
@@ -61,6 +64,8 @@ def main():
     max_iter = all_res.Iteration.max()
     print(all_res[(all_res.variable == "did_approval") & (all_res.Iteration ==
         max_iter)].groupby("Procedure").mean())
+
+    print(all_res[all_res.Iteration == max_iter])
 
     sns.set_context("paper", font_scale=2.5)
     rel_plt = sns.relplot(
