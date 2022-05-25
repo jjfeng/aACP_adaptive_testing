@@ -34,6 +34,9 @@ sc.SConscript(flag + '/sconscript', exports=['flag'])
 flag = 'simulation_improve'
 sc.SConscript(flag + '/sconscript', exports=['flag'])
 
+flag = 'simulation_prespec_alignment'
+sc.SConscript(flag + '/sconscript', exports=['flag'])
+
 flag = 'simulation_calib_auc'
 sc.SConscript(flag + '/sconscript', exports=['flag'])
 

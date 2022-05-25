@@ -27,6 +27,7 @@ def parse_args():
     parser.add_argument("--simulation", type=str, default="online_delta", choices=["adversary", "online_delta", "online_compare"])
     parser.add_argument("--hypo-tester", type=str, default="auc", choices=["log_lik", "auc", "calib_auc"])
     parser.add_argument("--model-type", type=str, default="Logistic", choices=["Logistic", "GBT", "RandomForest"])
+    parser.add_argument("--online-model-type", type=str, default="Logistic", choices=["Logistic", "GBT", "RandomForest"])
     parser.add_argument("--out-file", type=str, default="_output/model.pkl")
     # ONLY RELEVANT TO ADVERSARIAL DEVELOPER
     parser.add_argument("--sparse-p", type=int, default=4, help="number of nonzero coefficients in the true logistic regression model")
