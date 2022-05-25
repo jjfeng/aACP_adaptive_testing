@@ -18,7 +18,7 @@ from mtp_mechanisms import *
 
 def parse_args():
     parser = argparse.ArgumentParser(description="create mtp mechanism")
-    parser.add_argument("--mtp-mech", type=str, default="graphical_bonf", choices=["binary_thres_mtp", "bonferroni", "graphical_bonf", "graphical_prespec", "graphical_ffs"], help="Multiple testing mechanism")
+    parser.add_argument("--mtp-mech", type=str, default="graphical_bonf", choices=["binary_thres_mtp", "weighted_bonferroni", "bonferroni", "graphical_bonf", "graphical_prespec", "graphical_ffs"], help="Multiple testing mechanism")
     parser.add_argument(
         "--hypo-tester", type=str, default="auc", choices=["log_lik", "auc", "calib_auc"]
     )
@@ -29,6 +29,7 @@ def parse_args():
         "--success-weight", type=float, default=0.8, help="recycling factor"
     )
     parser.add_argument("--alpha", type=float, default=0.1, help="ci alpha")
+    parser.add_argument("--bad-attempt-thres", type=int, default=3, help="attempts before this threshold get upweighted in weighted bonferroni")
     parser.add_argument("--first-pres-weight", type=float, default=0.1, help="weight for first prespecified node versus other prespecified nodes")
     parser.add_argument("--out-file", type=str, default="_output/mtp_mech.pkl")
     args = parser.parse_args()
@@ -56,6 +57,8 @@ def main():
         mtp_mech = BinaryThresholdMTP(hypo_tester, args.alpha)
     elif args.mtp_mech == "bonferroni":
         mtp_mech = BonferroniThresholdMTP(hypo_tester, args.alpha)
+    elif args.mtp_mech == "weighted_bonferroni":
+        mtp_mech = WeightedBonferroniThresholdMTP(hypo_tester, args.alpha, args.bad_attempt_thres)
     elif args.mtp_mech == "graphical_bonf":
         mtp_mech = GraphicalBonfMTP(
             hypo_tester, args.alpha, success_weight=args.success_weight

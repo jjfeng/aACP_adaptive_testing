@@ -4,6 +4,7 @@ Classes that perform multiple hypothesis testing
 import logging
 from typing import List
 
+import scipy.special
 import numpy as np
 
 from node import Node
@@ -66,19 +67,7 @@ class BinaryThresholdMTP:
         self.test_tree.local_alpha = self.alpha * self.test_tree.weight
 
     def init_test_dat(self, test_dat, num_adapt_queries):
-        self.hypo_tester.set_test_dat(test_dat)
-
-        self.num_queries = -1
-        self.num_adapt_queries = num_adapt_queries
-
-        self.start_node = Node(
-            weight=self.correction_factor,
-            history=[],
-            parent=None,
-        )
-        self._create_children(self.start_node, self.num_queries)
-        self.test_tree = self.start_node
-        self._do_tree_update(1)
+        raise NotImplementedError("need to define init_test_dat")
 
     def get_test_res(self, null_hypo: np.ndarray, orig_mdl, new_mdl, orig_predef_mdl=None, predef_mdl=None):
         """
@@ -101,10 +90,57 @@ class BonferroniThresholdMTP(BinaryThresholdMTP):
 
         self.num_queries = -1
         self.num_adapt_queries = num_adapt_queries
-        self.correction_factor = 1/np.power(2, num_adapt_queries)
+        self.correction_factor = 1/(np.power(2, num_adapt_queries) - 1)
 
         self.start_node = Node(
             weight=self.correction_factor,
+            history=[],
+            parent=None,
+        )
+        self._create_children(self.start_node, self.num_queries)
+        self.test_tree = self.start_node
+        self._do_tree_update(1)
+
+class WeightedBonferroniThresholdMTP(BinaryThresholdMTP):
+    require_predef = False
+    name = "weighted_bonferroni"
+
+    def __init__(self, hypo_tester, alpha: float, bad_attempt_thres: int):
+        self.hypo_tester = hypo_tester
+        self.alpha = alpha
+        self.bad_attempt_thres = bad_attempt_thres
+
+    def _create_children(self, node, query_idx):
+        """
+        @param node: create children for this node
+        @param query_idx: which adaptive query number we are on
+        """
+        children = [Node(
+            weight=self.small_correction_factor if (np.array(node.history) == 0).sum() <= self.bad_attempt_thres else self.big_correction_factor,
+            history=node.history + ([1] if query_idx >= 0 else []) + [0] * i,
+            parent=node,
+            ) for i in range(self.num_adapt_queries - query_idx - 1)]
+        node.children = children
+        node.children_weights = [0 for i in range(len(children))]
+
+
+    def init_test_dat(self, test_dat, num_adapt_queries):
+        self.hypo_tester.set_test_dat(test_dat)
+
+        self.num_queries = -1
+        self.num_adapt_queries = num_adapt_queries
+        num_queries_below_thres = sum([
+                sum([
+                    scipy.special.binom(query_idx, j)
+                    for j in range(min(query_idx + 1, self.bad_attempt_thres + 1))])
+                for query_idx in range(num_adapt_queries)])
+        num_queries_above_thres = np.power(2, num_adapt_queries) - 1 - num_queries_below_thres
+        self.small_correction_factor = 0.5/num_queries_below_thres
+        self.big_correction_factor = 0.5/num_queries_above_thres
+        assert num_queries_above_thres >= 0
+
+        self.start_node = Node(
+            weight=self.small_correction_factor,
             history=[],
             parent=None,
         )

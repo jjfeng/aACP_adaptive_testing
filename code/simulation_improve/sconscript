@@ -21,7 +21,8 @@ SPARSE_P = 6
 SPARSE_COEF_VAL = 0.75
 FWER = 0.1
 MTP_MECH_LIST = [
-    #"bonferroni",
+    "weighted_bonferroni",
+    "bonferroni",
     "graphical_bonf",
     "graphical_ffs",
     "graphical_prespec",
@@ -98,6 +99,7 @@ def create_mtp(env, outdir, c):
         'python create_mtp_mechanism.py',
         '--prespec-ratio 0.6' if "graphical_prespec" == c['mtp_mech'] else '',
         '--success-weight 0.8' if "graphical" in c['mtp_mech'] else '',
+        '--bad-attempt-thres 2' if c['mtp_mech'] == "weighted_bonferroni" else '',
         '--alpha',
         FWER,
         '--hypo-tester',

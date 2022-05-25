@@ -73,6 +73,7 @@ def main():
             }
     mtp_dict = {
             'binary_thres': 'BinaryThres',
+            'weighted_bonferroni': 'WBonferroni',
             'bonferroni': 'Bonferroni',
             'graphical_bonf_thres': 'bonfSRGP',
             'graphical_ffs': 'fsSRGP',
