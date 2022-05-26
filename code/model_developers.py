@@ -5,10 +5,11 @@ import numpy as np
 import pandas as pd
 import scipy.optimize
 import sklearn.base
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.ensemble import GradientBoostingClassifier
 
+from custom_models import *
 from dataset import Dataset, DataGenerator
 from hypothesis_tester import get_log_lik
 
@@ -66,10 +67,14 @@ class LockedModeler:
     def _init_modeler(self, model_type: str):
         if model_type == "Logistic":
             modeler = LogisticRegression(penalty="none", max_iter=10000)
+        elif model_type == "LogisticEven":
+            modeler = LogisticRegressionEven(penalty="none", max_iter=10000)
+        elif model_type == "LogisticOdd":
+            modeler = LogisticRegressionOdd(penalty="none", max_iter=10000)
         elif model_type == "RandomForest":
-            modeler = RandomForestClassifier(n_estimators=300, min_samples_leaf=50, criterion="entropy")
+            modeler = RandomForestClassifier(n_estimators=n_estimators, min_samples_leaf=1, n_jobs=2)
         elif model_type == "GBT":
-            modeler = GradientBoostingClassifier(loss="deviance", max_depth=1, n_estimators=40)
+            modeler = GradientBoostingClassifier(loss="deviance", max_depth=1, n_estimators=100)
         else:
             raise NotImplementedError("model type missing")
         return modeler

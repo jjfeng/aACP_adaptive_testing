@@ -14,7 +14,7 @@ nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
 CLUSTER_STR = localenv['cluster']
 NUM_SEEDS = localenv['num_seeds']
 PERTURB_FACTOR = 0.2
-REUSE_ITERS = 15
+REUSE_ITERS = 10
 MAX_BATCH = REUSE_ITERS * 60
 NUM_P = 100
 SPARSE_P = 6
@@ -39,11 +39,27 @@ nest.add(
     'perf_measure',
     ['auc'])
 
+nest.add_aggregate("summary_res_Lasso", list)
 nest.add_aggregate("summary_res_GBT", list)
+nest.add_aggregate("summary_res_GBT_stochastic", list)
+nest.add_aggregate("summary_res_RandomForest_100", list)
+nest.add_aggregate("summary_res_MLPClassifier", list)
 nest.add_aggregate("summary_res_Logistic", list)
+nest.add_aggregate("summary_res_LogisticShuffle", list)
+nest.add_aggregate("summary_res_LogisticEven", list)
+nest.add_aggregate("summary_res_LogisticOdd", list)
+nest.add(
+    'prespec_model_type',
+    [
+        'LogisticEven',
+    ])
+
 nest.add(
     'model_type',
-    ['GBT', 'Logistic'])
+    [
+        'LogisticOdd',
+        'LogisticEven',
+    ])
 
 nest.add(
     'power',
@@ -76,7 +92,7 @@ def create_model_developer(env, outdir, c):
         '--model-type',
         c['model_type'],
         '--prespec-model-type',
-        'Logistic',
+        c['prespec_model_type'],
         '--hypo-tester',
         c['perf_measure'],
         '--valid-frac',
@@ -138,8 +154,8 @@ def generate_data(env, outdir, c):
         SPARSE_P,
         '--p',
         NUM_P,
-        '--init-train-n 80',
-        '--train-batch-n 5',
+        '--init-train-n 160',
+        '--train-batch-n 10',
         '--num-batches',
         MAX_BATCH,
         '--reuse-test-n',
@@ -194,16 +210,16 @@ def run_experiment(env, outdir, c):
         ],
         ' '.join(map(str, cmd)))
 
-nest.pop("model_type")
+nest.pop("prespec_model_type")
 
 @nest.add_target_with_env(localenv)
 def plot_avg(env, outdir, c):
     cmd = [
         'python plot_simulation_prespec_alignment.py',
-	'--gbt-results',
-        ",".join(["simulation_prespec_alignment/%s" % r for r in c['summary_res_GBT']]),
-	'--logistic-results',
-        ",".join(["simulation_prespec_alignment/%s" % r for r in c['summary_res_Logistic']]),
+	'--even-results',
+        ",".join(["simulation_prespec_alignment/%s" % r for r in c['summary_res_LogisticEven']]),
+	'--odd-results',
+        ",".join(["simulation_prespec_alignment/%s" % r for r in c['summary_res_LogisticOdd']]),
 	'--max-batch',
         MAX_BATCH,
 	'--plot-file ${TARGETS[0]}',
@@ -214,5 +230,5 @@ def plot_avg(env, outdir, c):
             join(outdir, 'res_summary.png'),
             join(outdir, 'res_log.txt'),
         ],
-        [c["summary_res_GBT"], c['summary_res_Logistic']],
+        [c["summary_res_LogisticShuffle"], c['summary_res_LogisticEven']],
         ' '.join(map(str, cmd)))

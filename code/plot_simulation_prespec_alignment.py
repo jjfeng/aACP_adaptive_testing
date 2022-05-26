@@ -17,13 +17,13 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Summarize csvs by taking mean")
     parser.add_argument("--seed", type=int, default=0, help="seed")
     parser.add_argument("--max-batch", type=int, default=0, help="max batch")
-    parser.add_argument("--gbt-results", type=str)
-    parser.add_argument("--logistic-results", type=str)
+    parser.add_argument("--odd-results", type=str, default="")
+    parser.add_argument("--even-results", type=str, default="")
     parser.add_argument("--plot-file", type=str, default="_output/plot.png")
     parser.add_argument("--log-file", type=str, default="_output/log.txt")
     args = parser.parse_args()
-    args.gbt_results = args.gbt_results.split(",")
-    args.logistic_results = args.logistic_results.split(",")
+    args.odd_results = args.odd_results.split(",")
+    args.even_results = args.even_results.split(",")
     return args
 
 def read_res(results, max_batch, mdl_type):
@@ -65,9 +65,9 @@ def main():
         format="%(message)s", filename=args.log_file, level=logging.INFO
     )
 
-    all_gbt_res = read_res(args.gbt_results, args.max_batch, "GBT")
-    all_logistic_res = read_res(args.logistic_results, args.max_batch, "logistic")
-    all_res = pd.concat([all_gbt_res, all_logistic_res])
+    all_odd_res = read_res(args.odd_results, args.max_batch, "odd")
+    all_even_res = read_res(args.even_results, args.max_batch, "even (prespec)")
+    all_res = pd.concat([all_odd_res, all_even_res])
     print(all_res)
 
     # Rename all the things for prettier figures
@@ -75,9 +75,6 @@ def main():
             'curr_diff': 'Detected improvement',
             'num_approvals': 'Number of approvals',
             'auc': 'AUC',
-            }
-    mtp_dict = {
-            'graphical_par': "presSRGP"
             }
     all_res = all_res.rename({
         "value": "Value",

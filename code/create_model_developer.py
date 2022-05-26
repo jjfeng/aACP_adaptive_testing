@@ -8,7 +8,6 @@ import logging
 
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
 
 from dataset import DataGenerator
 from model_developers import *
