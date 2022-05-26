@@ -189,6 +189,10 @@ class OnlineAdaptLossModeler(LockedModeler):
     Just do online learning on a separate dataset
     """
     def __init__(self, model_type: str, prespec_model_type: str, hypo_tester, validation_frac: float = 0.2, min_valid_dat_size: int = 200, power: float = 0.5, ni_margin: float = 0.01, predef_alpha: float = 0.1, se_factor: float = 1.96):
+        """
+        @param model_type: the type of model that we plan to use for proposing modifications
+        @param prespec_model_type: the type of model that we plan to use for prespecification (should usually be same as model_type)
+        """
         self.modeler = self._init_modeler(model_type)
         self.prespec_modeler = self._init_modeler(prespec_model_type)
         self.hypo_tester = hypo_tester
