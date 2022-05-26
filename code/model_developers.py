@@ -65,16 +65,17 @@ class LockedModeler:
     """
     def _init_modeler(self, model_type: str):
         if model_type == "Logistic":
-            self.modeler = LogisticRegression(penalty="none", max_iter=10000)
+            modeler = LogisticRegression(penalty="none", max_iter=10000)
         elif model_type == "RandomForest":
-            self.modeler = RandomForestClassifier(n_estimators=300, min_samples_leaf=50, criterion="entropy")
+            modeler = RandomForestClassifier(n_estimators=300, min_samples_leaf=50, criterion="entropy")
         elif model_type == "GBT":
-            self.modeler = GradientBoostingClassifier(loss="deviance", max_depth=1, n_estimators=40)
+            modeler = GradientBoostingClassifier(loss="deviance", max_depth=1, n_estimators=40)
         else:
             raise NotImplementedError("model type missing")
+        return modeler
 
     def __init__(self, model_type:str, seed:int = 0):
-        self._init_modeler(model_type)
+        self.modeler = self._init_modeler(model_type)
 
     def predict_prob(self, x):
         return self.modeler.predict_proba(x)[:, 1].reshape((-1, 1))
@@ -187,8 +188,9 @@ class OnlineAdaptLossModeler(LockedModeler):
     """
     Just do online learning on a separate dataset
     """
-    def __init__(self, model_type: str, hypo_tester, validation_frac: float = 0.2, min_valid_dat_size: int = 200, power: float = 0.5, ni_margin: float = 0.01, predef_alpha: float = 0.1, se_factor: float = 1.96):
-        self._init_modeler(model_type)
+    def __init__(self, model_type: str, prespec_model_type: str, hypo_tester, validation_frac: float = 0.2, min_valid_dat_size: int = 200, power: float = 0.5, ni_margin: float = 0.01, predef_alpha: float = 0.1, se_factor: float = 1.96):
+        self.modeler = self._init_modeler(model_type)
+        self.prespec_modeler = self._init_modeler(prespec_model_type)
         self.hypo_tester = hypo_tester
         self.validation_frac = validation_frac
         self.min_valid_dat_size = min_valid_dat_size
@@ -249,8 +251,8 @@ class OnlineAdaptLossModeler(LockedModeler):
         @return perf_value
         """
         train_dat, valid_dat = self._create_train_valid_dat(dat)
-        self.modeler.fit(train_dat.x, train_dat.y.flatten())
-        orig_mdl = self.modeler
+        self.prespec_modeler.fit(train_dat.x, train_dat.y.flatten())
+        orig_mdl = self.prespec_modeler
 
         curr_diff= 0
         test_hist = TestHistory(orig_mdl, res_detail=pd.DataFrame({
@@ -264,8 +266,10 @@ class OnlineAdaptLossModeler(LockedModeler):
 
             predef_dat = Dataset.merge([dat] + dat_stream[: adapt_read_idx + 1])
             predef_train_dat, predef_valid_dat = self._create_train_valid_dat(predef_dat)
-            predef_lr = sklearn.base.clone(self.modeler)
+            predef_lr = sklearn.base.clone(self.prespec_modeler)
             predef_lr.fit(predef_train_dat.x, predef_train_dat.y.flatten())
+            online_mdl = sklearn.base.clone(self.modeler)
+            online_mdl.fit(predef_train_dat.x, predef_train_dat.y.flatten())
 
             # calculate the threshold that we can test at such that the power of rejecting the null given Type I error at level alpha_node
             predef_test_power, _ = self._do_power_calc_test_bound(
@@ -300,7 +304,9 @@ class OnlineAdaptLossModeler(LockedModeler):
                 null_constraints = np.array([
                         [0,adapt_test_diff]])
                 test_res = mtp_mechanism.get_test_res(
-                    null_constraints, orig_mdl, predef_lr,
+                    null_constraints,
+                    orig_mdl,
+                    new_mdl=online_mdl,
                     orig_predef_mdl=orig_mdl,
                     predef_mdl=predef_test_mdls[test_idx] if mtp_mechanism.require_predef else None
                 )
@@ -314,7 +320,7 @@ class OnlineAdaptLossModeler(LockedModeler):
                         test_res=test_res,
                         res_detail = pd.DataFrame({
                             "curr_diff": [curr_diff]}),
-                        proposed_mdl=predef_lr,
+                        proposed_mdl=online_mdl,
                         batch_number=adapt_read_idx,
                     )
             else:
@@ -325,103 +331,13 @@ class OnlineAdaptLossModeler(LockedModeler):
 
         return test_hist
 
-class OnlineAdaptCompareModeler(OnlineAdaptLossModeler):
-    """
-    Just do online learning on a separate dataset
-    """
-    def simulate_approval_process(self, dat, mtp_mechanism, dat_stream, maxfev=10, side_dat_stream = None):
-        """
-        @param dat_stream: a list of datasets for further training the model
-        @return perf_value
-        """
-        train_dat, valid_dat = self._create_train_valid_dat(dat)
-        self.modeler.fit(train_dat.x, train_dat.y.flatten())
-        orig_mdl = self.modeler
-        prev_mdl = orig_mdl
-
-        curr_diff= 0
-        test_hist = TestHistory(orig_mdl, res_detail=pd.DataFrame({
-                "curr_diff": [0],
-                }))
-        test_idx = 0
-        adapt_read_idx = 0
-        lag_time = 10
-        predef_test_mdls = []
-        while (test_idx < maxfev) and (adapt_read_idx < len(dat_stream)):
-            print("ITERATION", test_idx)
-
-            predef_dat = Dataset.merge([dat] + dat_stream[: adapt_read_idx + 1])
-            predef_train_dat, predef_valid_dat = self._create_train_valid_dat(predef_dat)
-            predef_lr = sklearn.base.clone(self.modeler)
-            predef_lr.fit(predef_train_dat.x, predef_train_dat.y.flatten())
-
-            # calculate the threshold that we can test at such that the power of rejecting the null given Type I error at level alpha_node
-            predef_test_power, _ = self._do_power_calc_test_bound(
-                    orig_mdl,
-                    predef_lr,
-                    min_diff=len(predef_test_mdls) * self.ni_margin,
-                    valid_dat=predef_valid_dat,
-                    num_test=mtp_mechanism.test_set_size,
-                    alpha=self.predef_alpha)
-
-            logging.info("predef batch %d power %.5f", adapt_read_idx, predef_test_power)
-            if predef_test_power >= self.power/4:
-                # Predef will not test if power is terrible
-                predef_test_mdls.append(predef_lr)
-                logging.info("predef TEST idx %d, adapt idx %d, batch %d", len(predef_test_mdls) - 1, test_idx, adapt_read_idx)
-
-            # do the same for an adaptively decided min difference
-            adapt_test_power, adapt_test_diff = self._do_power_calc_test_bound(
-                    prev_mdl,
-                    predef_lr,
-                    min_diff=curr_diff,
-                    valid_dat=predef_valid_dat,
-                    num_test=mtp_mechanism.test_set_size,
-                    alpha=self.predef_alpha)
-            logging.info("adapt batch %d power %.5f", adapt_read_idx, adapt_test_power)
-
-            adapt_read_idx += 1
-            if (adapt_test_power > self.power) and (test_hist.batch_numbers[-1] < (adapt_read_idx - lag_time)):
-                logging.info("TEST idx: %d (batch_number) %d", test_idx, adapt_read_idx)
-                logging.info("TEST (avg) diff %f", adapt_test_diff)
-
-                print("test", test_idx)
-                null_constraints = np.array([
-                        [0,0]])
-                test_res = mtp_mechanism.get_test_res(
-                    null_constraints,
-                    prev_mdl,
-                    predef_lr,
-                    orig_predef_mdl=orig_mdl,
-                    predef_mdl=predef_test_mdls[test_idx] if mtp_mechanism.require_predef else None
-                )
-                if test_res:
-                    prev_mdl = predef_lr
-                test_idx += 1
-                logging.info("Test res %d", test_res)
-                print("TEST RES", test_res)
-
-                test_hist.update(
-                        test_res=test_res,
-                        res_detail = pd.DataFrame({
-                            "curr_diff": [curr_diff]}),
-                        proposed_mdl=predef_lr,
-                        batch_number=adapt_read_idx,
-                    )
-            else:
-                logging.info("CONTinuing to pull data until confident in improvement %f <  %f + %f", adapt_test_diff, curr_diff, self.ni_margin)
-        logging.info("adapt read idx %d", adapt_read_idx)
-        print("adapt read", adapt_read_idx)
-        logging.info("TEST batch numbers %s (len %d)", test_hist.batch_numbers, len(test_hist.batch_numbers))
-
-        return test_hist
 
 class OnlineAdaptCalibAUCModeler(OnlineAdaptLossModeler):
     """
     Just do online learning on a separate dataset
     """
     def __init__(self, model_type:str, hypo_tester, validation_frac: float = 0.2, min_valid_dat_size: int = 200, power: float = 0.5, ni_margin: float = 0.01, calib_ni_margin: float = 0.1, predef_alpha: float = 0.1, se_factor: float = 1.96):
-        self._init_modeler(model_type)
+        self.modeler = self._init_modeler(model_type)
         self.hypo_tester = hypo_tester
         self.validation_frac = validation_frac
         self.min_valid_dat_size = min_valid_dat_size

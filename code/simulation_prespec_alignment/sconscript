@@ -39,9 +39,11 @@ nest.add(
     'perf_measure',
     ['auc'])
 
+nest.add_aggregate("summary_res_GBT", list)
+nest.add_aggregate("summary_res_Logistic", list)
 nest.add(
-    'online_model_type',
-    ['GBT'])
+    'model_type',
+    ['GBT', 'Logistic'])
 
 nest.add(
     'power',
@@ -72,9 +74,9 @@ def create_model_developer(env, outdir, c):
         '--alpha',
         0.1,
         '--model-type',
+        c['model_type'],
+        '--prespec-model-type',
         'Logistic',
-        '--online-model-type',
-        c['online_model_type'],
         '--hypo-tester',
         c['perf_measure'],
         '--valid-frac',
@@ -117,7 +119,6 @@ def create_mtp(env, outdir, c):
 
 nest.pop('mtp_mech')
 
-nest.add_aggregate("summary_res", list)
 nest.add(
     'seed',
     range(NUM_SEEDS),
@@ -161,7 +162,7 @@ nest.add(
 
 @nest.add_target_with_env(localenv)
 def run_experiment(env, outdir, c):
-    scratch_file = join("simulation_improve", outdir, "scratch.txt")
+    scratch_file = join("simulation_prespec_alignment", outdir, "scratch.txt")
     cmd = [
         'python run_script.py',
         CLUSTER_STR,
@@ -174,7 +175,7 @@ def run_experiment(env, outdir, c):
 	'--data ${SOURCES[0]}',
 	'--model ${SOURCES[1]}',
 	'--mtp-mech',
-    "simulation_improve/%s" % c['mtp_mech_res'][c['mtp_mech']],
+    "simulation_prespec_alignment/%s" % c['mtp_mech_res'][c['mtp_mech']],
 	    '--scratch %s' % scratch_file if c['mtp_mech'] in ["graphical_prespec", "graphical_ffs"] else '',
 	'--log ${TARGETS[0]}',
 	'--out-csv ${TARGETS[1]}',
@@ -183,7 +184,7 @@ def run_experiment(env, outdir, c):
             join(outdir, 'log.txt'),
             join(outdir, 'res.csv'),
         ]
-    c['summary_res'].append(targets[1])
+    c['summary_res_%s' % c['model_type']].append(targets[1])
     return env.Command(
         targets,
         [
@@ -193,14 +194,16 @@ def run_experiment(env, outdir, c):
         ],
         ' '.join(map(str, cmd)))
 
-nest.pop("seed")
+nest.pop("model_type")
 
 @nest.add_target_with_env(localenv)
 def plot_avg(env, outdir, c):
     cmd = [
-        'python plot_simulation_improve.py',
-	'--results',
-        ",".join(["simulation_improve/%s" % r for r in c['summary_res']]),
+        'python plot_simulation_prespec_alignment.py',
+	'--gbt-results',
+        ",".join(["simulation_prespec_alignment/%s" % r for r in c['summary_res_GBT']]),
+	'--logistic-results',
+        ",".join(["simulation_prespec_alignment/%s" % r for r in c['summary_res_Logistic']]),
 	'--max-batch',
         MAX_BATCH,
 	'--plot-file ${TARGETS[0]}',
@@ -211,5 +214,5 @@ def plot_avg(env, outdir, c):
             join(outdir, 'res_summary.png'),
             join(outdir, 'res_log.txt'),
         ],
-        c["summary_res"],
+        [c["summary_res_GBT"], c['summary_res_Logistic']],
         ' '.join(map(str, cmd)))
