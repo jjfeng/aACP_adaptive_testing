@@ -71,6 +71,8 @@ class LockedModeler:
             modeler = LogisticRegressionEven(penalty="none", max_iter=10000)
         elif model_type == "LogisticOdd":
             modeler = LogisticRegressionOdd(penalty="none", max_iter=10000)
+        elif model_type == "LogisticMod":
+            modeler = LogisticRegressionMod(penalty="none", max_iter=10000)
         elif model_type == "RandomForest":
             modeler = RandomForestClassifier(n_estimators=n_estimators, min_samples_leaf=1, n_jobs=2)
         elif model_type == "GBT":

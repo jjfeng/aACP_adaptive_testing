@@ -39,15 +39,10 @@ nest.add(
     'perf_measure',
     ['auc'])
 
-nest.add_aggregate("summary_res_Lasso", list)
-nest.add_aggregate("summary_res_GBT", list)
-nest.add_aggregate("summary_res_GBT_stochastic", list)
-nest.add_aggregate("summary_res_RandomForest_100", list)
-nest.add_aggregate("summary_res_MLPClassifier", list)
 nest.add_aggregate("summary_res_Logistic", list)
-nest.add_aggregate("summary_res_LogisticShuffle", list)
 nest.add_aggregate("summary_res_LogisticEven", list)
 nest.add_aggregate("summary_res_LogisticOdd", list)
+nest.add_aggregate("summary_res_LogisticMod", list)
 nest.add(
     'prespec_model_type',
     [
@@ -59,6 +54,7 @@ nest.add(
     [
         'LogisticOdd',
         'LogisticEven',
+        'LogisticMod',
     ])
 
 nest.add(
@@ -218,6 +214,8 @@ def plot_avg(env, outdir, c):
         'python plot_simulation_prespec_alignment.py',
 	'--even-results',
         ",".join(["simulation_prespec_alignment/%s" % r for r in c['summary_res_LogisticEven']]),
+	'--mod4-results',
+        ",".join(["simulation_prespec_alignment/%s" % r for r in c['summary_res_LogisticMod']]),
 	'--odd-results',
         ",".join(["simulation_prespec_alignment/%s" % r for r in c['summary_res_LogisticOdd']]),
 	'--max-batch',
@@ -230,5 +228,9 @@ def plot_avg(env, outdir, c):
             join(outdir, 'res_summary.png'),
             join(outdir, 'res_log.txt'),
         ],
-        [c["summary_res_LogisticShuffle"], c['summary_res_LogisticEven']],
+        [
+            c["summary_res_LogisticOdd"],
+            c['summary_res_LogisticEven'],
+            c['summary_res_LogisticMod'],
+        ],
         ' '.join(map(str, cmd)))

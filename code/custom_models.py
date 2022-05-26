@@ -2,6 +2,12 @@ import numpy as np
 
 from sklearn.linear_model import LogisticRegression
 
+class LogisticRegressionMod(LogisticRegression):
+    def fit(self, X, y):
+        all_idxs = np.arange(y.shape[0])
+        selected_idxs = np.isin(all_idxs % 6, [0,3,5])
+        super().fit(X[selected_idxs], y[selected_idxs])
+
 class LogisticRegressionOdd(LogisticRegression):
     def fit(self, X, y):
         all_idxs = np.arange(y.shape[0])

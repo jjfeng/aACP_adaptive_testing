@@ -18,11 +18,13 @@ def parse_args():
     parser.add_argument("--seed", type=int, default=0, help="seed")
     parser.add_argument("--max-batch", type=int, default=0, help="max batch")
     parser.add_argument("--odd-results", type=str, default="")
+    parser.add_argument("--mod-results", type=str, default="")
     parser.add_argument("--even-results", type=str, default="")
     parser.add_argument("--plot-file", type=str, default="_output/plot.png")
     parser.add_argument("--log-file", type=str, default="_output/log.txt")
     args = parser.parse_args()
     args.odd_results = args.odd_results.split(",")
+    args.mod_results = args.mod_results.split(",")
     args.even_results = args.even_results.split(",")
     return args
 
@@ -39,7 +41,6 @@ def read_res(results, max_batch, mdl_type):
                 "time": batch_dict.time}).drop_duplicates()
 
             res = res.merge(batch_df, on="time")
-            print(batch_df)
             for i in range(batch_df.shape[0]):
                 batch_start = int(batch_df.batch_number.iloc[i])
                 if i == (batch_df.shape[0] - 1):
@@ -66,9 +67,12 @@ def main():
     )
 
     all_odd_res = read_res(args.odd_results, args.max_batch, "odd")
+    all_mod_res = read_res(args.mod_results, args.max_batch, "mod")
     all_even_res = read_res(args.even_results, args.max_batch, "even (prespec)")
-    all_res = pd.concat([all_odd_res, all_even_res])
-    print(all_res)
+    all_res = pd.concat([
+        all_odd_res,
+        all_mod_res,
+        all_even_res])
 
     # Rename all the things for prettier figures
     measure_dict = {
