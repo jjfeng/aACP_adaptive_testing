@@ -1,0 +1,228 @@
+import os
+
+from os.path import join
+from nestly.scons import SConsWrap
+from nestly import Nest
+from SCons.Script import Environment, Command, AddOption
+
+Import('env')
+localenv = env.Clone()
+
+# Set up state
+nest = SConsWrap(Nest(), localenv['output'], alias_environment=localenv)
+
+CLUSTER_STR = localenv['cluster']
+NUM_SEEDS = localenv['num_seeds']
+INIT_TRAIN = 5
+FWER = 0.1
+EICU_DATA = "../data/train_99.csv"
+MTP_MECH_LIST = [
+    "bonferroni",
+    #"weighted_bonferroni",
+    #"graphical_bonf",
+    #"graphical_ffs",
+    #"graphical_prespec",
+]
+
+nest.add(
+    'reuse_test_n',
+    [5],
+    label_func=lambda c: "test_%d" % c)
+
+nest.add(
+    'model_sim',
+    [
+        "online_delta",
+    ])
+
+nest.add(
+    'model_type',
+    [
+        "Logistic",
+    ])
+
+nest.add(
+    'perf_measure',
+    ['auc'])
+
+nest.add(
+    'power',
+    [0.5],
+    label_func=lambda c: "power_%d" % int(c * 100))
+
+nest.add(
+    'se_factor',
+    [
+        1,
+    ],
+    label_func=lambda c: "se_factor_%.3f" % c)
+
+@nest.add_target_with_env(localenv)
+def create_model_developer(env, outdir, c):
+    targets = [
+            join(outdir, 'model.pkl')]
+    cmd = [
+        'python create_model_developer.py',
+        '--simulation',
+        c['model_sim'],
+        '--se-factor',
+        c['se_factor'],
+        '--power',
+        c['power'],
+        '--ni-margin',
+        0.01,
+        '--calib-ni-margin',
+        0.05,
+        '--alpha',
+        0.1,
+        '--model-type',
+        c['model_type'],
+        '--hypo-tester',
+        c['perf_measure'],
+        '--valid-frac',
+        0.5,
+        '--min-valid-dat-size',
+        200,
+        '--out ${TARGETS[0]}'
+    ]
+    return env.Command(
+        targets,
+        [],
+        ' '.join(map(str, cmd)))
+
+nest.add_aggregate("mtp_mech_res", dict)
+nest.add(
+    'mtp_mech',
+    MTP_MECH_LIST)
+
+@nest.add_target_with_env(localenv)
+def create_mtp(env, outdir, c):
+    targets = [join(outdir, 'mtp_mech.pkl')]
+    cmd = [
+        'python create_mtp_mechanism.py',
+        '--prespec-ratio 0.6' if "graphical_prespec" == c['mtp_mech'] else '',
+        '--success-weight 0.8' if "graphical" in c['mtp_mech'] else '',
+        '--alpha',
+        FWER,
+        '--hypo-tester',
+        c['perf_measure'],
+        '--mtp-mech',
+        c['mtp_mech'],
+	    '--out ${TARGETS[0]}'
+    ]
+    c['mtp_mech_res'][c['mtp_mech']] = targets[0]
+    return env.Command(
+        targets,
+        [],
+        ' '.join(map(str, cmd)))
+
+nest.pop('mtp_mech')
+
+nest.add(
+    'train_batch_n',
+    [
+        1,
+    ],
+    label_func=lambda c: "train_batch_%d" % c)
+
+nest.add(
+    'reuse_iters',
+    [
+        15
+    ],
+    label_func=lambda c: "reuse_iters_%d" % c)
+
+nest.add(
+    'random_pick_n',
+    [10],
+    label_func=lambda c: "random_pick_%d" % c)
+
+nest.add_aggregate("summary_res", list)
+nest.add(
+    'seed',
+    range(NUM_SEEDS),
+    label_func=lambda c: "seed_%d" % c)
+
+@nest.add_target_with_env(localenv)
+def generate_data(env, outdir, c):
+    cmd = [
+        'python read_rsna_data.py',
+        '--seed',
+        c['seed'],
+        '--dat-file',
+        EICU_DATA,
+        '--init-train-n',
+        INIT_TRAIN,
+        '--train-batch-n',
+        c['train_batch_n'],
+        '--reuse-test-n',
+        c['reuse_test_n'],
+        '--random-pick-n',
+        c['random_pick_n'],
+        '--out ${TARGETS[0]}',
+        '--log-file ${TARGETS[1]}']
+    return env.Command(
+        [
+            join(outdir, 'data.pkl'),
+            join(outdir, 'data_log.txt')],
+        [],
+        ' '.join(map(str, cmd)))
+
+nest.add(
+    'mtp_mech',
+    MTP_MECH_LIST)
+
+@nest.add_target_with_env(localenv)
+def run_experiment(env, outdir, c):
+    scratch_file = join("experiment_rsna", outdir, "scratch.txt")
+    cmd = [
+        #'python run_script.py',
+        #CLUSTER_STR,
+        #'${TARGETS[0]}',
+        'python main.py',
+        '--seed',
+        c['seed'],
+        '--max-iter',
+        c['reuse_iters'],
+        '--data ${SOURCES[0]}',
+        '--model ${SOURCES[1]}',
+        '--mtp-mech',
+        "experiment_rsna/%s" % c['mtp_mech_res'][c['mtp_mech']],
+	    '--scratch %s' % scratch_file if c['mtp_mech'] in ["graphical_prespec", "graphical_ffs"] else '',
+        '--log ${TARGETS[0]}',
+        '--out-csv ${TARGETS[1]}',
+    ]
+    targets = [
+            join(outdir, 'log.txt'),
+            join(outdir, 'res.csv'),
+        ]
+    c['summary_res'].append(targets[1])
+    return env.Command(
+        targets,
+        [
+            c["generate_data"][0],
+            c["create_model_developer"][0],
+            c["mtp_mech_res"][c['mtp_mech']],
+        ],
+        ' '.join(map(str, cmd)))
+
+nest.pop("seed")
+
+@nest.add_target_with_env(localenv)
+def plot_avg(env, outdir, c):
+    cmd = [
+        'python plot_experiment_rsna.py',
+	'--results',
+        ",".join(["experiment_rsna/%s" % r for r in c['summary_res']]),
+	'--max-batch',
+        (1129 - INIT_TRAIN - c['reuse_test_n'])//c['train_batch_n'],
+	'--plot-file ${TARGETS[0]}',
+	'--log-file ${TARGETS[1]}',
+    ]
+    return env.Command(
+        [
+            join(outdir, 'res_summary.png'),
+            join(outdir, 'res_log.txt'),
+        ],
+        c["summary_res"],
+        ' '.join(map(str, cmd)))
