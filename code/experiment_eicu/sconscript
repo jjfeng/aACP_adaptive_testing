@@ -18,6 +18,7 @@ FWER = 0.1
 EICU_DATA = "../data/eicu_hypotension_data.csv"
 MTP_MECH_LIST = [
     #"binary_thres_mtp",
+    "weighted_bonferroni",
     "bonferroni",
     "graphical_bonf",
     "graphical_ffs",

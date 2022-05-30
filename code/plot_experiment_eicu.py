@@ -74,6 +74,7 @@ def main():
             }
     mtp_dict = {
             'binary_thres': 'BinaryThres',
+            'weighted_bonferroni': 'WBonferroni',
             'bonferroni': 'Bonferroni',
             'graphical_bonf_thres': 'bonfSRGP',
             'graphical_ffs': 'fsSRGP',
@@ -121,7 +122,6 @@ def main():
             logging.info(ttest_res)
             print(method1, method2)
             print(ttest_res)
-    1/0
 
     sns.set_context("paper", font_scale=2.5)
     rel_plt = sns.relplot(
