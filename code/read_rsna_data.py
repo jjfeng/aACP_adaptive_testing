@@ -12,6 +12,7 @@ import pandas as pd
 
 from dataset import *
 
+MAX_VARIABLES = 2000
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Read RSNA data for simulations")
@@ -20,10 +21,11 @@ def parse_args():
     parser.add_argument("--init-train-n", type=int, default=10, help="how much data was used to train the initial model")
     parser.add_argument("--train-batch-n", type=int, default=1, help="how much data is observed between each iteration, in the simulated data stream")
     parser.add_argument("--random-pick-n", type=int, default=1, help="how many observations to randomly pick within a subject")
-    parser.add_argument("--dat-file", type=str)
+    parser.add_argument("--dat-files", type=str)
     parser.add_argument("--out-file", type=str, default="_output/data.pkl")
     parser.add_argument("--log-file", type=str, default="_output/log.txt")
     args = parser.parse_args()
+    args.dat_files = args.dat_files.split(",")
     return args
 
 def _get_data(full_dat, patient_ids, selected_ids, max_random_pick=None):
@@ -31,6 +33,7 @@ def _get_data(full_dat, patient_ids, selected_ids, max_random_pick=None):
         selected_rows = []
         for p_stay_id in selected_ids:
             stay_row_idxs = np.where(patient_ids == p_stay_id)[0]
+            #print("STAY ROWS", stay_row_idxs, p_stay_id)
             if max_random_pick > stay_row_idxs.size:
                 selected_idxs = stay_row_idxs
             else:
@@ -51,16 +54,25 @@ def main():
     np.random.seed(args.seed)
 
     # Prep data
-    dat = pd.read_csv(args.dat_file, delimiter=",")
+    dat = pd.concat([
+        pd.read_csv(dat_file, delimiter=",")
+        for dat_file in args.dat_files])
     patient_ids = dat["patient_ID"].to_numpy()
     dat = dat.iloc[:,np.concatenate([[4], np.arange(12, dat.shape[1])])].to_numpy()
+    col_vars = np.var(dat, axis=0)
+    dat = dat[:, col_vars > 0]
+    print("keep cols", np.sum(col_vars > 0))
+
+    # normalize
+    col_means = np.mean(dat[:,1:MAX_VARIABLES], axis=0, keepdims=True)
+    col_sds = np.sqrt(np.var(dat[:,1:MAX_VARIABLES], axis=0, keepdims=True))
+    dat[:,1:MAX_VARIABLES] = (dat[:,1:MAX_VARIABLES] - col_means)/col_sds
 
     # Shuffle patient ids
     num_uniq_ids = np.unique(patient_ids).size
     print("NUM UNIQ", num_uniq_ids)
     logging.info("uniq patient ids %d, train %d", num_uniq_ids, args.init_train_n)
     rand_ids = np.random.choice(np.unique(patient_ids), num_uniq_ids, replace=False)
-    print("RAND", rand_ids, num_uniq_ids)
     init_train_idxs = rand_ids[:args.init_train_n]
     init_train_dat = _get_data(dat, patient_ids, init_train_idxs, max_random_pick=args.random_pick_n)
     start_idx = args.init_train_n
@@ -72,11 +84,11 @@ def main():
 
     # Split data
     init_train_dat = Dataset(
-            x=init_train_dat[:,1:],
+            x=init_train_dat[:,1:MAX_VARIABLES],
             y=init_train_dat[:,:1],
             )
     reuse_test_dat = Dataset(
-            x=reuse_test_dat[:,1:],
+            x=reuse_test_dat[:,1:MAX_VARIABLES],
             y=reuse_test_dat[:,:1],
             )
     print("OUTCOME RATE", reuse_test_dat.y.mean())
@@ -87,7 +99,7 @@ def main():
         dat_slice = _get_data(dat, patient_ids, batch_ids, max_random_pick=args.random_pick_n)
         iid_train_dats.append(
                 Dataset(
-                    x=dat_slice[:,1:],
+                    x=dat_slice[:,1:MAX_VARIABLES],
                     y=dat_slice[:,:1],
             ))
     logging.info("train batches %d", len(iid_train_dats))

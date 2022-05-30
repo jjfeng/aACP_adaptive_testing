@@ -73,6 +73,10 @@ class LockedModeler:
             modeler = LogisticRegressionOdd(penalty="none", max_iter=10000)
         elif model_type == "LogisticMod":
             modeler = LogisticRegressionMod(penalty="none", max_iter=10000)
+        elif model_type == "LogisticLasso":
+            modeler = LogisticRegressionCV(class_weight="balanced", penalty="l1", max_iter=10000, solver="liblinear", cv=3, n_jobs=2, Cs=5, scoring="roc_auc")
+        elif model_type == "LogisticRidge":
+            modeler = LogisticRegressionCV(class_weight="balanced", penalty="l2", max_iter=10000, solver="liblinear", cv=3)
         elif model_type == "RandomForest":
             modeler = RandomForestClassifier(n_estimators=n_estimators, min_samples_leaf=1, n_jobs=2)
         elif model_type == "GBT":
@@ -306,6 +310,9 @@ class OnlineAdaptLossModeler(LockedModeler):
                     num_test=mtp_mechanism.test_set_size,
                     alpha=self.predef_alpha)
             logging.info("adapt batch %d power %.5f", adapt_read_idx, adapt_test_power)
+
+            print("COEF", predef_lr.coef_[np.abs(predef_lr.coef_) > 0])
+            print("INTERCE", predef_lr.intercept_)
 
             adapt_read_idx += 1
             if (adapt_test_power > self.power) and (adapt_test_diff >= (curr_diff + self.ni_margin)) and not (mtp_mechanism.require_predef and len(predef_test_mdls) <= test_idx):
