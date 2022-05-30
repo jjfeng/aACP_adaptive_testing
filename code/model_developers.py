@@ -311,8 +311,8 @@ class OnlineAdaptLossModeler(LockedModeler):
                     alpha=self.predef_alpha)
             logging.info("adapt batch %d power %.5f", adapt_read_idx, adapt_test_power)
 
-            print("COEF", predef_lr.coef_[np.abs(predef_lr.coef_) > 0])
-            print("INTERCE", predef_lr.intercept_)
+            #print("COEF", predef_lr.coef_[np.abs(predef_lr.coef_) > 0])
+            #print("INTERCE", predef_lr.intercept_)
 
             adapt_read_idx += 1
             if (adapt_test_power > self.power) and (adapt_test_diff >= (curr_diff + self.ni_margin)) and not (mtp_mechanism.require_predef and len(predef_test_mdls) <= test_idx):
