@@ -17,10 +17,10 @@ INIT_TRAIN = 100
 FWER = 0.1
 RSNA_DATA = ",".join(["../data/train_%d.csv" % i for i in range(70,100)])
 MTP_MECH_LIST = [
-    #"bonferroni",
-    #"weighted_bonferroni",
-    #"graphical_bonf",
-    #"graphical_ffs",
+    "bonferroni",
+    "weighted_bonferroni",
+    "graphical_bonf",
+    "graphical_ffs",
     "graphical_prespec",
 ]
 
@@ -38,13 +38,13 @@ nest.add(
 nest.add(
     'model_type',
     [
-        "LogisticLasso",
-        #"LogisticRidge",
+        "GBT",
     ])
 
 nest.add(
     'perf_measure',
-    ['auc'])
+    ['calib_auc'])
+    #['auc'])
 
 nest.add(
     'power',
@@ -83,7 +83,7 @@ def create_model_developer(env, outdir, c):
         '--hypo-tester',
         c['perf_measure'],
         '--valid-frac',
-        0.5,
+        0.3,
         '--min-valid-dat-size',
         10,
         '--out ${TARGETS[0]}'
@@ -124,14 +124,14 @@ nest.pop('mtp_mech')
 nest.add(
     'train_batch_n',
     [
-        120,
+        10,
     ],
     label_func=lambda c: "train_batch_%d" % c)
 
 nest.add(
     'reuse_iters',
     [
-        5
+        10
     ],
     label_func=lambda c: "reuse_iters_%d" % c)
 
@@ -214,12 +214,12 @@ nest.pop("seed")
 @nest.add_target_with_env(localenv)
 def plot_avg(env, outdir, c):
     cmd = [
-        'python plot_experiment_eicu.py',
+        'python plot_experiment_rsna.py',
 	'--results',
         ",".join(["experiment_rsna/%s" % r for r in c['summary_res']]),
 	'--max-batch',
     # placeholder number for now
-    10,
+    95,
 	'--plot-file ${TARGETS[0]}',
 	'--log-file ${TARGETS[1]}',
     ]

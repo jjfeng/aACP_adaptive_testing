@@ -99,7 +99,7 @@ class AUCHypothesisTester(HypothesisTester):
         cov_est = np.cov(full_df)/self.test_dat.size
         if full_df.shape[0] == 1:
             cov_est = np.array([[cov_est]])
-        logging.info("cov est %s", cov_est)
+        #logging.info("cov est %s", cov_est)
         if np.any(np.isnan(cov_est)):
             print(full_df)
             raise ValueError("something wrong with cov")
@@ -224,7 +224,7 @@ class CalibZAUCHypothesisTester(AUCHypothesisTester):
         cov_est = np.cov(full_df)/self.test_dat.size
         if full_df.shape[0] == 1:
             cov_est = np.array([[cov_est]])
-        logging.info("cov est %s", cov_est)
+        #logging.info("cov est %s", cov_est)
         if np.any(np.isnan(cov_est)):
             print(full_df)
             raise ValueError("something wrong with cov")

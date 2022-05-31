@@ -26,7 +26,7 @@ def parse_args():
     parser.add_argument("--simulation", type=str, default="online_delta", choices=["adversary", "online_delta"])
     parser.add_argument("--hypo-tester", type=str, default="auc", choices=["log_lik", "auc", "calib_auc"])
     parser.add_argument("--model-type", type=str, default="Logistic")
-    parser.add_argument("--prespec-model-type", type=str, default="Logistic")
+    parser.add_argument("--prespec-model-type", type=str, default="Logistic", help="This argument lets you pick a different model type to prespecify. Used for sensitivity analyses in the appendix. Only used for testing auc")
     parser.add_argument("--out-file", type=str, default="_output/model.pkl")
     # ONLY RELEVANT TO ADVERSARIAL DEVELOPER
     parser.add_argument("--sparse-p", type=int, default=4, help="number of nonzero coefficients in the true logistic regression model")
@@ -59,7 +59,7 @@ def main():
                     args.prespec_model_type,
                     hypo_tester, min_valid_dat_size=args.min_valid_dat_size, predef_alpha=args.alpha, power=args.power, se_factor=args.se_factor, ni_margin=args.ni_margin)
         elif args.hypo_tester == "calib_auc":
-            clf = OnlineAdaptCalibAUCModeler(args.model_type, args.prespec_model_type, hypo_tester, validation_frac=args.valid_frac, min_valid_dat_size=args.min_valid_dat_size, predef_alpha=args.alpha, power=args.power, se_factor=args.se_factor, ni_margin=args.ni_margin, calib_ni_margin=args.calib_ni_margin)
+            clf = OnlineAdaptCalibAUCModeler(args.model_type, hypo_tester, validation_frac=args.valid_frac, min_valid_dat_size=args.min_valid_dat_size, predef_alpha=args.alpha, power=args.power, se_factor=args.se_factor, ni_margin=args.ni_margin, calib_ni_margin=args.calib_ni_margin)
 
     if clf is None:
         raise NotImplementedError("modeler missing")
