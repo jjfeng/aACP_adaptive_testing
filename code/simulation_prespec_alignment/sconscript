@@ -214,7 +214,7 @@ def plot_avg(env, outdir, c):
         'python plot_simulation_prespec_alignment.py',
 	'--even-results',
         ",".join(["simulation_prespec_alignment/%s" % r for r in c['summary_res_LogisticEven']]),
-	'--mod4-results',
+	'--mod-results',
         ",".join(["simulation_prespec_alignment/%s" % r for r in c['summary_res_LogisticMod']]),
 	'--odd-results',
         ",".join(["simulation_prespec_alignment/%s" % r for r in c['summary_res_LogisticOdd']]),

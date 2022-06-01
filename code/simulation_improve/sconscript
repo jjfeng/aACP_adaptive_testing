@@ -47,8 +47,8 @@ nest.add(
 nest.add(
     'power',
     [
-        #0.5,
-        0.8,
+        0.5,
+        #0.8,
     ],
     label_func=lambda c: "power_%d" % int(c * 100))
 
