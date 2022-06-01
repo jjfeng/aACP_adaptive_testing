@@ -74,7 +74,7 @@ def main():
             }
     mtp_dict = {
             'binary_thres': 'BinaryThres',
-            'weighted_bonferroni': 'WBonferroni',
+            'weighted_bonferroni': 'wBonferroni',
             'bonferroni': 'Bonferroni',
             'graphical_bonf_thres': 'bonfSRGP',
             'graphical_ffs': 'fsSRGP',
@@ -96,7 +96,7 @@ def main():
         ])
 
     # PERFORM paired t-test
-    METHODS = ["presSRGP", "fsSRGP", "bonfSRGP", "Bonferroni"]
+    METHODS = ["presSRGP", "fsSRGP", "bonfSRGP", "Bonferroni", "wBonferroni"]
     final_method_values = all_res[(all_res.Time == (args.max_batch - 1)) &
             (all_res.Measure == "AUC")]
     print(final_method_values)
