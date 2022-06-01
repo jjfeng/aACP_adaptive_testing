@@ -12,7 +12,7 @@ import pandas as pd
 
 from dataset import *
 
-MAX_VARIABLES = 2000
+MAX_VARIABLES = 3000
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Read RSNA data for simulations")

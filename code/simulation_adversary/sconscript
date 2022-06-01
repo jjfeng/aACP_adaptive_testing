@@ -21,6 +21,7 @@ SPARSE_COEF_VAL = 0.75 #0.8
 FWER = 0.1
 MTP_MECH_LIST = [
     "binary_thres_mtp",
+    "weighted_bonferroni",
     "bonferroni",
     "graphical_bonf",
     "graphical_ffs",
