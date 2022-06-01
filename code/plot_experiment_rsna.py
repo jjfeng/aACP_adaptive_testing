@@ -56,6 +56,7 @@ def main():
                     res = pd.concat([
                         res,
                         batch_filler])
+            print("res", res)
             all_res.append(res)
         else:
             print("file missing", res_file)
@@ -74,7 +75,7 @@ def main():
             }
     mtp_dict = {
             'binary_thres': 'BinaryThres',
-            'weighted_bonferroni': 'wBonferroni',
+            'weighted_bonferroni': 'WBonferroni',
             'bonferroni': 'Bonferroni',
             'graphical_bonf_thres': 'bonfSRGP',
             'graphical_ffs': 'fsSRGP',
@@ -96,34 +97,35 @@ def main():
         ])
 
     # PERFORM paired t-test
-    METHODS = ["presSRGP", "fsSRGP", "bonfSRGP", "Bonferroni", "wBonferroni"]
-    final_method_values = all_res[(all_res.Time == (args.max_batch - 1)) &
-            (all_res.Measure == "AUC")]
-    print(final_method_values)
-    for idx1, method1 in enumerate(METHODS):
-        for idx2, method2 in enumerate(METHODS):
-            if idx1 >= idx2:
-                continue
+    #METHODS = ["presSRGP", "fsSRGP", "bonfSRGP", "Bonferroni"]
+    #final_method_values = all_res[(all_res.Time == (args.max_batch - 1)) &
+    #        (all_res.Measure == "AUC")]
+    #print(final_method_values)
+    #for idx1, method1 in enumerate(METHODS):
+    #    for idx2, method2 in enumerate(METHODS):
+    #        if idx1 >= idx2:
+    #            continue
 
-            logging.info("METHODS %s vs %s", method1, method2)
-            print(method1, method2)
-            method_compare_df = final_method_values[final_method_values.Procedure.isin([method1, method2])]
-            seeds = method_compare_df.seed.unique()
-            method_compare_df = method_compare_df[method_compare_df.seed.isin(seeds)].sort_values("seed")
-            print(method_compare_df)
-            method1_values = method_compare_df.Value[method_compare_df.Procedure ==
-                method1]
-            print(method1_values)
-            method2_values = method_compare_df.Value[method_compare_df.Procedure ==
-                method2]
-            print(method2_values)
-            ttest_res = scipy.stats.ttest_1samp(method1_values.to_numpy() -
-                    method2_values.to_numpy(), popmean=0)
-            logging.info(ttest_res)
-            print(method1, method2)
-            print(ttest_res)
+    #        logging.info("METHODS %s vs %s", method1, method2)
+    #        print(method1, method2)
+    #        method_compare_df = final_method_values[final_method_values.Procedure.isin([method1, method2])]
+    #        seeds = method_compare_df.seed.unique()
+    #        method_compare_df = method_compare_df[method_compare_df.seed.isin(seeds)].sort_values("seed")
+    #        print(method_compare_df)
+    #        method1_values = method_compare_df.Value[method_compare_df.Procedure ==
+    #            method1]
+    #        print(method1_values)
+    #        method2_values = method_compare_df.Value[method_compare_df.Procedure ==
+    #            method2]
+    #        print(method2_values)
+    #        ttest_res = scipy.stats.ttest_1samp(method1_values.to_numpy() -
+    #                method2_values.to_numpy(), popmean=0)
+    #        logging.info(ttest_res)
+    #        print(method1, method2)
+    #        print(ttest_res)
 
     sns.set_context("paper", font_scale=2.5)
+    print(all_res[all_res.variable.isin(list(measure_dict.keys()))])
     rel_plt = sns.relplot(
         data=all_res[all_res.variable.isin(list(measure_dict.keys()))],
         x="Time",
@@ -134,7 +136,7 @@ def main():
         style="Procedure",
         facet_kws={"sharey": False, "sharex": True},
         linewidth=3,
-        col_wrap=2
+        col_wrap=4
     )
     rel_plt.set_titles('{col_name}')
     plt.savefig(args.plot_file)

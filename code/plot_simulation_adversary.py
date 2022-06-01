@@ -47,6 +47,7 @@ def main():
     data_dict = {'test':'Test', 'reuse_test': 'Reusable Test'}
     mtp_dict = {
             'binary_thres': 'BinaryThres',
+            'weighted_bonferroni': 'wBonferroni',
             'bonferroni': 'Bonferroni',
             'graphical_bonf_thres': 'bonfSRGP',
             'graphical_ffs': 'fsSRGP',
