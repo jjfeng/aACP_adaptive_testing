@@ -66,9 +66,9 @@ def main():
         format="%(message)s", filename=args.log_file, level=logging.INFO
     )
 
-    all_odd_res = read_res(args.odd_results, args.max_batch, "odd")
-    all_mod_res = read_res(args.mod_results, args.max_batch, "mod")
-    all_even_res = read_res(args.even_results, args.max_batch, "even (prespec)")
+    all_odd_res = read_res(args.odd_results, args.max_batch, "Odd")
+    all_mod_res = read_res(args.mod_results, args.max_batch, "Even/Odd")
+    all_even_res = read_res(args.even_results, args.max_batch, "Even")
     all_res = pd.concat([
         all_odd_res,
         all_mod_res,
