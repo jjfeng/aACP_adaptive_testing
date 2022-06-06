@@ -17,8 +17,8 @@ INIT_TRAIN = 100
 FWER = 0.1
 RSNA_DATA = ",".join(["../data/train_%d.csv" % i for i in range(70,100)])
 MTP_MECH_LIST = [
-    "bonferroni",
     "weighted_bonferroni",
+    "bonferroni",
     "graphical_bonf",
     "graphical_ffs",
     "graphical_prespec",
