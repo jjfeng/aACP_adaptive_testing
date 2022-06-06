@@ -55,23 +55,23 @@ def main():
             }
     all_res = all_res.rename({
         "value": "Value",
-        "time": "Iteration",
+        "time": "Modification",
         }, axis=1)
     all_res["Measure"] = all_res.variable.map(measure_dict)
     all_res["Procedure"] = all_res.procedure.map(mtp_dict)
     all_res["Dataset"] = all_res.dataset.map(data_dict)
     all_res = all_res.reset_index()
     all_res.Dataset[all_res.Measure == "Error rate"] = "Reusable Test"
-    max_iter = all_res.Iteration.max()
-    print(all_res[(all_res.variable == "did_approval") & (all_res.Iteration ==
+    max_iter = all_res.Modification.max()
+    print(all_res[(all_res.variable == "did_approval") & (all_res.Modification ==
         max_iter)].groupby("Procedure").mean())
 
-    print(all_res[all_res.Iteration == max_iter])
+    print(all_res[all_res.Modification == max_iter])
 
     sns.set_context("paper", font_scale=2.5)
     rel_plt = sns.relplot(
         data=all_res[all_res.variable.isin(list(measure_dict.keys()))],
-        x="Iteration",
+        x="Modification",
         y="Value",
         hue="Procedure",
         #row="Dataset",
