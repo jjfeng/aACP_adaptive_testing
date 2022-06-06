@@ -87,7 +87,7 @@ def main():
             print("file missing", res_file)
 
     num_replicates = len(all_res)
-    print("Number of replicates:", num_replicates)
+    logging.info("Number of replicates: %d", num_replicates)
     all_res = pd.concat(all_res)
     print(all_res)
 
