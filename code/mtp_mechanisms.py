@@ -67,7 +67,19 @@ class BinaryThresholdMTP:
         self.test_tree.local_alpha = self.alpha * self.test_tree.weight
 
     def init_test_dat(self, test_dat, num_adapt_queries):
-        raise NotImplementedError("need to define init_test_dat")
+        self.hypo_tester.set_test_dat(test_dat)
+
+        self.num_queries = -1
+        self.num_adapt_queries = num_adapt_queries
+
+        self.start_node = Node(
+            weight=self.correction_factor,
+            history=[],
+            parent=None,
+        )
+        self._create_children(self.start_node, self.num_queries)
+        self.test_tree = self.start_node
+        self._do_tree_update(1)
 
     def get_test_res(self, null_hypo: np.ndarray, orig_mdl, new_mdl, orig_predef_mdl=None, predef_mdl=None):
         """

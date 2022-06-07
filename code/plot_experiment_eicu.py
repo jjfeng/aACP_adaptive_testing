@@ -24,6 +24,30 @@ def parse_args():
     args.results = args.results.split(",")
     return args
 
+def run_ttests(final_method_values, measure):
+    METHODS = ["presSRGP", "fsSRGP", "bonfSRGP", "Bonferroni", "wBonferroni"]
+    for idx1, method1 in enumerate(METHODS):
+        for idx2, method2 in enumerate(METHODS):
+            if idx1 >= idx2:
+                continue
+
+            logging.info("METHODS %s vs %s (%s)", method1, method2, measure)
+            print(method1, method2)
+            method_compare_df = final_method_values[final_method_values.Procedure.isin([method1, method2])]
+            seeds = method_compare_df.seed.unique()
+            method_compare_df = method_compare_df[method_compare_df.seed.isin(seeds)].sort_values("seed")
+            print(method_compare_df)
+            method1_values = method_compare_df.Value[method_compare_df.Procedure ==
+                method1]
+            print(method1_values)
+            method2_values = method_compare_df.Value[method_compare_df.Procedure ==
+                method2]
+            print(method2_values)
+            ttest_res = scipy.stats.ttest_1samp(method1_values.to_numpy() -
+                    method2_values.to_numpy(), popmean=0)
+            logging.info(ttest_res)
+            print(method1, method2)
+            print(ttest_res)
 
 def main():
     args = parse_args()
@@ -61,7 +85,7 @@ def main():
             print("file missing", res_file)
 
     num_replicates = len(all_res)
-    print("Number of replicates:", num_replicates)
+    logging.info("Number of replicates: %d", num_replicates)
     all_res = pd.concat(all_res)
     print(all_res)
 
@@ -96,32 +120,12 @@ def main():
         ])
 
     # PERFORM paired t-test
-    METHODS = ["presSRGP", "fsSRGP", "bonfSRGP", "Bonferroni", "wBonferroni"]
     final_method_values = all_res[(all_res.Time == (args.max_batch - 1)) &
             (all_res.Measure == "AUC")]
-    print(final_method_values)
-    for idx1, method1 in enumerate(METHODS):
-        for idx2, method2 in enumerate(METHODS):
-            if idx1 >= idx2:
-                continue
-
-            logging.info("METHODS %s vs %s", method1, method2)
-            print(method1, method2)
-            method_compare_df = final_method_values[final_method_values.Procedure.isin([method1, method2])]
-            seeds = method_compare_df.seed.unique()
-            method_compare_df = method_compare_df[method_compare_df.seed.isin(seeds)].sort_values("seed")
-            print(method_compare_df)
-            method1_values = method_compare_df.Value[method_compare_df.Procedure ==
-                method1]
-            print(method1_values)
-            method2_values = method_compare_df.Value[method_compare_df.Procedure ==
-                method2]
-            print(method2_values)
-            ttest_res = scipy.stats.ttest_1samp(method1_values.to_numpy() -
-                    method2_values.to_numpy(), popmean=0)
-            logging.info(ttest_res)
-            print(method1, method2)
-            print(ttest_res)
+    run_ttests(final_method_values, "auc")
+    final_method_values = all_res[(all_res.Time == (args.max_batch - 1)) &
+            (all_res.Measure == "Number of approvals")]
+    run_ttests(final_method_values, "num approvals")
 
     sns.set_context("paper", font_scale=2.5)
     rel_plt = sns.relplot(

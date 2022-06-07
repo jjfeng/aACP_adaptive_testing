@@ -55,7 +55,7 @@ def main():
             }
     all_res = all_res.rename({
         "value": "Value",
-        "time": "Modification",
+        "time": "Iteration",
         }, axis=1)
     all_res["Measure"] = all_res.variable.map(measure_dict)
     all_res["Procedure"] = all_res.procedure.map(mtp_dict)
